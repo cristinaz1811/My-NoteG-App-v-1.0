@@ -7,6 +7,8 @@ import Register from './pages/Register';
 import Courses from './pages/Courses';
 import CourseDetail from './pages/CourseDetail';
 import Exercise from './pages/Exercise';
+import MyCourses from './pages/MyCourses';
+import MyCourseDetail from './pages/MyCourseDetail';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -59,6 +61,22 @@ function App() {
                         element={
                             <ProtectedRoute>
                                 <Exercise />
+                            </ProtectedRoute>
+                        } 
+                    />
+                    <Route 
+                        path="/my-courses" 
+                        element={
+                            <ProtectedRoute>
+                                <MyCourses />
+                            </ProtectedRoute>
+                        } 
+                    />
+                    <Route 
+                        path="/my-courses/:courseId" 
+                        element={
+                            <ProtectedRoute>
+                                <MyCourseDetail />
                             </ProtectedRoute>
                         } 
                     />

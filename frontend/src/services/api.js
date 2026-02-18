@@ -30,9 +30,14 @@ export const authService = {
 export const courseService = {
     getAllCourses: () => api.get('/courses'),
     getCourseById: (id) => api.get(`/courses/${id}`),
-    getUserCourses: () => api.get('/courses/my-courses'),
+    getUserCourses: () => api.get('/courses/my-courses/list'),
+    getEnrolledCourseDetails: (courseId) => api.get(`/courses/my-courses/${courseId}/details`),
     enrollInCourse: (courseId) => api.post(`/courses/${courseId}/enroll`),
     createCourse: (courseData) => api.post('/courses', courseData),
+    // Time tracking
+    startTimeSession: (courseId) => api.post(`/courses/my-courses/${courseId}/time/start`),
+    endTimeSession: (courseId) => api.post(`/courses/my-courses/${courseId}/time/end`),
+    heartbeat: (courseId) => api.post(`/courses/my-courses/${courseId}/time/heartbeat`),
 };
 
 // Exercise services

@@ -96,15 +96,34 @@ const getUserCourses = async (req, res) => {
         const userId = req.user.id;
 
         const result = await db.query(`
-            SELECT c.*, e.progress, e.enrolled_at,
-                   COUNT(DISTINCT ex.id) as total_exercises,
-                   COUNT(DISTINCT CASE WHEN up.completed = true THEN up.exercise_id END) as completed_exercises
+            SELECT 
+                c.id,
+                c.title,
+                c.description,
+                c.difficulty,
+                e.progress,
+                e.enrolled_at,
+                COALESCE(e.total_time_spent, 0) as total_time_spent,
+                COUNT(DISTINCT ex.id) as total_exercises,
+                COUNT(DISTINCT CASE WHEN up.completed = true THEN up.exercise_id END) as completed_exercises,
+                COALESCE(sub_stats.total_attempts, 0) as total_attempts,
+                COALESCE(sub_stats.avg_score, 0) as average_score
             FROM enrollments e
             JOIN courses c ON e.course_id = c.id
             LEFT JOIN exercises ex ON c.id = ex.course_id
             LEFT JOIN user_progress up ON ex.id = up.exercise_id AND up.user_id = e.user_id
+            LEFT JOIN (
+                SELECT 
+                    ex2.course_id,
+                    COUNT(s.id) as total_attempts,
+                    ROUND(AVG(s.score)::numeric, 2) as avg_score
+                FROM submissions s
+                JOIN exercises ex2 ON s.exercise_id = ex2.id
+                WHERE s.user_id = $1
+                GROUP BY ex2.course_id
+            ) sub_stats ON c.id = sub_stats.course_id
             WHERE e.user_id = $1
-            GROUP BY c.id, e.progress, e.enrolled_at
+            GROUP BY c.id, c.title, c.description, c.difficulty, e.progress, e.enrolled_at, e.total_time_spent, sub_stats.total_attempts, sub_stats.avg_score
             ORDER BY e.enrolled_at DESC
         `, [userId]);
 
@@ -115,10 +134,221 @@ const getUserCourses = async (req, res) => {
     }
 };
 
+// Get detailed stats for a specific enrolled course
+const getEnrolledCourseDetails = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { courseId } = req.params;
+
+        // Check enrollment
+        const enrollment = await db.query(
+            'SELECT * FROM enrollments WHERE user_id = $1 AND course_id = $2',
+            [userId, courseId]
+        );
+
+        if (enrollment.rows.length === 0) {
+            return res.status(404).json({ error: 'Not enrolled in this course' });
+        }
+
+        // Get course info
+        const courseResult = await db.query(
+            'SELECT * FROM courses WHERE id = $1',
+            [courseId]
+        );
+
+        // Get all exercises with user progress
+        const exercisesResult = await db.query(`
+            SELECT 
+                ex.id,
+                ex.title,
+                ex.description,
+                ex.difficulty,
+                ex.language,
+                COALESCE(up.completed, false) as completed,
+                COALESCE(up.best_score, 0) as best_score,
+                COALESCE(up.attempts, 0) as attempts,
+                up.last_attempt_at
+            FROM exercises ex
+            LEFT JOIN user_progress up ON ex.id = up.exercise_id AND up.user_id = $1
+            WHERE ex.course_id = $2
+            ORDER BY ex.id
+        `, [userId, courseId]);
+
+        // Get submission history for this course
+        const submissionsResult = await db.query(`
+            SELECT 
+                s.id,
+                s.exercise_id,
+                ex.title as exercise_title,
+                s.score,
+                s.tests_passed,
+                s.tests_total,
+                s.status,
+                s.submitted_at
+            FROM submissions s
+            JOIN exercises ex ON s.exercise_id = ex.id
+            WHERE s.user_id = $1 AND ex.course_id = $2
+            ORDER BY s.submitted_at DESC
+            LIMIT 50
+        `, [userId, courseId]);
+
+        // Get time spent breakdown
+        const timeResult = await db.query(`
+            SELECT 
+                DATE(started_at) as date,
+                SUM(duration) as time_spent
+            FROM time_sessions
+            WHERE user_id = $1 AND course_id = $2 AND duration IS NOT NULL
+            GROUP BY DATE(started_at)
+            ORDER BY date DESC
+            LIMIT 30
+        `, [userId, courseId]);
+
+        // Calculate total time from time_sessions (this is more accurate than enrollment total)
+        const totalTimeResult = await db.query(`
+            SELECT COALESCE(SUM(duration), 0) as total_time
+            FROM time_sessions
+            WHERE user_id = $1 AND course_id = $2 AND duration IS NOT NULL
+        `, [userId, courseId]);
+        const totalTimeSpent = parseInt(totalTimeResult.rows[0].total_time) || 0;
+
+        // Calculate stats
+        const totalAttempts = exercisesResult.rows.reduce((sum, ex) => sum + ex.attempts, 0);
+        const completedExercises = exercisesResult.rows.filter(ex => ex.completed).length;
+        const avgScore = exercisesResult.rows.length > 0
+            ? exercisesResult.rows.reduce((sum, ex) => sum + parseFloat(ex.best_score || 0), 0) / exercisesResult.rows.length
+            : 0;
+
+        res.json({
+            course: courseResult.rows[0],
+            enrollment: enrollment.rows[0],
+            exercises: exercisesResult.rows,
+            submissions: submissionsResult.rows,
+            timeBreakdown: timeResult.rows,
+            stats: {
+                totalAttempts,
+                completedExercises,
+                totalExercises: exercisesResult.rows.length,
+                averageScore: Math.round(avgScore * 100) / 100,
+                totalTimeSpent: totalTimeSpent,
+                progressPercentage: exercisesResult.rows.length > 0
+                    ? Math.round((completedExercises / exercisesResult.rows.length) * 100)
+                    : 0
+            }
+        });
+    } catch (error) {
+        console.error('Get enrolled course details error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Start a time tracking session
+const startTimeSession = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { courseId } = req.params;
+
+        // Check enrollment
+        const enrollment = await db.query(
+            'SELECT * FROM enrollments WHERE user_id = $1 AND course_id = $2',
+            [userId, courseId]
+        );
+
+        if (enrollment.rows.length === 0) {
+            return res.status(403).json({ error: 'Not enrolled in this course' });
+        }
+
+        // End any existing open sessions for this user/course
+        await db.query(`
+            UPDATE time_sessions 
+            SET ended_at = CURRENT_TIMESTAMP, 
+                duration = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::INTEGER
+            WHERE user_id = $1 AND course_id = $2 AND ended_at IS NULL
+        `, [userId, courseId]);
+
+        // Start new session
+        const result = await db.query(
+            'INSERT INTO time_sessions (user_id, course_id) VALUES ($1, $2) RETURNING *',
+            [userId, courseId]
+        );
+
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        console.error('Start time session error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// End a time tracking session
+const endTimeSession = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { courseId } = req.params;
+
+        // End the session and calculate duration
+        const result = await db.query(`
+            UPDATE time_sessions 
+            SET ended_at = CURRENT_TIMESTAMP, 
+                duration = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::INTEGER
+            WHERE user_id = $1 AND course_id = $2 AND ended_at IS NULL
+            RETURNING *
+        `, [userId, courseId]);
+
+        if (result.rows.length > 0) {
+            const duration = result.rows[0].duration;
+
+            // Update total time in enrollments
+            await db.query(`
+                UPDATE enrollments 
+                SET total_time_spent = total_time_spent + $3
+                WHERE user_id = $1 AND course_id = $2
+            `, [userId, courseId, duration]);
+        }
+
+        res.json({ message: 'Session ended', session: result.rows[0] || null });
+    } catch (error) {
+        console.error('End time session error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Heartbeat to keep session alive and update time (call every 30 seconds)
+const updateTimeSession = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { courseId } = req.params;
+
+        // Check for active session
+        const session = await db.query(`
+            SELECT * FROM time_sessions 
+            WHERE user_id = $1 AND course_id = $2 AND ended_at IS NULL
+            ORDER BY started_at DESC LIMIT 1
+        `, [userId, courseId]);
+
+        if (session.rows.length === 0) {
+            // No active session, start one
+            const newSession = await db.query(
+                'INSERT INTO time_sessions (user_id, course_id) VALUES ($1, $2) RETURNING *',
+                [userId, courseId]
+            );
+            return res.json({ session: newSession.rows[0], isNew: true });
+        }
+
+        res.json({ session: session.rows[0], isNew: false });
+    } catch (error) {
+        console.error('Update time session error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 module.exports = {
     getAllCourses,
     getCourseById,
     createCourse,
     enrollInCourse,
     getUserCourses,
+    getEnrolledCourseDetails,
+    startTimeSession,
+    endTimeSession,
+    updateTimeSession,
 };
