@@ -8,6 +8,7 @@ const CourseDetail = () => {
     const [loading, setLoading] = useState(true);
     const [isEnrolled, setIsEnrolled] = useState(false);
     const [checkingEnrollment, setCheckingEnrollment] = useState(true);
+    const [expandedChapters, setExpandedChapters] = useState({});
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -19,6 +20,10 @@ const CourseDetail = () => {
         try {
             const response = await courseService.getCourseById(id);
             setCourse(response.data);
+            // Expand first chapter by default
+            if (response.data.chapters?.length > 0) {
+                setExpandedChapters({ [response.data.chapters[0].id]: true });
+            }
         } catch (error) {
             console.error('Error loading course:', error);
         } finally {
@@ -51,6 +56,13 @@ const CourseDetail = () => {
         navigate(`/my-courses/${id}`);
     };
 
+    const toggleChapter = (chapterId) => {
+        setExpandedChapters(prev => ({
+            ...prev,
+            [chapterId]: !prev[chapterId]
+        }));
+    };
+
     if (loading || checkingEnrollment) {
         return <div className="loading">Loading course...</div>;
     }
@@ -60,7 +72,7 @@ const CourseDetail = () => {
     }
 
     const exerciseCount = course.exercises?.length || 0;
-    const estimatedHours = Math.max(1, Math.ceil(exerciseCount * 0.5));
+    const chapterCount = course.chapters?.length || 0;
 
     // If user is enrolled, show enrolled message
     if (isEnrolled) {
@@ -87,70 +99,193 @@ const CourseDetail = () => {
         );
     }
 
-    // Not enrolled - show course preview
+    // Not enrolled - show detailed course preview
     return (
-        <div className="container course-preview">
-            <div className="course-header-preview">
-                <h1>{course.title}</h1>
-                <span className={`difficulty ${course.difficulty}`}>
-                    {course.difficulty}
-                </span>
-            </div>
-
-            <p className="course-description-preview">
-                {course.description}
-            </p>
-
-            {/* Course Stats */}
-            <div className="course-stats-preview">
-                <div className="stat-item">
-                    <span className="stat-number">{exerciseCount}</span>
-                    <span className="stat-label">Exercises</span>
-                </div>
-                <div className="stat-item">
-                    <span className="stat-number">~{estimatedHours}h</span>
-                    <span className="stat-label">Estimated Time</span>
-                </div>
-                <div className="stat-item">
-                    <span className="stat-number">{course.difficulty}</span>
-                    <span className="stat-label">Difficulty</span>
-                </div>
-            </div>
-
-            {/* Enroll CTA */}
-            <div className="enroll-cta">
-                <h3>Ready to start learning?</h3>
-                <p>Enroll now to track your progress, submit solutions, and earn achievements.</p>
-                <button 
-                    onClick={handleEnroll} 
-                    className="btn btn-primary btn-large"
-                >
-                    Enroll in Course
-                </button>
-            </div>
-
-            {/* Exercise Preview - Not clickable */}
-            <div className="exercises-preview">
-                <h2>📚 Course Content Preview</h2>
-                <p className="preview-note">Enroll to access and solve these exercises</p>
-                
-                <div className="exercise-preview-list">
-                    {course.exercises?.map((exercise, index) => (
-                        <div key={exercise.id} className="exercise-preview-item">
-                            <div className="exercise-number">{index + 1}</div>
-                            <div className="exercise-preview-info">
-                                <h4>{exercise.title}</h4>
-                                <div className="exercise-preview-meta">
-                                    <span className={`difficulty ${exercise.difficulty}`}>
-                                        {exercise.difficulty}
-                                    </span>
-                                    <span className="language-badge">{exercise.language}</span>
-                                </div>
-                                <p className="exercise-preview-desc">{exercise.description}</p>
-                            </div>
-                            <div className="locked-badge">🔒</div>
+        <div className="container course-detail-page">
+            {/* Hero Section */}
+            <div className="course-hero">
+                <div className="course-hero-content">
+                    <div className="course-badges">
+                        <span className={`difficulty-badge ${course.difficulty}`}>
+                            {course.difficulty}
+                        </span>
+                        {course.tags?.map((tag, i) => (
+                            <span key={i} className="tag-badge">{tag}</span>
+                        ))}
+                    </div>
+                    
+                    <h1>{course.title}</h1>
+                    <p className="course-short-desc">{course.description}</p>
+                    
+                    <div className="course-quick-stats">
+                        <div className="quick-stat">
+                            <span className="quick-stat-icon">📖</span>
+                            <span className="quick-stat-value">{chapterCount}</span>
+                            <span className="quick-stat-label">Chapters</span>
                         </div>
-                    ))}
+                        <div className="quick-stat">
+                            <span className="quick-stat-icon">💻</span>
+                            <span className="quick-stat-value">{exerciseCount}</span>
+                            <span className="quick-stat-label">Exercises</span>
+                        </div>
+                        <div className="quick-stat">
+                            <span className="quick-stat-icon">⏱️</span>
+                            <span className="quick-stat-value">~{course.estimated_hours || 1}h</span>
+                            <span className="quick-stat-label">Duration</span>
+                        </div>
+                    </div>
+
+                    <button 
+                        onClick={handleEnroll} 
+                        className="btn btn-primary btn-large enroll-hero-btn"
+                    >
+                        Enroll Now - Start Learning
+                    </button>
+                </div>
+            </div>
+
+            {/* Two Column Layout */}
+            <div className="course-content-layout">
+                {/* Main Content */}
+                <div className="course-main-content">
+                    {/* About Section */}
+                    {course.long_description && (
+                        <section className="course-section">
+                            <h2>📋 About This Course</h2>
+                            <p className="long-description">{course.long_description}</p>
+                        </section>
+                    )}
+
+                    {/* Learning Objectives */}
+                    {course.learning_objectives?.length > 0 && (
+                        <section className="course-section">
+                            <h2>🎯 What You'll Learn</h2>
+                            <ul className="objectives-list">
+                                {course.learning_objectives.map((obj, i) => (
+                                    <li key={i}>
+                                        <span className="check-icon">✓</span>
+                                        {obj}
+                                    </li>
+                                ))}
+                            </ul>
+                        </section>
+                    )}
+
+                    {/* Prerequisites */}
+                    {course.prerequisites?.length > 0 && (
+                        <section className="course-section">
+                            <h2>📝 Prerequisites</h2>
+                            <ul className="prerequisites-list">
+                                {course.prerequisites.map((prereq, i) => (
+                                    <li key={i}>{prereq}</li>
+                                ))}
+                            </ul>
+                        </section>
+                    )}
+
+                    {/* Table of Contents */}
+                    <section className="course-section">
+                        <h2>📚 Table of Contents</h2>
+                        
+                        {course.chapters?.length > 0 ? (
+                            <div className="chapters-accordion">
+                                {course.chapters.map((chapter, chapterIndex) => (
+                                    <div key={chapter.id} className="chapter-item">
+                                        <div 
+                                            className={`chapter-header ${expandedChapters[chapter.id] ? 'expanded' : ''}`}
+                                            onClick={() => toggleChapter(chapter.id)}
+                                        >
+                                            <div className="chapter-info">
+                                                <span className="chapter-number">Chapter {chapterIndex + 1}</span>
+                                                <h3>{chapter.title}</h3>
+                                                <p className="chapter-desc">{chapter.description}</p>
+                                            </div>
+                                            <div className="chapter-meta">
+                                                <span className="exercise-count">
+                                                    {chapter.exercises?.length || 0} exercises
+                                                </span>
+                                                <span className="expand-icon">
+                                                    {expandedChapters[chapter.id] ? '▼' : '▶'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        
+                                        {expandedChapters[chapter.id] && chapter.exercises?.length > 0 && (
+                                            <div className="chapter-exercises">
+                                                {chapter.exercises.map((exercise, exIndex) => (
+                                                    <div key={exercise.id} className="exercise-preview-row">
+                                                        <div className="exercise-preview-left">
+                                                            <span className="exercise-index">
+                                                                {chapterIndex + 1}.{exIndex + 1}
+                                                            </span>
+                                                            <div className="exercise-preview-details">
+                                                                <span className="exercise-title">{exercise.title}</span>
+                                                                <span className={`difficulty-sm ${exercise.difficulty}`}>
+                                                                    {exercise.difficulty}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <span className="locked-icon">🔒</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            // Fallback for courses without chapters
+                            <div className="exercises-flat-list">
+                                {course.exercises?.map((exercise, index) => (
+                                    <div key={exercise.id} className="exercise-preview-row">
+                                        <div className="exercise-preview-left">
+                                            <span className="exercise-index">{index + 1}</span>
+                                            <div className="exercise-preview-details">
+                                                <span className="exercise-title">{exercise.title}</span>
+                                                <span className={`difficulty-sm ${exercise.difficulty}`}>
+                                                    {exercise.difficulty}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <span className="locked-icon">🔒</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+                </div>
+
+                {/* Sidebar */}
+                <div className="course-sidebar">
+                    <div className="enroll-card">
+                        <h3>Start Learning Today</h3>
+                        <div className="enroll-card-stats">
+                            <div className="enroll-stat">
+                                <span className="enroll-stat-value">{chapterCount}</span>
+                                <span className="enroll-stat-label">Chapters</span>
+                            </div>
+                            <div className="enroll-stat">
+                                <span className="enroll-stat-value">{exerciseCount}</span>
+                                <span className="enroll-stat-label">Exercises</span>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={handleEnroll} 
+                            className="btn btn-primary btn-block"
+                        >
+                            Enroll in Course
+                        </button>
+                        <p className="enroll-note">
+                            Free access • Track your progress • Get feedback
+                        </p>
+                    </div>
+
+                    {course.creator_name && (
+                        <div className="instructor-card">
+                            <h4>Instructor</h4>
+                            <p>{course.creator_name}</p>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

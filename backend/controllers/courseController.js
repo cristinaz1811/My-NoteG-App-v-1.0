@@ -4,10 +4,12 @@ const getAllCourses = async (req, res) => {
     try {
         const result = await db.query(`
             SELECT c.*, u.username as creator_name,
-                   COUNT(DISTINCT e.id) as exercise_count
+                   COUNT(DISTINCT e.id) as exercise_count,
+                   COUNT(DISTINCT ch.id) as chapter_count
             FROM courses c
             LEFT JOIN users u ON c.created_by = u.id
             LEFT JOIN exercises e ON c.id = e.course_id
+            LEFT JOIN chapters ch ON c.id = ch.course_id
             GROUP BY c.id, u.username
             ORDER BY c.created_at DESC
         `);
@@ -23,8 +25,12 @@ const getCourseById = async (req, res) => {
     try {
         const { id } = req.params;
 
+        // Get course with all details
         const courseResult = await db.query(
-            'SELECT c.*, u.username as creator_name FROM courses c LEFT JOIN users u ON c.created_by = u.id WHERE c.id = $1',
+            `SELECT c.*, u.username as creator_name 
+             FROM courses c 
+             LEFT JOIN users u ON c.created_by = u.id 
+             WHERE c.id = $1`,
             [id]
         );
 
@@ -32,14 +38,49 @@ const getCourseById = async (req, res) => {
             return res.status(404).json({ error: 'Course not found' });
         }
 
-        const exercisesResult = await db.query(
-            'SELECT id, title, description, difficulty FROM exercises WHERE course_id = $1 ORDER BY id',
+        // Get chapters with their exercises
+        const chaptersResult = await db.query(`
+            SELECT ch.id, ch.title, ch.description, ch.order_index,
+                   json_agg(
+                       json_build_object(
+                           'id', e.id,
+                           'title', e.title,
+                           'description', e.description,
+                           'difficulty', e.difficulty,
+                           'language', e.language,
+                           'order_index', e.order_index
+                       ) ORDER BY e.order_index
+                   ) FILTER (WHERE e.id IS NOT NULL) as exercises
+            FROM chapters ch
+            LEFT JOIN exercises e ON e.chapter_id = ch.id
+            WHERE ch.course_id = $1
+            GROUP BY ch.id
+            ORDER BY ch.order_index
+        `, [id]);
+
+        // Get exercises without chapter (for backwards compatibility)
+        const unassignedExercises = await db.query(
+            `SELECT id, title, description, difficulty, language, order_index 
+             FROM exercises 
+             WHERE course_id = $1 AND chapter_id IS NULL 
+             ORDER BY order_index, id`,
+            [id]
+        );
+
+        // Get all exercises flat (for backward compatibility)
+        const allExercises = await db.query(
+            `SELECT id, title, description, difficulty, language 
+             FROM exercises 
+             WHERE course_id = $1 
+             ORDER BY order_index, id`,
             [id]
         );
 
         res.json({
             ...courseResult.rows[0],
-            exercises: exercisesResult.rows,
+            chapters: chaptersResult.rows,
+            unassignedExercises: unassignedExercises.rows,
+            exercises: allExercises.rows, // Keep for backward compatibility
         });
     } catch (error) {
         console.error('Get course error:', error);
