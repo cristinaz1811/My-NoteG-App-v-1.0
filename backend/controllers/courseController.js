@@ -648,7 +648,8 @@ const getCourseEnrolledStudents = async (req, res) => {
                 u.email,
                 e.enrolled_at,
                 e.progress,
-                COALESCE(e.total_time_spent, 0) as total_time_spent,
+                COALESCE(time_stats.total_time, 0) as total_time_spent,
+                COALESCE(time_stats.session_count, 0) as session_count,
                 COUNT(DISTINCT ex.id) as total_exercises,
                 COUNT(DISTINCT CASE WHEN up.completed = true THEN up.exercise_id END) as completed_exercises,
                 COALESCE(sub_stats.total_attempts, 0) as total_attempts,
@@ -669,8 +670,21 @@ const getCourseEnrolledStudents = async (req, res) => {
                 WHERE ex2.course_id = $1
                 GROUP BY s.user_id
             ) sub_stats ON u.id = sub_stats.user_id
+            LEFT JOIN (
+                SELECT 
+                    user_id,
+                    COUNT(*) as session_count,
+                    SUM(CASE 
+                        WHEN duration IS NOT NULL THEN duration
+                        ELSE EXTRACT(EPOCH FROM (COALESCE(ended_at, NOW()) - started_at))::integer
+                    END) as total_time
+                FROM time_sessions
+                WHERE course_id = $1 AND started_at IS NOT NULL
+                GROUP BY user_id
+            ) time_stats ON u.id = time_stats.user_id
             WHERE e.course_id = $1
-            GROUP BY u.id, u.username, u.email, e.enrolled_at, e.progress, e.total_time_spent, 
+            GROUP BY u.id, u.username, u.email, e.enrolled_at, e.progress,
+                     time_stats.total_time, time_stats.session_count,
                      sub_stats.total_attempts, sub_stats.avg_score, sub_stats.last_submission
             ORDER BY e.enrolled_at DESC
         `, [courseId]);
@@ -770,6 +784,19 @@ const getStudentCourseDetails = async (req, res) => {
             LIMIT 10
         `, [studentId, courseId]);
 
+        // Calculate total time spent from all time sessions
+        const totalTimeResult = await db.query(`
+            SELECT COALESCE(SUM(
+                CASE 
+                    WHEN duration IS NOT NULL THEN duration
+                    ELSE EXTRACT(EPOCH FROM (COALESCE(ended_at, NOW()) - started_at))::integer
+                END
+            ), 0) as total_time
+            FROM time_sessions
+            WHERE user_id = $1 AND course_id = $2 AND started_at IS NOT NULL
+        `, [studentId, courseId]);
+        const calculatedTotalTime = parseInt(totalTimeResult.rows[0]?.total_time || 0);
+
         // Calculate stats
         const totalExercises = exercisesResult.rows.length;
         const completedExercises = exercisesResult.rows.filter(e => e.completed).length;
@@ -788,7 +815,8 @@ const getStudentCourseDetails = async (req, res) => {
                 progress_percentage: totalExercises > 0 ? Math.round((completedExercises / totalExercises) * 100) : 0,
                 total_attempts: totalAttempts,
                 average_score: Math.round(averageScore * 100) / 100,
-                total_time_spent: enrollment.rows[0].total_time_spent || 0
+                total_time_spent: calculatedTotalTime,
+                study_sessions_count: timeSessionsResult.rows.length
             },
             exercises: exercisesResult.rows,
             recentSubmissions: submissionsResult.rows,

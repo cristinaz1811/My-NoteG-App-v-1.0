@@ -73,8 +73,10 @@ const CourseStudents = () => {
     };
 
     const getProgressPercentage = (student) => {
-        if (!student.total_exercises || student.total_exercises === 0) return 0;
-        return Math.round((student.completed_exercises / student.total_exercises) * 100);
+        const total = parseInt(student.total_exercises) || 0;
+        const completed = parseInt(student.completed_exercises) || 0;
+        if (total === 0) return 0;
+        return Math.round((completed / total) * 100);
     };
 
     const getDifficultyBadgeClass = (difficulty) => {
