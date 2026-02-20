@@ -16,6 +16,8 @@ const EditCourse = () => {
     const [showExerciseModal, setShowExerciseModal] = useState(false);
     const [editingChapter, setEditingChapter] = useState(null);
     const [editingExercise, setEditingExercise] = useState(null);
+    const [tagInput, setTagInput] = useState('');
+    const [objectiveInput, setObjectiveInput] = useState('');
 
     useEffect(() => {
         loadCourse();
@@ -31,6 +33,8 @@ const EditCourse = () => {
                 difficulty: response.data.difficulty,
                 long_description: response.data.long_description || '',
                 estimated_hours: response.data.estimated_hours || 1,
+                tags: response.data.tags || [],
+                learning_objectives: response.data.learning_objectives || [],
             });
         } catch (error) {
             console.error('Error loading course:', error);
@@ -238,6 +242,110 @@ const EditCourse = () => {
                                         className="w-full"
                                     />
                                 </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">Estimated Hours</label>
+                                    <input
+                                        type="number"
+                                        value={formData.estimated_hours}
+                                        onChange={(e) => setFormData({ ...formData, estimated_hours: parseInt(e.target.value) || 1 })}
+                                        min="1"
+                                        className="w-32"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">Tags</label>
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                        {formData.tags?.map((tag, idx) => (
+                                            <span key={idx} className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[#a1609d]/20 text-[#a1609d] text-sm">
+                                                {tag}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, tags: formData.tags.filter((_, i) => i !== idx) })}
+                                                    className="hover:text-red-400"
+                                                >
+                                                    ×
+                                                </button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={tagInput}
+                                            onChange={(e) => setTagInput(e.target.value)}
+                                            placeholder="Add a tag"
+                                            className="flex-1"
+                                            onKeyPress={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    if (tagInput.trim() && !formData.tags.includes(tagInput.trim())) {
+                                                        setFormData({ ...formData, tags: [...formData.tags, tagInput.trim()] });
+                                                        setTagInput('');
+                                                    }
+                                                }
+                                            }}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (tagInput.trim() && !formData.tags.includes(tagInput.trim())) {
+                                                    setFormData({ ...formData, tags: [...formData.tags, tagInput.trim()] });
+                                                    setTagInput('');
+                                                }
+                                            }}
+                                            className="px-4 py-2 rounded-lg bg-white/10 text-white hover:bg-white/20"
+                                        >
+                                            Add
+                                        </button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">Learning Objectives</label>
+                                    <ul className="space-y-2 mb-2">
+                                        {formData.learning_objectives?.map((obj, idx) => (
+                                            <li key={idx} className="flex items-center justify-between p-2 bg-black/20 rounded-lg">
+                                                <span className="text-sm">{obj}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, learning_objectives: formData.learning_objectives.filter((_, i) => i !== idx) })}
+                                                    className="text-red-400 hover:text-red-300 text-sm"
+                                                >
+                                                    Remove
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={objectiveInput}
+                                            onChange={(e) => setObjectiveInput(e.target.value)}
+                                            placeholder="Add a learning objective"
+                                            className="flex-1"
+                                            onKeyPress={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    if (objectiveInput.trim()) {
+                                                        setFormData({ ...formData, learning_objectives: [...formData.learning_objectives, objectiveInput.trim()] });
+                                                        setObjectiveInput('');
+                                                    }
+                                                }
+                                            }}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (objectiveInput.trim()) {
+                                                    setFormData({ ...formData, learning_objectives: [...formData.learning_objectives, objectiveInput.trim()] });
+                                                    setObjectiveInput('');
+                                                }
+                                            }}
+                                            className="px-4 py-2 rounded-lg bg-white/10 text-white hover:bg-white/20"
+                                        >
+                                            Add
+                                        </button>
+                                    </div>
+                                </div>
                                 <button
                                     onClick={handleUpdateCourse}
                                     className="px-6 py-2 rounded-lg font-medium text-white"
@@ -260,6 +368,32 @@ const EditCourse = () => {
                                     <span className="text-sm text-gray-400">Full Description</span>
                                     <p className="text-white">{course.long_description || '-'}</p>
                                 </div>
+                                <div>
+                                    <span className="text-sm text-gray-400">Estimated Hours</span>
+                                    <p className="text-white">{course.estimated_hours || 1} hours</p>
+                                </div>
+                                {course.tags && course.tags.length > 0 && (
+                                    <div>
+                                        <span className="text-sm text-gray-400">Tags</span>
+                                        <div className="flex flex-wrap gap-2 mt-1">
+                                            {course.tags.map((tag, idx) => (
+                                                <span key={idx} className="px-3 py-1 rounded-full bg-[#a1609d]/20 text-[#a1609d] text-sm">
+                                                    {tag}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {course.learning_objectives && course.learning_objectives.length > 0 && (
+                                    <div>
+                                        <span className="text-sm text-gray-400">Learning Objectives</span>
+                                        <ul className="list-disc list-inside mt-1 space-y-1">
+                                            {course.learning_objectives.map((obj, idx) => (
+                                                <li key={idx} className="text-white">{obj}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
