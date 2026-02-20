@@ -761,12 +761,12 @@ const getStudentCourseDetails = async (req, res) => {
         // Get time sessions
         const timeSessionsResult = await db.query(`
             SELECT 
-                ts.start_time,
-                ts.end_time,
-                EXTRACT(EPOCH FROM (COALESCE(ts.end_time, NOW()) - ts.start_time))::integer as duration_seconds
+                ts.started_at,
+                ts.ended_at,
+                COALESCE(ts.duration, EXTRACT(EPOCH FROM (COALESCE(ts.ended_at, NOW()) - ts.started_at))::integer) as duration_seconds
             FROM time_sessions ts
-            WHERE ts.user_id = $1 AND ts.course_id = $2 AND ts.start_time IS NOT NULL
-            ORDER BY ts.start_time DESC
+            WHERE ts.user_id = $1 AND ts.course_id = $2 AND ts.started_at IS NOT NULL
+            ORDER BY ts.started_at DESC
             LIMIT 10
         `, [studentId, courseId]);
 

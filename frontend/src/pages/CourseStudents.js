@@ -308,7 +308,7 @@ const CourseStudents = () => {
                                                     key={idx}
                                                     className="flex items-center justify-between py-2 px-3 bg-black/20 rounded-lg text-sm"
                                                 >
-                                                    <span className="text-gray-400">{formatDateTime(session.start_time)}</span>
+                                                    <span className="text-gray-400">{formatDateTime(session.started_at)}</span>
                                                     <span className="text-white">{formatTime(session.duration_seconds)}</span>
                                                 </div>
                                             ))}
