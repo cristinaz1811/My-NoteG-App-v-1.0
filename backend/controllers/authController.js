@@ -4,11 +4,17 @@ const db = require('../config/database');
 
 const register = async (req, res) => {
     try {
-        const { username, email, password } = req.body;
+        const { username, email, password, role = 'student' } = req.body;
 
         // Validate input
         if (!username || !email || !password) {
             return res.status(400).json({ error: 'All fields are required' });
+        }
+
+        // Validate role
+        const validRoles = ['student', 'professor'];
+        if (!validRoles.includes(role)) {
+            return res.status(400).json({ error: 'Invalid role' });
         }
 
         // Check if user already exists
@@ -25,10 +31,10 @@ const register = async (req, res) => {
         const saltRounds = 10;
         const passwordHash = await bcrypt.hash(password, saltRounds);
 
-        // Create user
+        // Create user with role
         const result = await db.query(
-            'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, role',
-            [username, email, passwordHash]
+            'INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, username, email, role',
+            [username, email, passwordHash, role]
         );
 
         const user = result.rows[0];

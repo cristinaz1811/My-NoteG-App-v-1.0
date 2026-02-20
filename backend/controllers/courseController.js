@@ -90,12 +90,13 @@ const getCourseById = async (req, res) => {
 
 const createCourse = async (req, res) => {
     try {
-        const { title, description, difficulty } = req.body;
+        const { title, description, difficulty, long_description, estimated_hours, tags, learning_objectives } = req.body;
         const createdBy = req.user.id;
 
         const result = await db.query(
-            'INSERT INTO courses (title, description, difficulty, created_by) VALUES ($1, $2, $3, $4) RETURNING *',
-            [title, description, difficulty, createdBy]
+            `INSERT INTO courses (title, description, difficulty, created_by, long_description, estimated_hours, tags, learning_objectives) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+            [title, description, difficulty, createdBy, long_description || null, estimated_hours || 1, tags || [], learning_objectives || []]
         );
 
         res.status(201).json(result.rows[0]);
@@ -414,14 +415,231 @@ const updateTimeSession = async (req, res) => {
     }
 };
 
+// Professor: Get courses created by the professor
+const getProfessorCourses = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        const result = await db.query(`
+            SELECT c.*, 
+                   COUNT(DISTINCT e.id) as exercise_count,
+                   COUNT(DISTINCT ch.id) as chapter_count,
+                   COUNT(DISTINCT en.id) as enrollment_count
+            FROM courses c
+            LEFT JOIN exercises e ON c.id = e.course_id
+            LEFT JOIN chapters ch ON c.id = ch.course_id
+            LEFT JOIN enrollments en ON c.id = en.course_id
+            WHERE c.created_by = $1
+            GROUP BY c.id
+            ORDER BY c.created_at DESC
+        `, [userId]);
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Get professor courses error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Professor: Update course
+const updateCourse = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { title, description, difficulty, long_description, learning_objectives, tags, estimated_hours } = req.body;
+        const userId = req.user.id;
+
+        // Verify ownership
+        const course = await db.query('SELECT * FROM courses WHERE id = $1', [id]);
+        if (course.rows.length === 0) {
+            return res.status(404).json({ error: 'Course not found' });
+        }
+        if (course.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized to edit this course' });
+        }
+
+        const result = await db.query(`
+            UPDATE courses 
+            SET title = COALESCE($1, title),
+                description = COALESCE($2, description),
+                difficulty = COALESCE($3, difficulty),
+                long_description = COALESCE($4, long_description),
+                learning_objectives = COALESCE($5, learning_objectives),
+                tags = COALESCE($6, tags),
+                estimated_hours = COALESCE($7, estimated_hours),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $8
+            RETURNING *
+        `, [title, description, difficulty, long_description, learning_objectives, tags, estimated_hours, id]);
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Update course error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Professor: Delete course
+const deleteCourse = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+
+        // Verify ownership
+        const course = await db.query('SELECT * FROM courses WHERE id = $1', [id]);
+        if (course.rows.length === 0) {
+            return res.status(404).json({ error: 'Course not found' });
+        }
+        if (course.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized to delete this course' });
+        }
+
+        // Delete related records that don't have ON DELETE CASCADE
+        // Get all exercise IDs for this course
+        const exercises = await db.query('SELECT id FROM exercises WHERE course_id = $1', [id]);
+        const exerciseIds = exercises.rows.map(e => e.id);
+        
+        if (exerciseIds.length > 0) {
+            // Delete user_progress for these exercises
+            await db.query('DELETE FROM user_progress WHERE exercise_id = ANY($1)', [exerciseIds]);
+            // Delete submissions for these exercises
+            await db.query('DELETE FROM submissions WHERE exercise_id = ANY($1)', [exerciseIds]);
+        }
+        
+        // Delete enrollments for this course
+        await db.query('DELETE FROM enrollments WHERE course_id = $1', [id]);
+        
+        // Delete time_sessions for this course
+        await db.query('DELETE FROM time_sessions WHERE course_id = $1', [id]);
+        
+        // Delete chapters (exercises will cascade)
+        await db.query('DELETE FROM chapters WHERE course_id = $1', [id]);
+        
+        // Delete exercises (test_cases will cascade)
+        await db.query('DELETE FROM exercises WHERE course_id = $1', [id]);
+
+        await db.query('DELETE FROM courses WHERE id = $1', [id]);
+        res.json({ message: 'Course deleted successfully' });
+    } catch (error) {
+        console.error('Delete course error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Professor: Add chapter to course
+const addChapter = async (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const { title, description } = req.body;
+        const userId = req.user.id;
+
+        // Verify ownership
+        const course = await db.query('SELECT * FROM courses WHERE id = $1', [courseId]);
+        if (course.rows.length === 0) {
+            return res.status(404).json({ error: 'Course not found' });
+        }
+        if (course.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        // Get next order index
+        const maxOrder = await db.query(
+            'SELECT COALESCE(MAX(order_index), 0) + 1 as next_order FROM chapters WHERE course_id = $1',
+            [courseId]
+        );
+
+        const result = await db.query(
+            'INSERT INTO chapters (course_id, title, description, order_index) VALUES ($1, $2, $3, $4) RETURNING *',
+            [courseId, title, description, maxOrder.rows[0].next_order]
+        );
+
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        console.error('Add chapter error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Professor: Update chapter
+const updateChapter = async (req, res) => {
+    try {
+        const { chapterId } = req.params;
+        const { title, description, order_index } = req.body;
+        const userId = req.user.id;
+
+        // Verify ownership through course
+        const chapter = await db.query(`
+            SELECT ch.*, c.created_by 
+            FROM chapters ch 
+            JOIN courses c ON ch.course_id = c.id 
+            WHERE ch.id = $1
+        `, [chapterId]);
+        
+        if (chapter.rows.length === 0) {
+            return res.status(404).json({ error: 'Chapter not found' });
+        }
+        if (chapter.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        const result = await db.query(`
+            UPDATE chapters 
+            SET title = COALESCE($1, title),
+                description = COALESCE($2, description),
+                order_index = COALESCE($3, order_index)
+            WHERE id = $4
+            RETURNING *
+        `, [title, description, order_index, chapterId]);
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Update chapter error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Professor: Delete chapter
+const deleteChapter = async (req, res) => {
+    try {
+        const { chapterId } = req.params;
+        const userId = req.user.id;
+
+        // Verify ownership through course
+        const chapter = await db.query(`
+            SELECT ch.*, c.created_by 
+            FROM chapters ch 
+            JOIN courses c ON ch.course_id = c.id 
+            WHERE ch.id = $1
+        `, [chapterId]);
+        
+        if (chapter.rows.length === 0) {
+            return res.status(404).json({ error: 'Chapter not found' });
+        }
+        if (chapter.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        await db.query('DELETE FROM chapters WHERE id = $1', [chapterId]);
+        res.json({ message: 'Chapter deleted successfully' });
+    } catch (error) {
+        console.error('Delete chapter error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 module.exports = {
     getAllCourses,
     getCourseById,
     createCourse,
+    updateCourse,
+    deleteCourse,
     enrollInCourse,
     unenrollFromCourse,
     getUserCourses,
     getEnrolledCourseDetails,
+    getProfessorCourses,
+    addChapter,
+    updateChapter,
+    deleteChapter,
     startTimeSession,
     endTimeSession,
     updateTimeSession,

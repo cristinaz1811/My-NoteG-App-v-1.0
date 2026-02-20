@@ -4,15 +4,21 @@ const {
     getAllCourses,
     getCourseById,
     createCourse,
+    updateCourse,
+    deleteCourse,
     enrollInCourse,
     unenrollFromCourse,
     getUserCourses,
     getEnrolledCourseDetails,
+    getProfessorCourses,
+    addChapter,
+    updateChapter,
+    deleteChapter,
     startTimeSession,
     endTimeSession,
     updateTimeSession,
 } = require('../controllers/courseController');
-const { authMiddleware, isAdmin } = require('../middleware/auth');
+const { authMiddleware, isAdmin, isProfessor } = require('../middleware/auth');
 
 // Public routes
 router.get('/', getAllCourses);
@@ -26,7 +32,18 @@ router.post('/my-courses/:courseId/time/start', authMiddleware, startTimeSession
 router.post('/my-courses/:courseId/time/end', authMiddleware, endTimeSession);
 router.post('/my-courses/:courseId/time/heartbeat', authMiddleware, updateTimeSession);
 
-// Course management
+// Professor routes
+router.get('/professor/my-courses', authMiddleware, isProfessor, getProfessorCourses);
+router.post('/professor/create', authMiddleware, isProfessor, createCourse);
+router.put('/professor/:id', authMiddleware, isProfessor, updateCourse);
+router.delete('/professor/:id', authMiddleware, isProfessor, deleteCourse);
+
+// Chapter management (professor)
+router.post('/professor/:courseId/chapters', authMiddleware, isProfessor, addChapter);
+router.put('/professor/chapters/:chapterId', authMiddleware, isProfessor, updateChapter);
+router.delete('/professor/chapters/:chapterId', authMiddleware, isProfessor, deleteChapter);
+
+// Course management (legacy admin route)
 router.post('/', authMiddleware, isAdmin, createCourse);
 router.post('/:courseId/enroll', authMiddleware, enrollInCourse);
 router.delete('/:courseId/unenroll', authMiddleware, unenrollFromCourse);
