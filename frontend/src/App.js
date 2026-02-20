@@ -13,6 +13,7 @@ import ProfessorDashboard from './pages/ProfessorDashboard';
 import CreateCourse from './pages/CreateCourse';
 import EditCourse from './pages/EditCourse';
 import EditExercise from './pages/EditExercise';
+import CourseStudents from './pages/CourseStudents';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -360,6 +361,14 @@ function App() {
                         element={
                             <ProfessorRoute>
                                 <Navbar /><div className="pt-16"><EditExercise /></div>
+                            </ProfessorRoute>
+                        } 
+                    />
+                    <Route 
+                        path="/professor/course/:id/students" 
+                        element={
+                            <ProfessorRoute>
+                                <Navbar /><div className="pt-16"><CourseStudents /></div>
                             </ProfessorRoute>
                         } 
                     />

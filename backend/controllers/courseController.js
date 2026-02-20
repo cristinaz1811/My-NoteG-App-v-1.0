@@ -90,13 +90,13 @@ const getCourseById = async (req, res) => {
 
 const createCourse = async (req, res) => {
     try {
-        const { title, description, difficulty, long_description, estimated_hours, tags, learning_objectives } = req.body;
+        const { title, description, difficulty, long_description, estimated_hours, tags, learning_objectives, language } = req.body;
         const createdBy = req.user.id;
 
         const result = await db.query(
-            `INSERT INTO courses (title, description, difficulty, created_by, long_description, estimated_hours, tags, learning_objectives) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-            [title, description, difficulty, createdBy, long_description || null, estimated_hours || 1, tags || [], learning_objectives || []]
+            `INSERT INTO courses (title, description, difficulty, created_by, long_description, estimated_hours, tags, learning_objectives, language) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+            [title, description, difficulty, createdBy, long_description || null, estimated_hours || 1, tags || [], learning_objectives || [], language || 'javascript']
         );
 
         res.status(201).json(result.rows[0]);
@@ -626,6 +626,208 @@ const deleteChapter = async (req, res) => {
     }
 };
 
+// Professor: Get enrolled students for a course
+const getCourseEnrolledStudents = async (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const userId = req.user.id;
+
+        // Verify ownership
+        const course = await db.query('SELECT * FROM courses WHERE id = $1', [courseId]);
+        if (course.rows.length === 0) {
+            return res.status(404).json({ error: 'Course not found' });
+        }
+        if (course.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        const result = await db.query(`
+            SELECT 
+                u.id,
+                u.username,
+                u.email,
+                e.enrolled_at,
+                e.progress,
+                COALESCE(time_stats.total_time, 0) as total_time_spent,
+                COALESCE(time_stats.session_count, 0) as session_count,
+                COUNT(DISTINCT ex.id) as total_exercises,
+                COUNT(DISTINCT CASE WHEN up.completed = true THEN up.exercise_id END) as completed_exercises,
+                COALESCE(sub_stats.total_attempts, 0) as total_attempts,
+                COALESCE(sub_stats.avg_score, 0) as average_score,
+                COALESCE(sub_stats.last_submission, NULL) as last_activity
+            FROM enrollments e
+            JOIN users u ON e.user_id = u.id
+            LEFT JOIN exercises ex ON ex.course_id = e.course_id
+            LEFT JOIN user_progress up ON ex.id = up.exercise_id AND up.user_id = e.user_id
+            LEFT JOIN (
+                SELECT 
+                    s.user_id,
+                    COUNT(s.id) as total_attempts,
+                    ROUND(AVG(s.score)::numeric, 2) as avg_score,
+                    MAX(s.submitted_at) as last_submission
+                FROM submissions s
+                JOIN exercises ex2 ON s.exercise_id = ex2.id
+                WHERE ex2.course_id = $1
+                GROUP BY s.user_id
+            ) sub_stats ON u.id = sub_stats.user_id
+            LEFT JOIN (
+                SELECT 
+                    user_id,
+                    COUNT(*) as session_count,
+                    SUM(CASE 
+                        WHEN duration IS NOT NULL THEN duration
+                        ELSE EXTRACT(EPOCH FROM (COALESCE(ended_at, NOW()) - started_at))::integer
+                    END) as total_time
+                FROM time_sessions
+                WHERE course_id = $1 AND started_at IS NOT NULL
+                GROUP BY user_id
+            ) time_stats ON u.id = time_stats.user_id
+            WHERE e.course_id = $1
+            GROUP BY u.id, u.username, u.email, e.enrolled_at, e.progress,
+                     time_stats.total_time, time_stats.session_count,
+                     sub_stats.total_attempts, sub_stats.avg_score, sub_stats.last_submission
+            ORDER BY e.enrolled_at DESC
+        `, [courseId]);
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Get course enrolled students error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Professor: Get detailed stats for a specific student in a course
+const getStudentCourseDetails = async (req, res) => {
+    try {
+        const { courseId, studentId } = req.params;
+        const userId = req.user.id;
+
+        // Verify ownership
+        const course = await db.query('SELECT * FROM courses WHERE id = $1', [courseId]);
+        if (course.rows.length === 0) {
+            return res.status(404).json({ error: 'Course not found' });
+        }
+        if (course.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        // Check if student is enrolled
+        const enrollment = await db.query(
+            'SELECT * FROM enrollments WHERE user_id = $1 AND course_id = $2',
+            [studentId, courseId]
+        );
+
+        if (enrollment.rows.length === 0) {
+            return res.status(404).json({ error: 'Student not enrolled in this course' });
+        }
+
+        // Get student info
+        const studentResult = await db.query(
+            'SELECT id, username, email FROM users WHERE id = $1',
+            [studentId]
+        );
+
+        // Get course info
+        const courseResult = await db.query(
+            'SELECT * FROM courses WHERE id = $1',
+            [courseId]
+        );
+
+        // Get all exercises with student progress
+        const exercisesResult = await db.query(`
+            SELECT 
+                ex.id,
+                ex.title,
+                ex.description,
+                ex.difficulty,
+                ex.language,
+                ch.title as chapter_title,
+                COALESCE(up.completed, false) as completed,
+                COALESCE(up.best_score, 0) as best_score,
+                COALESCE(up.attempts, 0) as attempts,
+                up.last_attempt_at
+            FROM exercises ex
+            LEFT JOIN chapters ch ON ex.chapter_id = ch.id
+            LEFT JOIN user_progress up ON ex.id = up.exercise_id AND up.user_id = $1
+            WHERE ex.course_id = $2
+            ORDER BY ch.order_index, ex.order_index, ex.id
+        `, [studentId, courseId]);
+
+        // Get recent submissions
+        const submissionsResult = await db.query(`
+            SELECT 
+                s.id,
+                s.exercise_id,
+                ex.title as exercise_title,
+                s.score,
+                s.status,
+                s.tests_passed,
+                s.tests_total,
+                s.execution_time,
+                s.submitted_at
+            FROM submissions s
+            JOIN exercises ex ON s.exercise_id = ex.id
+            WHERE s.user_id = $1 AND ex.course_id = $2
+            ORDER BY s.submitted_at DESC
+            LIMIT 20
+        `, [studentId, courseId]);
+
+        // Get time sessions
+        const timeSessionsResult = await db.query(`
+            SELECT 
+                ts.started_at,
+                ts.ended_at,
+                COALESCE(ts.duration, EXTRACT(EPOCH FROM (COALESCE(ts.ended_at, NOW()) - ts.started_at))::integer) as duration_seconds
+            FROM time_sessions ts
+            WHERE ts.user_id = $1 AND ts.course_id = $2 AND ts.started_at IS NOT NULL
+            ORDER BY ts.started_at DESC
+            LIMIT 10
+        `, [studentId, courseId]);
+
+        // Calculate total time spent from all time sessions
+        const totalTimeResult = await db.query(`
+            SELECT COALESCE(SUM(
+                CASE 
+                    WHEN duration IS NOT NULL THEN duration
+                    ELSE EXTRACT(EPOCH FROM (COALESCE(ended_at, NOW()) - started_at))::integer
+                END
+            ), 0) as total_time
+            FROM time_sessions
+            WHERE user_id = $1 AND course_id = $2 AND started_at IS NOT NULL
+        `, [studentId, courseId]);
+        const calculatedTotalTime = parseInt(totalTimeResult.rows[0]?.total_time || 0);
+
+        // Calculate stats
+        const totalExercises = exercisesResult.rows.length;
+        const completedExercises = exercisesResult.rows.filter(e => e.completed).length;
+        const totalAttempts = exercisesResult.rows.reduce((sum, e) => sum + (e.attempts || 0), 0);
+        const averageScore = submissionsResult.rows.length > 0 
+            ? submissionsResult.rows.reduce((sum, s) => sum + (s.score || 0), 0) / submissionsResult.rows.length
+            : 0;
+
+        res.json({
+            student: studentResult.rows[0],
+            course: courseResult.rows[0],
+            enrollment: enrollment.rows[0],
+            stats: {
+                total_exercises: totalExercises,
+                completed_exercises: completedExercises,
+                progress_percentage: totalExercises > 0 ? Math.round((completedExercises / totalExercises) * 100) : 0,
+                total_attempts: totalAttempts,
+                average_score: Math.round(averageScore * 100) / 100,
+                total_time_spent: calculatedTotalTime,
+                study_sessions_count: timeSessionsResult.rows.length
+            },
+            exercises: exercisesResult.rows,
+            recentSubmissions: submissionsResult.rows,
+            timeSessions: timeSessionsResult.rows
+        });
+    } catch (error) {
+        console.error('Get student course details error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 module.exports = {
     getAllCourses,
     getCourseById,
@@ -643,4 +845,6 @@ module.exports = {
     startTimeSession,
     endTimeSession,
     updateTimeSession,
+    getCourseEnrolledStudents,
+    getStudentCourseDetails,
 };

@@ -154,6 +154,20 @@ const ProfessorDashboard = () => {
                                     {/* Actions */}
                                     <div className="flex items-center gap-2">
                                         <Link
+                                            to={`/professor/course/${course.id}/students`}
+                                            className="px-4 py-2 rounded-lg text-sm font-medium text-[#fef483] border border-[#fef483]/30 hover:bg-[#fef483]/10 transition-colors no-underline"
+                                        >
+                                            Students
+                                        </Link>
+                                        <a
+                                            href={`http://localhost:8501?course_id=${course.id}&professor_id=${user?.id}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="px-4 py-2 rounded-lg text-sm font-medium text-[#4ade80] border border-[#4ade80]/30 hover:bg-[#4ade80]/10 transition-colors no-underline"
+                                        >
+                                            Analytics
+                                        </a>
+                                        <Link
                                             to={`/professor/course/${course.id}`}
                                             className="px-4 py-2 rounded-lg text-sm font-medium text-white no-underline"
                                             style={{ background: 'linear-gradient(135deg, #a1609d, #b870ad)' }}
