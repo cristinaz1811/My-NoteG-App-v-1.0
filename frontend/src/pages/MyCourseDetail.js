@@ -217,15 +217,15 @@ const MyCourseDetail = () => {
                                 </h3>
                                 <ul className="space-y-3">
                                     <li className="flex items-start gap-3 text-gray-300">
-                                        <span className="text-cyan-400 mt-1">✓</span>
+                                        <span className="text-[#fef483] mt-1">✓</span>
                                         Master {course.title} fundamentals
                                     </li>
                                     <li className="flex items-start gap-3 text-gray-300">
-                                        <span className="text-cyan-400 mt-1">✓</span>
+                                        <span className="text-[#fef483] mt-1">✓</span>
                                         Complete {stats.totalExercises} hands-on exercises
                                     </li>
                                     <li className="flex items-start gap-3 text-gray-300">
-                                        <span className="text-cyan-400 mt-1">✓</span>
+                                        <span className="text-[#fef483] mt-1">✓</span>
                                         Build practical programming skills
                                     </li>
                                 </ul>
@@ -282,7 +282,7 @@ const MyCourseDetail = () => {
                                                 {exercise.completed ? '✓' : '○'}
                                             </div>
                                             <div>
-                                                <h4 className="font-medium group-hover:text-cyan-400 transition-colors">
+                                                <h4 className="font-medium group-hover:text-[#fef483] transition-colors">
                                                     {exercise.title}
                                                 </h4>
                                                 <div className="flex items-center gap-2 mt-1">
@@ -297,7 +297,7 @@ const MyCourseDetail = () => {
                                         </div>
                                         <div className="text-right">
                                             <div className="text-sm text-gray-400">
-                                                Best: <span className="text-cyan-400 font-medium">{exercise.best_score}%</span>
+                                                Best: <span className="text-[#fef483] font-medium">{exercise.best_score}%</span>
                                             </div>
                                             <div className="text-xs text-gray-500">
                                                 {exercise.attempts} attempts
@@ -380,7 +380,7 @@ const MyCourseDetail = () => {
                                                     <tr key={sub.id} className="border-b border-white/5">
                                                         <td className="py-3 text-gray-300">{sub.exercise_title}</td>
                                                         <td className="py-3">
-                                                            <span className={sub.score === 100 ? 'text-green-400' : 'text-cyan-400'}>
+                                                            <span className={sub.score === 100 ? 'text-green-400' : 'text-[#fef483]'}>
                                                                 {sub.score}%
                                                             </span>
                                                         </td>

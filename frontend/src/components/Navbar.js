@@ -1,38 +1,40 @@
 import React, { useContext } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
 const Navbar = () => {
     const { user, logout } = useContext(AuthContext);
+    const navigate = useNavigate();
+
+    const handleLogout = () => {
+        logout();
+        navigate('/');
+    };
 
     return (
-        <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-4" style={{ background: 'rgba(10, 10, 15, 0.8)', backdropFilter: 'blur(20px)' }}>
+        <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-1 border-b border-white/5" style={{ background: 'linear-gradient(to bottom, rgba(18, 22, 28, 0.6) 0%, rgba(18, 22, 28, 0.3) 70%, transparent 100%)', backdropFilter: 'blur(12px)' }}>
             <div className="max-w-7xl mx-auto flex items-center justify-between">
                 {/* Logo */}
                 <Link to="/student" className="flex items-center gap-2 no-underline">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center gradient-bg">
-                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                        </svg>
-                    </div>
-                    <span className="text-xl font-bold text-white">CodeCraft</span>
+                    <img src="/logo.png" alt="Note G" className="w-16 h-16" />
+                    <span className="text-xl font-bold text-white">Note G</span>
                 </Link>
 
                 {/* Navigation Links */}
                 <div className="flex items-center gap-6">
                     {user ? (
                         <>
-                            <Link to="/courses" className="text-gray-300 hover:text-cyan-400 transition-colors no-underline">
+                            <Link to="/courses" className="text-gray-300 hover:text-[#fef483] transition-colors no-underline">
                                 Courses
                             </Link>
-                            <Link to="/my-courses" className="text-gray-300 hover:text-cyan-400 transition-colors no-underline">
+                            <Link to="/my-courses" className="text-gray-300 hover:text-[#fef483] transition-colors no-underline">
                                 My Courses
                             </Link>
                             <span className="text-gray-400">
-                                Welcome, <span className="text-cyan-400">{user.username}</span>
+                                Welcome, <span className="text-[#fef483]">{user.username}</span>
                             </span>
                             <button 
-                                onClick={logout}
+                                onClick={handleLogout}
                                 className="px-4 py-2 rounded-lg text-gray-300 hover:bg-white/10 transition-colors border-none bg-transparent cursor-pointer"
                             >
                                 Logout
@@ -40,7 +42,7 @@ const Navbar = () => {
                         </>
                     ) : (
                         <>
-                            <Link to="/login" className="text-gray-300 hover:text-cyan-400 transition-colors no-underline">
+                            <Link to="/login" className="text-gray-300 hover:text-[#fef483] transition-colors no-underline">
                                 Sign In
                             </Link>
                             <Link 

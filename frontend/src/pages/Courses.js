@@ -51,10 +51,10 @@ const Courses = () => {
             'from-blue-500 to-indigo-600',
             'from-purple-500 to-pink-600',
             'from-green-500 to-emerald-600',
-            'from-cyan-500 to-blue-600',
+            'from-fuchsia-500 to-purple-600',
             'from-amber-500 to-orange-600',
             'from-rose-500 to-red-600',
-            'from-teal-500 to-cyan-600',
+            'from-violet-500 to-purple-600',
         ];
         return gradients[index % gradients.length];
     };
@@ -71,7 +71,7 @@ const Courses = () => {
     }
 
     return (
-        <div className="min-h-screen py-8 px-6">
+        <div className="min-h-screen pt-20 pb-8 px-6">
             <div className="max-w-7xl mx-auto">
                 {/* Header */}
                 <div className="text-center mb-12">
@@ -130,7 +130,7 @@ const Courses = () => {
                                 </div>
 
                                 {/* Title */}
-                                <h3 className="text-xl font-semibold mb-2 group-hover:text-cyan-400 transition-colors">
+                                <h3 className="text-xl font-semibold mb-2 group-hover:text-[#fef483] transition-colors">
                                     {course.title}
                                 </h3>
 

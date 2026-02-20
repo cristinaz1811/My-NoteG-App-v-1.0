@@ -29,11 +29,7 @@ const Register = () => {
                 <div className="surface-card p-8 rounded-2xl glow-sm">
                     {/* Header */}
                     <div className="text-center mb-8">
-                        <div className="w-16 h-16 rounded-2xl gradient-bg flex items-center justify-center mx-auto mb-4">
-                            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                            </svg>
-                        </div>
+                        <img src="/logo.png" alt="Note G" className="w-32 h-32 mx-auto mb-4" />
                         <h2 className="text-2xl font-bold mb-2">Create Your Account</h2>
                         <p className="text-gray-400">Start your coding journey today</p>
                     </div>
@@ -119,14 +115,14 @@ const Register = () => {
                             <div className="w-full border-t border-gray-700"></div>
                         </div>
                         <div className="relative flex justify-center text-sm">
-                            <span className="px-4 bg-[#16161f] text-gray-400">or</span>
+                            <span className="px-4 bg-[#232a36] text-gray-400">or</span>
                         </div>
                     </div>
 
                     {/* Login Link */}
                     <p className="text-center text-gray-400">
                         Already have an account?{' '}
-                        <Link to="/login" className="text-cyan-400 hover:text-cyan-300 font-medium">
+                        <Link to="/login" className="text-[#fef483] hover:text-[#fff9c4] font-medium">
                             Sign in
                         </Link>
                     </p>

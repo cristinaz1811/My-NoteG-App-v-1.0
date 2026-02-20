@@ -28,11 +28,7 @@ const Login = () => {
                 <div className="surface-card p-8 rounded-2xl glow-sm">
                     {/* Header */}
                     <div className="text-center mb-8">
-                        <div className="w-16 h-16 rounded-2xl gradient-bg flex items-center justify-center mx-auto mb-4">
-                            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                            </svg>
-                        </div>
+                        <img src="/logo.png" alt="Note G" className="w-32 h-32 mx-auto mb-4" />
                         <h2 className="text-2xl font-bold mb-2">Welcome Back</h2>
                         <p className="text-gray-400">Sign in to continue your learning journey</p>
                     </div>
@@ -88,14 +84,14 @@ const Login = () => {
                             <div className="w-full border-t border-gray-700"></div>
                         </div>
                         <div className="relative flex justify-center text-sm">
-                            <span className="px-4 bg-[#16161f] text-gray-400">or</span>
+                            <span className="px-4 bg-[#232a36] text-gray-400">or</span>
                         </div>
                     </div>
 
                     {/* Register Link */}
                     <p className="text-center text-gray-400">
                         Don't have an account?{' '}
-                        <Link to="/register" className="text-cyan-400 hover:text-cyan-300 font-medium">
+                        <Link to="/register" className="text-[#fef483] hover:text-[#fff9c4] font-medium">
                             Create one free
                         </Link>
                     </p>

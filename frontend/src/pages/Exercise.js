@@ -121,7 +121,7 @@ const Exercise = () => {
                                 <div className="space-y-2 font-mono text-sm">
                                     <div>
                                         <span className="text-gray-500">Input: </span>
-                                        <span className="text-cyan-400">{testCase.input}</span>
+                                        <span className="text-[#fef483]">{testCase.input}</span>
                                     </div>
                                     <div>
                                         <span className="text-gray-500">Expected: </span>
@@ -160,9 +160,9 @@ const Exercise = () => {
             </div>
 
             {/* Right Panel - Editor */}
-            <div className="lg:w-1/2 xl:w-3/5 flex flex-col bg-[#12121a]" style={{ height: 'calc(100vh - 4rem)' }}>
+            <div className="lg:w-1/2 xl:w-3/5 flex flex-col bg-[#1e242e]" style={{ height: 'calc(100vh - 4rem)' }}>
                 {/* Editor Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-[#16161f]">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-[#232a36]">
                     <div className="flex items-center gap-3">
                         <div className="flex items-center gap-1.5">
                             <div className="w-3 h-3 rounded-full bg-red-500"></div>

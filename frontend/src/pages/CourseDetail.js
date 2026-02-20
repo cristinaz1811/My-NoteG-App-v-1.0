@@ -244,7 +244,7 @@ const CourseDetail = () => {
                                 <div className="grid sm:grid-cols-2 gap-3">
                                     {course.learning_objectives.map((obj, i) => (
                                         <div key={i} className="flex items-start gap-3">
-                                            <span className="text-cyan-400 mt-1">✓</span>
+                                            <span className="text-[#fef483] mt-1">✓</span>
                                             <span className="text-gray-300">{obj}</span>
                                         </div>
                                     ))}

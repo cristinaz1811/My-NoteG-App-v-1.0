@@ -16,24 +16,76 @@ const ProtectedRoute = ({ children }) => {
     return token ? children : <Navigate to="/login" />;
 };
 
-// Role Selection Landing Page
+// Animated Background Component
+const AnimatedBackground = () => (
+    <div className="animated-bg">
+        <div className="bg-orb bg-orb-1"></div>
+        <div className="bg-orb bg-orb-2"></div>
+        <div className="bg-orb bg-orb-3"></div>
+        <div className="bg-orb bg-orb-4"></div>
+    </div>
+);
+
+// Main Landing Page (simple welcome screen)
+const LandingPage = () => {
+    return (
+        <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #1a1f28 0%, #252c38 50%, #1a1f28 100%)' }}>
+            {/* Floating background shapes */}
+            <div className="absolute w-96 h-96 rounded-full -top-48 -left-48 opacity-10 animate-pulse" style={{ background: 'radial-gradient(circle, rgba(161, 96, 157, 0.6), transparent)' }}></div>
+            <div className="absolute w-72 h-72 rounded-full -bottom-36 -right-36 opacity-10 animate-pulse" style={{ background: 'radial-gradient(circle, rgba(254, 244, 131, 0.6), transparent)', animationDelay: '1s' }}></div>
+            <div className="absolute w-80 h-80 rounded-full top-1/2 -right-40 opacity-10 animate-pulse" style={{ background: 'radial-gradient(circle, rgba(184, 138, 181, 0.6), transparent)', animationDelay: '2s' }}></div>
+
+            <div className="text-center space-y-8 max-w-lg relative z-10">
+                {/* Logo */}
+                <div className="space-y-6 animate-slideUp">
+                    <img src="/logo.png" alt="Note G" className="w-48 h-48 mx-auto" style={{ filter: 'drop-shadow(0 0 40px rgba(161, 96, 157, 0.4))' }} />
+                    <h1 className="text-5xl sm:text-6xl font-black text-white leading-tight">
+                        Note G
+                    </h1>
+                    <p className="text-xl sm:text-2xl font-medium" style={{ color: '#fef483' }}>
+                        Learn to code the fun way
+                    </p>
+                </div>
+
+                {/* Buttons */}
+                <div className="space-y-4 pt-8">
+                    <Link 
+                        to="/login" 
+                        className="w-full block px-8 py-4 bg-white text-gray-900 font-bold rounded-2xl text-lg hover:bg-gray-100 transition-all shadow-lg no-underline hover:scale-105 active:scale-95"
+                    >
+                        Log In
+                    </Link>
+                    <Link 
+                        to="/get-started" 
+                        className="w-full block px-8 py-4 gradient-bg text-white font-bold rounded-2xl text-lg shadow-lg no-underline hover:scale-105 active:scale-95 transition-all"
+                        style={{ boxShadow: '0 8px 30px rgba(161, 96, 157, 0.5)' }}
+                    >
+                        Get Started
+                    </Link>
+                </div>
+
+                <p className="text-[#fef483] text-sm font-medium pt-4">
+                    ✨ Join thousands of students and educators learning together
+                </p>
+            </div>
+        </div>
+    );
+};
+
+// Role Selection Page (after landing)
 const RoleSelection = () => {
     return (
         <div className="min-h-screen flex items-center justify-center px-6 py-12" style={{ background: 'var(--bg-color)' }}>
             <div className="max-w-4xl w-full text-center">
                 {/* Logo */}
                 <div className="flex items-center justify-center gap-3 mb-8">
-                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center gradient-bg">
-                        <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                        </svg>
-                    </div>
-                    <span className="text-4xl font-bold text-white">CodeCraft</span>
+                    <img src="/logo.png" alt="Note G" className="w-32 h-32" />
+                    <span className="text-4xl font-bold text-white">Note G</span>
                 </div>
 
                 {/* Title */}
                 <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4">
-                    Welcome to <span className="gradient-text">CodeCraft</span>
+                    Welcome to <span className="gradient-text">Note G</span>
                 </h1>
                 <p className="text-lg sm:text-xl text-gray-400 mb-12 max-w-2xl mx-auto">
                     The interactive platform for learning and teaching programming. Choose your role to get started.
@@ -47,16 +99,16 @@ const RoleSelection = () => {
                         className="surface-card card-hover p-8 rounded-2xl text-left group no-underline"
                     >
                         <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 text-4xl"
-                             style={{ background: 'linear-gradient(135deg, rgba(34, 211, 238, 0.2), rgba(99, 102, 241, 0.2))' }}>
+                             style={{ background: 'linear-gradient(135deg, rgba(254, 244, 131, 0.2), rgba(161, 96, 157, 0.2))' }}>
                             🎓
                         </div>
-                        <h2 className="text-2xl font-bold mb-3 text-white group-hover:text-cyan-400 transition-colors">
+                        <h2 className="text-2xl font-bold mb-3 text-white group-hover:text-[#fef483] transition-colors">
                             I'm a Student
                         </h2>
                         <p className="text-gray-400 mb-6">
                             Learn programming through interactive courses, hands-on exercises, and real-time feedback.
                         </p>
-                        <div className="flex items-center gap-2 text-cyan-400 font-medium">
+                        <div className="flex items-center gap-2 text-[#fef483] font-medium">
                             <span>Start Learning</span>
                             <span className="group-hover:translate-x-1 transition-transform">→</span>
                         </div>
@@ -68,12 +120,12 @@ const RoleSelection = () => {
                     >
                         {/* Coming Soon Badge */}
                         <div className="absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-semibold"
-                             style={{ background: 'rgba(251, 191, 36, 0.2)', color: '#fbbf24' }}>
+                             style={{ background: 'rgba(254, 244, 131, 0.2)', color: '#fef483' }}>
                             Coming Soon
                         </div>
                         
                         <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 text-4xl"
-                             style={{ background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(236, 72, 153, 0.2))' }}>
+                             style={{ background: 'linear-gradient(135deg, rgba(161, 96, 157, 0.2), rgba(184, 138, 181, 0.2))' }}>
                             👨‍🏫
                         </div>
                         <h2 className="text-2xl font-bold mb-3 text-white">
@@ -90,7 +142,7 @@ const RoleSelection = () => {
 
                 {/* Footer */}
                 <p className="text-sm text-gray-500 mt-12">
-                    Already have an account? <Link to="/login" className="text-cyan-400 hover:text-cyan-300">Sign in</Link>
+                    Already have an account? <Link to="/login" className="text-[#fef483] hover:text-[#fff9c4]">Sign in</Link>
                 </p>
             </div>
         </div>
@@ -106,7 +158,7 @@ const Home = () => {
                     {/* Left Content */}
                     <div className="animate-slideUp">
                         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm mb-6" 
-                             style={{ background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+                             style={{ background: 'rgba(161, 96, 157, 0.1)', border: '1px solid rgba(161, 96, 157, 0.3)' }}>
                             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
                             <span>Join thousands of developers learning right now</span>
                         </div>
@@ -161,7 +213,7 @@ const Home = () => {
                 <div className="max-w-7xl mx-auto">
                     <div className="text-center mb-16">
                         <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-                            Why Learn With <span className="gradient-text">CodeCraft</span>
+                            Why Learn With <span className="gradient-text">Note G</span>
                         </h2>
                         <p className="text-lg opacity-70 max-w-2xl mx-auto">
                             Everything you need to go from zero to professional developer, all in one place.
@@ -178,7 +230,7 @@ const Home = () => {
                         ].map((feature, idx) => (
                             <div key={idx} className="card-hover p-8 rounded-2xl surface-card">
                                 <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-6 text-3xl"
-                                     style={{ background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(34, 211, 238, 0.2))' }}>
+                                     style={{ background: 'linear-gradient(135deg, rgba(161, 96, 157, 0.2), rgba(254, 244, 131, 0.2))' }}>
                                     {feature.icon}
                                 </div>
                                 <h3 className="text-xl font-semibold mb-3">{feature.title}</h3>
@@ -194,14 +246,10 @@ const Home = () => {
                 <div className="max-w-7xl mx-auto">
                     <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                         <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center gradient-bg">
-                                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                                </svg>
-                            </div>
-                            <span className="font-bold text-white">CodeCraft</span>
+                            <img src="/logo.png" alt="Note G" className="w-16 h-16" />
+                            <span className="font-bold text-white">Note G</span>
                         </div>
-                        <p className="text-sm opacity-50">© 2024 CodeCraft. All rights reserved.</p>
+                        <p className="text-sm opacity-50">© 2024 Note G. All rights reserved.</p>
                     </div>
                 </div>
             </footer>
@@ -213,9 +261,13 @@ function App() {
     return (
         <Router>
             <AuthProvider>
+                <AnimatedBackground />
                 <Routes>
+                    {/* Landing Page - No Navbar */}
+                    <Route path="/" element={<LandingPage />} />
+                    
                     {/* Role Selection - No Navbar */}
-                    <Route path="/" element={<RoleSelection />} />
+                    <Route path="/get-started" element={<RoleSelection />} />
                     
                     {/* Student Routes - With Navbar */}
                     <Route path="/student" element={<><Navbar /><div className="pt-16"><Home /></div></>} />

@@ -63,7 +63,7 @@ const MyCourses = () => {
 
     if (courses.length === 0) {
         return (
-            <div className="min-h-screen py-8 px-6">
+            <div className="min-h-screen pt-20 pb-8 px-6">
                 <div className="max-w-4xl mx-auto">
                     <div className="surface-card rounded-3xl p-12 text-center glow-sm">
                         <div className="text-6xl mb-6">📚</div>
@@ -84,7 +84,7 @@ const MyCourses = () => {
     }
 
     return (
-        <div className="min-h-screen py-8 px-6">
+        <div className="min-h-screen pt-20 pb-8 px-6">
             <div className="max-w-7xl mx-auto">
                 {/* Header */}
                 <div className="mb-10">
@@ -136,7 +136,7 @@ const MyCourses = () => {
                                 {/* Header */}
                                 <div className="flex items-start justify-between mb-4">
                                     <div className="flex-1">
-                                        <h3 className="text-lg font-semibold group-hover:text-cyan-400 transition-colors mb-2">
+                                        <h3 className="text-lg font-semibold group-hover:text-[#fef483] transition-colors mb-2">
                                             {course.title}
                                         </h3>
                                         <span className={`badge ${getDifficultyBadgeClass(course.difficulty)}`}>
@@ -159,7 +159,7 @@ const MyCourses = () => {
                                 <div className="mb-4">
                                     <div className="flex justify-between text-sm mb-2">
                                         <span className="text-gray-400">Progress</span>
-                                        <span className="font-medium text-cyan-400">{progress}%</span>
+                                        <span className="font-medium text-[#fef483]">{progress}%</span>
                                     </div>
                                     <div className="progress-bar-container h-2">
                                         <div 

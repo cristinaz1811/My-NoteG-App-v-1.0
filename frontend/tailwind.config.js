@@ -7,11 +7,12 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        'bg': '#0a0a0f',
-        'surface': '#16161f',
-        'primary': '#6366f1',
-        'secondary': '#22d3ee',
+        'bg': '#1a1f28',
+        'surface': '#232a36',
+        'primary': '#a1609d',
+        'secondary': '#fef483',
         'text': '#e8e8ed',
+        'accent-muted': '#b88ab5',
       },
       fontFamily: {
         'grotesk': ['Space Grotesk', 'sans-serif'],
