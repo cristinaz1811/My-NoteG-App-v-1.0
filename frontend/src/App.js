@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -9,11 +9,28 @@ import CourseDetail from './pages/CourseDetail';
 import Exercise from './pages/Exercise';
 import MyCourses from './pages/MyCourses';
 import MyCourseDetail from './pages/MyCourseDetail';
+import ProfessorDashboard from './pages/ProfessorDashboard';
+import CreateCourse from './pages/CreateCourse';
+import EditCourse from './pages/EditCourse';
+import EditExercise from './pages/EditExercise';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
     const token = localStorage.getItem('token');
     return token ? children : <Navigate to="/login" />;
+};
+
+// Professor Route Component - requires professor or admin role
+const ProfessorRoute = ({ children }) => {
+    const { user } = useAuth();
+    const token = localStorage.getItem('token');
+    
+    if (!token) return <Navigate to="/login" />;
+    if (!user) return null; // Loading
+    if (user.role !== 'professor' && user.role !== 'admin') {
+        return <Navigate to="/student" />;
+    }
+    return children;
 };
 
 // Animated Background Component
@@ -98,7 +115,7 @@ const RoleSelection = () => {
                 <div className="grid sm:grid-cols-2 gap-6 max-w-2xl mx-auto">
                     {/* Student Card */}
                     <Link 
-                        to="/register"
+                        to="/register?role=student"
                         className="surface-card card-hover p-8 rounded-2xl text-left group no-underline"
                     >
                         <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 text-4xl"
@@ -118,29 +135,25 @@ const RoleSelection = () => {
                     </Link>
 
                     {/* Professor Card */}
-                    <div 
-                        className="surface-card p-8 rounded-2xl text-left opacity-60 cursor-not-allowed relative overflow-hidden"
+                    <Link 
+                        to="/register?role=professor"
+                        className="surface-card card-hover p-8 rounded-2xl text-left group no-underline"
                     >
-                        {/* Coming Soon Badge */}
-                        <div className="absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-semibold"
-                             style={{ background: 'rgba(254, 244, 131, 0.2)', color: '#fef483' }}>
-                            Coming Soon
-                        </div>
-                        
                         <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 text-4xl"
                              style={{ background: 'linear-gradient(135deg, rgba(161, 96, 157, 0.2), rgba(184, 138, 181, 0.2))' }}>
                             👨‍🏫
                         </div>
-                        <h2 className="text-2xl font-bold mb-3 text-white">
+                        <h2 className="text-2xl font-bold mb-3 text-white group-hover:text-[#a1609d] transition-colors">
                             I'm a Professor
                         </h2>
                         <p className="text-gray-400 mb-6">
                             Create courses, design exercises, and track your students' progress in real-time.
                         </p>
-                        <div className="flex items-center gap-2 text-gray-500 font-medium">
-                            <span>Available Soon</span>
+                        <div className="flex items-center gap-2 text-[#a1609d] font-medium">
+                            <span>Start Teaching</span>
+                            <span className="group-hover:translate-x-1 transition-transform">→</span>
                         </div>
-                    </div>
+                    </Link>
                 </div>
 
                 {/* Footer */}
@@ -314,6 +327,40 @@ function App() {
                             <ProtectedRoute>
                                 <Navbar /><div className="pt-24"><MyCourseDetail /></div>
                             </ProtectedRoute>
+                        } 
+                    />
+                    
+                    {/* Professor Routes */}
+                    <Route 
+                        path="/professor" 
+                        element={
+                            <ProfessorRoute>
+                                <Navbar /><div className="pt-16"><ProfessorDashboard /></div>
+                            </ProfessorRoute>
+                        } 
+                    />
+                    <Route 
+                        path="/professor/create-course" 
+                        element={
+                            <ProfessorRoute>
+                                <Navbar /><div className="pt-16"><CreateCourse /></div>
+                            </ProfessorRoute>
+                        } 
+                    />
+                    <Route 
+                        path="/professor/course/:id" 
+                        element={
+                            <ProfessorRoute>
+                                <Navbar /><div className="pt-16"><EditCourse /></div>
+                            </ProfessorRoute>
+                        } 
+                    />
+                    <Route 
+                        path="/professor/exercise/:id" 
+                        element={
+                            <ProfessorRoute>
+                                <Navbar /><div className="pt-16"><EditExercise /></div>
+                            </ProfessorRoute>
                         } 
                     />
                 </Routes>

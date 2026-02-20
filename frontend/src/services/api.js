@@ -39,6 +39,15 @@ export const courseService = {
     startTimeSession: (courseId) => api.post(`/courses/my-courses/${courseId}/time/start`),
     endTimeSession: (courseId) => api.post(`/courses/my-courses/${courseId}/time/end`),
     heartbeat: (courseId) => api.post(`/courses/my-courses/${courseId}/time/heartbeat`),
+    // Professor endpoints
+    getProfessorCourses: () => api.get('/courses/professor/my-courses'),
+    createProfessorCourse: (courseData) => api.post('/courses/professor/create', courseData),
+    updateCourse: (id, courseData) => api.put(`/courses/professor/${id}`, courseData),
+    deleteCourse: (id) => api.delete(`/courses/professor/${id}`),
+    // Chapter management
+    addChapter: (courseId, chapterData) => api.post(`/courses/professor/${courseId}/chapters`, chapterData),
+    updateChapter: (chapterId, chapterData) => api.put(`/courses/professor/chapters/${chapterId}`, chapterData),
+    deleteChapter: (chapterId) => api.delete(`/courses/professor/chapters/${chapterId}`),
 };
 
 // Exercise services
@@ -47,6 +56,15 @@ export const exerciseService = {
     submitSolution: (id, data) => api.post(`/exercises/${id}/submit`, data),
     getUserSubmissions: (exerciseId) => api.get(`/exercises/${exerciseId}/submissions`),
     createExercise: (exerciseData) => api.post('/exercises', exerciseData),
+    // Professor endpoints
+    createProfessorExercise: (exerciseData) => api.post('/exercises/professor/create', exerciseData),
+    updateExercise: (id, exerciseData) => api.put(`/exercises/professor/${id}`, exerciseData),
+    deleteExercise: (id) => api.delete(`/exercises/professor/${id}`),
+    // Test case management
+    getTestCases: (exerciseId) => api.get(`/exercises/professor/${exerciseId}/test-cases`),
+    addTestCase: (exerciseId, testCaseData) => api.post(`/exercises/professor/${exerciseId}/test-cases`, testCaseData),
+    updateTestCase: (testCaseId, testCaseData) => api.put(`/exercises/professor/test-cases/${testCaseId}`, testCaseData),
+    deleteTestCase: (testCaseId) => api.delete(`/exercises/professor/test-cases/${testCaseId}`),
 };
 
 export default api;

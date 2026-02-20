@@ -42,13 +42,13 @@ const getExerciseById = async (req, res) => {
 
 const createExercise = async (req, res) => {
     try {
-        const { courseId, title, description, difficulty, starterCode, language, testCases } = req.body;
+        const { courseId, title, description, difficulty, starterCode, language, testCases, chapter_id } = req.body;
 
         // Create exercise
         const exerciseResult = await db.query(
-            `INSERT INTO exercises (course_id, title, description, difficulty, starter_code, language) 
-             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [courseId, title, description, difficulty, starterCode, language]
+            `INSERT INTO exercises (course_id, title, description, difficulty, starter_code, language, chapter_id) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+            [courseId, title, description, difficulty, starterCode, language, chapter_id || null]
         );
 
         const exercise = exerciseResult.rows[0];
@@ -162,9 +162,224 @@ const getUserSubmissions = async (req, res) => {
     }
 };
 
+// Professor: Update exercise
+const updateExercise = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { title, description, difficulty, starter_code, language, chapter_id, order_index } = req.body;
+        const userId = req.user.id;
+
+        // Verify ownership through course
+        const exercise = await db.query(`
+            SELECT e.*, c.created_by 
+            FROM exercises e 
+            JOIN courses c ON e.course_id = c.id 
+            WHERE e.id = $1
+        `, [id]);
+        
+        if (exercise.rows.length === 0) {
+            return res.status(404).json({ error: 'Exercise not found' });
+        }
+        if (exercise.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        const result = await db.query(`
+            UPDATE exercises 
+            SET title = COALESCE($1, title),
+                description = COALESCE($2, description),
+                difficulty = COALESCE($3, difficulty),
+                starter_code = COALESCE($4, starter_code),
+                language = COALESCE($5, language),
+                chapter_id = COALESCE($6, chapter_id),
+                order_index = COALESCE($7, order_index),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $8
+            RETURNING *
+        `, [title, description, difficulty, starter_code, language, chapter_id, order_index, id]);
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Update exercise error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Professor: Delete exercise
+const deleteExercise = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+
+        // Verify ownership through course
+        const exercise = await db.query(`
+            SELECT e.*, c.created_by 
+            FROM exercises e 
+            JOIN courses c ON e.course_id = c.id 
+            WHERE e.id = $1
+        `, [id]);
+        
+        if (exercise.rows.length === 0) {
+            return res.status(404).json({ error: 'Exercise not found' });
+        }
+        if (exercise.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        await db.query('DELETE FROM exercises WHERE id = $1', [id]);
+        res.json({ message: 'Exercise deleted successfully' });
+    } catch (error) {
+        console.error('Delete exercise error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Professor: Add test case
+const addTestCase = async (req, res) => {
+    try {
+        const { exerciseId } = req.params;
+        const { input, expected_output, is_hidden, weight } = req.body;
+        const userId = req.user.id;
+
+        // Verify ownership through course
+        const exercise = await db.query(`
+            SELECT e.*, c.created_by 
+            FROM exercises e 
+            JOIN courses c ON e.course_id = c.id 
+            WHERE e.id = $1
+        `, [exerciseId]);
+        
+        if (exercise.rows.length === 0) {
+            return res.status(404).json({ error: 'Exercise not found' });
+        }
+        if (exercise.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        const result = await db.query(
+            'INSERT INTO test_cases (exercise_id, input, expected_output, is_hidden, weight) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [exerciseId, input, expected_output, is_hidden || false, weight || 1]
+        );
+
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        console.error('Add test case error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Professor: Update test case
+const updateTestCase = async (req, res) => {
+    try {
+        const { testCaseId } = req.params;
+        const { input, expected_output, is_hidden, weight } = req.body;
+        const userId = req.user.id;
+
+        // Verify ownership through exercise and course
+        const testCase = await db.query(`
+            SELECT tc.*, c.created_by 
+            FROM test_cases tc 
+            JOIN exercises e ON tc.exercise_id = e.id
+            JOIN courses c ON e.course_id = c.id 
+            WHERE tc.id = $1
+        `, [testCaseId]);
+        
+        if (testCase.rows.length === 0) {
+            return res.status(404).json({ error: 'Test case not found' });
+        }
+        if (testCase.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        const result = await db.query(`
+            UPDATE test_cases 
+            SET input = COALESCE($1, input),
+                expected_output = COALESCE($2, expected_output),
+                is_hidden = COALESCE($3, is_hidden),
+                weight = COALESCE($4, weight)
+            WHERE id = $5
+            RETURNING *
+        `, [input, expected_output, is_hidden, weight, testCaseId]);
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Update test case error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Professor: Delete test case
+const deleteTestCase = async (req, res) => {
+    try {
+        const { testCaseId } = req.params;
+        const userId = req.user.id;
+
+        // Verify ownership through exercise and course
+        const testCase = await db.query(`
+            SELECT tc.*, c.created_by 
+            FROM test_cases tc 
+            JOIN exercises e ON tc.exercise_id = e.id
+            JOIN courses c ON e.course_id = c.id 
+            WHERE tc.id = $1
+        `, [testCaseId]);
+        
+        if (testCase.rows.length === 0) {
+            return res.status(404).json({ error: 'Test case not found' });
+        }
+        if (testCase.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        await db.query('DELETE FROM test_cases WHERE id = $1', [testCaseId]);
+        res.json({ message: 'Test case deleted successfully' });
+    } catch (error) {
+        console.error('Delete test case error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Professor: Get all test cases for an exercise (including hidden)
+const getExerciseTestCases = async (req, res) => {
+    try {
+        const { exerciseId } = req.params;
+        const userId = req.user.id;
+
+        // Verify ownership through course
+        const exercise = await db.query(`
+            SELECT e.*, c.created_by 
+            FROM exercises e 
+            JOIN courses c ON e.course_id = c.id 
+            WHERE e.id = $1
+        `, [exerciseId]);
+        
+        if (exercise.rows.length === 0) {
+            return res.status(404).json({ error: 'Exercise not found' });
+        }
+        if (exercise.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        const result = await db.query(
+            'SELECT * FROM test_cases WHERE exercise_id = $1 ORDER BY id',
+            [exerciseId]
+        );
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Get test cases error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 module.exports = {
     getExerciseById,
     createExercise,
+    updateExercise,
+    deleteExercise,
     submitSolution,
     getUserSubmissions,
+    addTestCase,
+    updateTestCase,
+    deleteTestCase,
+    getExerciseTestCases,
 };

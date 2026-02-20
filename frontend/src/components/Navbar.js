@@ -50,14 +50,30 @@ const Navbar = () => {
                 <div className="flex items-center gap-6">
                     {user ? (
                         <>
-                            <Link to="/courses" className="text-gray-300 hover:text-[#fef483] transition-colors no-underline">
-                                Courses
-                            </Link>
-                            <Link to="/my-courses" className="text-gray-300 hover:text-[#fef483] transition-colors no-underline">
-                                My Courses
-                            </Link>
+                            {user.role === 'professor' || user.role === 'admin' ? (
+                                // Professor Navigation
+                                <>
+                                    <Link to="/professor" className="text-gray-300 hover:text-[#a1609d] transition-colors no-underline">
+                                        Dashboard
+                                    </Link>
+                                    <Link to="/courses" className="text-gray-300 hover:text-[#a1609d] transition-colors no-underline">
+                                        All Courses
+                                    </Link>
+                                </>
+                            ) : (
+                                // Student Navigation
+                                <>
+                                    <Link to="/courses" className="text-gray-300 hover:text-[#fef483] transition-colors no-underline">
+                                        Courses
+                                    </Link>
+                                    <Link to="/my-courses" className="text-gray-300 hover:text-[#fef483] transition-colors no-underline">
+                                        My Courses
+                                    </Link>
+                                </>
+                            )}
                             <span className="text-gray-400">
-                                Welcome, <span className="text-[#fef483]">{user.username}</span>
+                                Welcome, <span style={{ color: user.role === 'professor' ? '#a1609d' : '#fef483' }}>{user.username}</span>
+                                {user.role === 'professor' && <span className="ml-1 text-xs text-[#a1609d]">(Prof)</span>}
                             </span>
                             <button 
                                 onClick={handleLogout}

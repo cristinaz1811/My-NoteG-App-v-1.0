@@ -23,4 +23,11 @@ const isAdmin = (req, res, next) => {
     next();
 };
 
-module.exports = { authMiddleware, isAdmin };
+const isProfessor = (req, res, next) => {
+    if (req.user.role !== 'professor' && req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Access denied. Professor only.' });
+    }
+    next();
+};
+
+module.exports = { authMiddleware, isAdmin, isProfessor };
