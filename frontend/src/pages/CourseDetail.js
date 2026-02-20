@@ -51,6 +51,19 @@ const CourseDetail = () => {
         }
     };
 
+    const handleUnenroll = async () => {
+        if (!window.confirm('Are you sure you want to unenroll from this course? Your progress will be lost.')) {
+            return;
+        }
+        try {
+            await courseService.unenrollFromCourse(id);
+            setIsEnrolled(false);
+        } catch (error) {
+            console.error('Error unenrolling:', error);
+            alert(error.response?.data?.error || 'Failed to unenroll');
+        }
+    };
+
     const handleGoToCourse = () => {
         navigate(`/my-courses/${id}`);
     };
@@ -99,44 +112,7 @@ const CourseDetail = () => {
     const exerciseCount = course.exercises?.length || 0;
     const chapterCount = course.chapters?.length || 0;
 
-    // Already enrolled view
-    if (isEnrolled) {
-        return (
-            <div className="min-h-screen py-8 px-6">
-                <div className="max-w-4xl mx-auto">
-                    <div className="surface-card rounded-2xl p-8 text-center glow-sm">
-                        <div className="w-20 h-20 rounded-full gradient-bg flex items-center justify-center mx-auto mb-6">
-                            <span className="text-4xl">✓</span>
-                        </div>
-                        <h2 className="text-2xl font-bold mb-3">You're Already Enrolled!</h2>
-                        <p className="text-gray-400 mb-8 max-w-md mx-auto">
-                            Continue learning in your personal dashboard where your progress is tracked.
-                        </p>
-                        <button 
-                            onClick={handleGoToCourse} 
-                            className="btn-primary px-8 py-4 text-lg"
-                        >
-                            Go to My Course →
-                        </button>
-                    </div>
-
-                    <div className="mt-8 surface-card rounded-2xl p-6">
-                        <div className="flex items-start justify-between">
-                            <div>
-                                <h3 className="text-xl font-semibold">{course.title}</h3>
-                                <p className="text-gray-400 mt-2">{course.description}</p>
-                            </div>
-                            <span className={`badge ${getDifficultyBadgeClass(course.difficulty)}`}>
-                                {course.difficulty}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    // Course preview for non-enrolled users
+    // Course detail view (same for enrolled and non-enrolled, different action buttons)
     return (
         <div className="min-h-screen py-8 px-6">
             <div className="max-w-7xl mx-auto">
@@ -192,30 +168,53 @@ const CourseDetail = () => {
                             </div>
                         </div>
 
-                        {/* Enroll Card */}
+                        {/* Action Card */}
                         <div className="lg:col-span-1">
                             <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
-                                <h3 className="text-xl font-semibold mb-4">Start Learning Today</h3>
-                                <button 
-                                    onClick={handleEnroll} 
-                                    className="w-full btn-primary py-4 text-lg mb-4"
-                                >
-                                    Enroll Now - It's Free
-                                </button>
-                                <div className="space-y-3 text-sm text-gray-400">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-green-400">✓</span>
-                                        <span>Track your progress</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-green-400">✓</span>
-                                        <span>Get instant feedback</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-green-400">✓</span>
-                                        <span>Earn completion certificate</span>
-                                    </div>
-                                </div>
+                                {isEnrolled ? (
+                                    <>
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <span className="text-green-400 text-xl">✓</span>
+                                            <h3 className="text-xl font-semibold">You're Enrolled!</h3>
+                                        </div>
+                                        <button 
+                                            onClick={handleGoToCourse} 
+                                            className="w-full btn-primary py-4 text-lg mb-3"
+                                        >
+                                            Continue Learning →
+                                        </button>
+                                        <button 
+                                            onClick={handleUnenroll} 
+                                            className="w-full py-3 text-sm text-gray-400 hover:text-red-400 transition-colors border border-white/10 rounded-lg hover:border-red-400/30"
+                                        >
+                                            Unenroll from Course
+                                        </button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <h3 className="text-xl font-semibold mb-4">Start Learning Today</h3>
+                                        <button 
+                                            onClick={handleEnroll} 
+                                            className="w-full btn-primary py-4 text-lg mb-4"
+                                        >
+                                            Enroll Now - It's Free
+                                        </button>
+                                        <div className="space-y-3 text-sm text-gray-400">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-green-400">✓</span>
+                                                <span>Track your progress</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-green-400">✓</span>
+                                                <span>Get instant feedback</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-green-400">✓</span>
+                                                <span>Earn completion certificate</span>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>

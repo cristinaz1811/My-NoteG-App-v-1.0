@@ -33,6 +33,7 @@ export const courseService = {
     getUserCourses: () => api.get('/courses/my-courses/list'),
     getEnrolledCourseDetails: (courseId) => api.get(`/courses/my-courses/${courseId}/details`),
     enrollInCourse: (courseId) => api.post(`/courses/${courseId}/enroll`),
+    unenrollFromCourse: (courseId) => api.delete(`/courses/${courseId}/unenroll`),
     createCourse: (courseData) => api.post('/courses', courseData),
     // Time tracking
     startTimeSession: (courseId) => api.post(`/courses/my-courses/${courseId}/time/start`),
