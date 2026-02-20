@@ -22,35 +22,85 @@ const Login = () => {
     };
 
     return (
-        <div className="auth-container">
-            <h2>Login</h2>
-            {error && <div className="error-message">{error}</div>}
-            <form onSubmit={handleSubmit}>
-                <div className="form-group">
-                    <label>Email</label>
-                    <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                    />
+        <div className="min-h-screen flex items-center justify-center px-6 py-12">
+            <div className="w-full max-w-md">
+                {/* Card */}
+                <div className="surface-card p-8 rounded-2xl glow-sm">
+                    {/* Header */}
+                    <div className="text-center mb-8">
+                        <div className="w-16 h-16 rounded-2xl gradient-bg flex items-center justify-center mx-auto mb-4">
+                            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                            </svg>
+                        </div>
+                        <h2 className="text-2xl font-bold mb-2">Welcome Back</h2>
+                        <p className="text-gray-400">Sign in to continue your learning journey</p>
+                    </div>
+
+                    {/* Error Message */}
+                    {error && (
+                        <div className="error-message mb-6">
+                            {error}
+                        </div>
+                    )}
+
+                    {/* Form */}
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                                Email Address
+                            </label>
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="you@example.com"
+                                required
+                                className="w-full"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                                Password
+                            </label>
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="••••••••"
+                                required
+                                className="w-full"
+                            />
+                        </div>
+
+                        <button 
+                            type="submit" 
+                            className="w-full btn-primary py-3 text-lg font-semibold"
+                        >
+                            Sign In
+                        </button>
+                    </form>
+
+                    {/* Divider */}
+                    <div className="relative my-8">
+                        <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-gray-700"></div>
+                        </div>
+                        <div className="relative flex justify-center text-sm">
+                            <span className="px-4 bg-[#16161f] text-gray-400">or</span>
+                        </div>
+                    </div>
+
+                    {/* Register Link */}
+                    <p className="text-center text-gray-400">
+                        Don't have an account?{' '}
+                        <Link to="/register" className="text-cyan-400 hover:text-cyan-300 font-medium">
+                            Create one free
+                        </Link>
+                    </p>
                 </div>
-                <div className="form-group">
-                    <label>Password</label>
-                    <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                    />
-                </div>
-                <button type="submit" className="btn btn-primary">
-                    Login
-                </button>
-            </form>
-            <p style={{ marginTop: '1rem', textAlign: 'center' }}>
-                Don't have an account? <Link to="/register">Register</Link>
-            </p>
+            </div>
         </div>
     );
 };

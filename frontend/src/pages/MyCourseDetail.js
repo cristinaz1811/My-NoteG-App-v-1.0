@@ -6,13 +6,13 @@ const MyCourseDetail = () => {
     const { courseId } = useParams();
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('content'); // Default to content tab
+    const [activeTab, setActiveTab] = useState('content');
     const [liveTime, setLiveTime] = useState(0);
-    const [isTracking, setIsTracking] = useState(false); // Track if we're currently tracking time
+    const [isTracking, setIsTracking] = useState(false);
     const navigate = useNavigate();
     const heartbeatRef = useRef(null);
     const timerRef = useRef(null);
-    const trackingStartRef = useRef(null); // When tracking started for current tab
+    const trackingStartRef = useRef(null);
 
     const loadCourseDetails = useCallback(async () => {
         try {
@@ -29,13 +29,10 @@ const MyCourseDetail = () => {
         }
     }, [courseId, navigate]);
 
-    // Content tabs where time should be tracked
     const isContentTab = activeTab === 'content' || activeTab === 'exercises';
 
-    // Time tracking - only when on content tabs
     useEffect(() => {
         if (isContentTab) {
-            // Start tracking
             setIsTracking(true);
             trackingStartRef.current = Date.now();
             
@@ -48,7 +45,6 @@ const MyCourseDetail = () => {
             };
             startSession();
 
-            // Set up heartbeat every 30 seconds
             heartbeatRef.current = setInterval(async () => {
                 try {
                     await courseService.heartbeat(courseId);
@@ -57,16 +53,13 @@ const MyCourseDetail = () => {
                 }
             }, 30000);
 
-            // Live timer update every second
             timerRef.current = setInterval(() => {
                 if (trackingStartRef.current && data?.stats?.totalTimeSpent !== undefined) {
                     const elapsed = Math.floor((Date.now() - trackingStartRef.current) / 1000);
                     setLiveTime(data.stats.totalTimeSpent + elapsed);
                 }
             }, 1000);
-
         } else {
-            // Stop tracking when on dashboard tabs
             setIsTracking(false);
             
             if (heartbeatRef.current) {
@@ -78,21 +71,14 @@ const MyCourseDetail = () => {
                 timerRef.current = null;
             }
             
-            // End session to save time
             courseService.endTimeSession(courseId).then(() => {
-                // Refresh data to get updated time
                 loadCourseDetails();
             }).catch(console.error);
         }
 
-        // Cleanup on unmount
         return () => {
-            if (heartbeatRef.current) {
-                clearInterval(heartbeatRef.current);
-            }
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-            }
+            if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+            if (timerRef.current) clearInterval(timerRef.current);
             if (isContentTab) {
                 courseService.endTimeSession(courseId).catch(console.error);
             }
@@ -110,18 +96,12 @@ const MyCourseDetail = () => {
         const secs = seconds % 60;
         
         if (showSeconds) {
-            if (hours > 0) {
-                return `${hours}h ${minutes}m ${secs}s`;
-            }
-            if (minutes > 0) {
-                return `${minutes}m ${secs}s`;
-            }
+            if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
+            if (minutes > 0) return `${minutes}m ${secs}s`;
             return `${secs}s`;
         }
         
-        if (hours > 0) {
-            return `${hours}h ${minutes}m`;
-        }
+        if (hours > 0) return `${hours}h ${minutes}m`;
         return `${minutes}m`;
     };
 
@@ -135,243 +115,328 @@ const MyCourseDetail = () => {
         });
     };
 
+    const getDifficultyBadgeClass = (difficulty) => {
+        switch(difficulty) {
+            case 'beginner': return 'badge-beginner';
+            case 'intermediate': return 'badge-intermediate';
+            case 'advanced': return 'badge-advanced';
+            default: return 'badge-beginner';
+        }
+    };
+
     if (loading) {
-        return <div className="loading">Loading course details...</div>;
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-gray-400">Loading course...</p>
+                </div>
+            </div>
+        );
     }
 
     if (!data) {
-        return <div className="container">Course not found</div>;
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                    <div className="text-6xl mb-4">😕</div>
+                    <h2 className="text-2xl font-bold mb-2">Course not found</h2>
+                    <button onClick={() => navigate('/my-courses')} className="btn-primary mt-4">
+                        Back to My Courses
+                    </button>
+                </div>
+            </div>
+        );
     }
 
     const { course, stats, exercises, submissions, timeBreakdown } = data;
 
     return (
-        <div className="container my-course-detail">
-            <button onClick={() => navigate('/my-courses')} className="back-btn">
-                ← Back to My Courses
-            </button>
-
-            <div className="course-header-detail">
-                <h1>{course.title}</h1>
-                <span className={`difficulty ${course.difficulty}`}>
-                    {course.difficulty}
-                </span>
-            </div>
-
-            <p className="course-description">{course.description}</p>
-
-            {/* Tracking Indicator */}
-            {isTracking && (
-                <div className="tracking-banner">
-                    🔴 Time is being tracked - You're studying course content
-                </div>
-            )}
-
-            {/* Tabs */}
-            <div className="tabs">
+        <div className="min-h-screen py-6 px-6">
+            <div className="max-w-7xl mx-auto">
+                {/* Back Button */}
                 <button 
-                    className={`tab ${activeTab === 'content' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('content')}
+                    onClick={() => navigate('/my-courses')} 
+                    className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-6"
                 >
-                    📖 Course Content
+                    <span>←</span> Back to My Courses
                 </button>
-                <button 
-                    className={`tab ${activeTab === 'exercises' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('exercises')}
-                >
-                    💻 Exercises
-                </button>
-                <button 
-                    className={`tab ${activeTab === 'dashboard' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('dashboard')}
-                >
-                    📊 Dashboard
-                </button>
-            </div>
 
-            {/* Tab Content */}
-            <div className="tab-content">
-                {/* Course Content Tab - Time is tracked here */}
-                {activeTab === 'content' && (
-                    <div className="course-content-section">
-                        <div className="content-info">
-                            <h3>Course Materials</h3>
-                            <p className="course-full-description">{course.description}</p>
-                            
-                            <div className="content-cards">
-                                <div className="content-card">
-                                    <h4>📚 Learning Objectives</h4>
-                                    <ul>
-                                        <li>Master {course.title} fundamentals</li>
-                                        <li>Complete {stats.totalExercises} hands-on exercises</li>
-                                        <li>Build practical programming skills</li>
-                                    </ul>
+                {/* Course Header */}
+                <div className="surface-card rounded-2xl p-6 mb-6">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div>
+                            <h1 className="text-2xl sm:text-3xl font-bold mb-2">{course.title}</h1>
+                            <div className="flex items-center gap-3">
+                                <span className={`badge ${getDifficultyBadgeClass(course.difficulty)}`}>
+                                    {course.difficulty}
+                                </span>
+                                <p className="text-gray-400 text-sm">{course.description}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {isTracking && (
+                                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-red-500/10 border border-red-500/30">
+                                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                                    <span className="text-sm text-red-400">Tracking: {formatTime(liveTime, true)}</span>
                                 </div>
-                                <div className="content-card">
-                                    <h4>⏱️ Estimated Time</h4>
-                                    <p>Approximately {Math.max(1, Math.ceil(stats.totalExercises * 0.5))} hours</p>
-                                    <p>You've spent: {formatTime(liveTime, true)}</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Tabs */}
+                <div className="flex gap-1 mb-6 bg-white/5 p-1 rounded-xl w-fit">
+                    {[
+                        { id: 'content', label: '📖 Content', tracking: true },
+                        { id: 'exercises', label: '💻 Exercises', tracking: true },
+                        { id: 'dashboard', label: '📊 Dashboard', tracking: false },
+                    ].map((tab) => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`px-5 py-2.5 rounded-lg font-medium text-sm transition-all ${
+                                activeTab === tab.id
+                                    ? 'gradient-bg text-white'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Tab Content */}
+                <div className="min-h-[60vh]">
+                    {/* Content Tab */}
+                    {activeTab === 'content' && (
+                        <div className="grid md:grid-cols-2 gap-6">
+                            <div className="surface-card rounded-2xl p-6">
+                                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                    <span>📚</span> Learning Objectives
+                                </h3>
+                                <ul className="space-y-3">
+                                    <li className="flex items-start gap-3 text-gray-300">
+                                        <span className="text-cyan-400 mt-1">✓</span>
+                                        Master {course.title} fundamentals
+                                    </li>
+                                    <li className="flex items-start gap-3 text-gray-300">
+                                        <span className="text-cyan-400 mt-1">✓</span>
+                                        Complete {stats.totalExercises} hands-on exercises
+                                    </li>
+                                    <li className="flex items-start gap-3 text-gray-300">
+                                        <span className="text-cyan-400 mt-1">✓</span>
+                                        Build practical programming skills
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="surface-card rounded-2xl p-6">
+                                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                    <span>⏱️</span> Time Progress
+                                </h3>
+                                <div className="text-center">
+                                    <div className="text-4xl font-bold gradient-text mb-2">
+                                        {formatTime(liveTime, true)}
+                                    </div>
+                                    <p className="text-gray-400 text-sm mb-6">Time spent learning</p>
+                                    <div className="text-sm text-gray-500">
+                                        Estimated: ~{Math.max(1, Math.ceil(stats.totalExercises * 0.5))} hours
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="start-learning">
-                                <h4>Ready to practice?</h4>
+                            <div className="md:col-span-2 surface-card rounded-2xl p-6">
+                                <h3 className="text-lg font-semibold mb-4">Ready to practice?</h3>
+                                <p className="text-gray-400 mb-4">
+                                    Head over to the exercises tab to start solving problems and building your skills.
+                                </p>
                                 <button 
-                                    className="btn btn-primary"
                                     onClick={() => setActiveTab('exercises')}
+                                    className="btn-primary"
                                 >
                                     Go to Exercises →
                                 </button>
                             </div>
                         </div>
-                    </div>
-                )}
+                    )}
 
-                {/* Exercises Tab - Time is tracked here */}
-                {activeTab === 'exercises' && (
-                    <div className="exercises-list">
-                        {exercises.map((exercise) => (
-                            <div 
-                                key={exercise.id} 
-                                className={`exercise-item ${exercise.completed ? 'completed' : ''}`}
-                                onClick={() => navigate(`/exercises/${exercise.id}`)}
-                            >
-                                <div className="exercise-status">
-                                    {exercise.completed ? '✅' : '⭕'}
-                                </div>
-                                <div className="exercise-info">
-                                    <h4>{exercise.title}</h4>
-                                    <span className={`difficulty ${exercise.difficulty}`}>
-                                        {exercise.difficulty}
-                                    </span>
-                                    <span className="language-badge">{exercise.language}</span>
-                                </div>
-                                <div className="exercise-stats">
-                                    <span>Best: {exercise.best_score}%</span>
-                                    <span>Attempts: {exercise.attempts}</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {/* Dashboard Tab - Time is NOT tracked here */}
-                {activeTab === 'dashboard' && (
-                    <div className="dashboard-section">
-                        <div className="dashboard-notice">
-                            ⏸️ Time tracking is paused while viewing statistics
-                        </div>
-
-                        {/* Stats Cards */}
-                        <div className="stats-grid">
-                            <div className="stat-card">
-                                <div className="stat-icon">📝</div>
-                                <div className="stat-content">
-                                    <span className="stat-value">{stats.totalAttempts}</span>
-                                    <span className="stat-label">Total Attempts</span>
-                                </div>
-                            </div>
-                            <div className="stat-card">
-                                <div className="stat-icon">📊</div>
-                                <div className="stat-content">
-                                    <span className="stat-value">{stats.averageScore}%</span>
-                                    <span className="stat-label">Average Score</span>
-                                </div>
-                            </div>
-                            <div className="stat-card">
-                                <div className="stat-icon">⏱️</div>
-                                <div className="stat-content">
-                                    <span className="stat-value">{formatTime(stats.totalTimeSpent)}</span>
-                                    <span className="stat-label">Time Spent</span>
-                                </div>
-                            </div>
-                            <div className="stat-card">
-                                <div className="stat-icon">✅</div>
-                                <div className="stat-content">
-                                    <span className="stat-value">{stats.progressPercentage}%</span>
-                                    <span className="stat-label">Completed</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="overall-progress">
-                            <h3>Overall Progress</h3>
-                            <div className="large-progress-bar-container">
+                    {/* Exercises Tab */}
+                    {activeTab === 'exercises' && (
+                        <div className="space-y-3">
+                            {exercises.map((exercise) => (
                                 <div 
-                                    className="progress-bar"
-                                    style={{ width: `${stats.progressPercentage}%` }}
-                                ></div>
-                            </div>
-                            <p>{stats.completedExercises} of {stats.totalExercises} exercises completed</p>
-                        </div>
-                        
-                        <h3>📊 Submission History</h3>
-                        <div className="submissions-list">
-                            {submissions.length === 0 ? (
-                                <p>No submissions yet. Start solving exercises!</p>
-                            ) : (
-                                <table className="submissions-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Exercise</th>
-                                            <th>Score</th>
-                                            <th>Tests</th>
-                                            <th>Status</th>
-                                            <th>Date</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {submissions.map((sub) => (
-                                            <tr key={sub.id}>
-                                                <td>{sub.exercise_title}</td>
-                                                <td>{sub.score}%</td>
-                                                <td>{sub.tests_passed}/{sub.tests_total}</td>
-                                                <td>
-                                                    <span className={`status ${sub.status}`}>
-                                                        {sub.status}
-                                                    </span>
-                                                </td>
-                                                <td>{formatDate(sub.submitted_at)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            )}
-                        </div>
-
-                        <h3>⏱️ Time Spent by Day</h3>
-                        <div className="time-tracking">
-                            {timeBreakdown.length === 0 ? (
-                                <p>No time tracking data yet. Spend some time learning!</p>
-                            ) : (
-                                <div className="time-chart">
-                                    {timeBreakdown.map((day, index) => (
-                                        <div key={index} className="time-bar-row">
-                                            <span className="time-date">
-                                                {new Date(day.date).toLocaleDateString()}
-                                            </span>
-                                            <div className="time-bar-bg">
-                                                <div 
-                                                    className="time-bar-fill"
-                                                    style={{ 
-                                                        width: `${Math.min((day.time_spent / 3600) * 100, 100)}%` 
-                                                    }}
-                                                ></div>
+                                    key={exercise.id}
+                                    onClick={() => navigate(`/exercises/${exercise.id}`)}
+                                    className={`surface-card rounded-xl p-5 cursor-pointer card-hover group ${
+                                        exercise.completed ? 'border-l-4 border-l-green-500' : ''
+                                    }`}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                                exercise.completed 
+                                                    ? 'bg-green-500/20 text-green-400' 
+                                                    : 'bg-white/5 text-gray-400'
+                                            }`}>
+                                                {exercise.completed ? '✓' : '○'}
                                             </div>
-                                            <span className="time-duration">
-                                                {formatTime(day.time_spent)}
-                                            </span>
+                                            <div>
+                                                <h4 className="font-medium group-hover:text-cyan-400 transition-colors">
+                                                    {exercise.title}
+                                                </h4>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className={`badge text-xs ${getDifficultyBadgeClass(exercise.difficulty)}`}>
+                                                        {exercise.difficulty}
+                                                    </span>
+                                                    <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded">
+                                                        {exercise.language}
+                                                    </span>
+                                                </div>
+                                            </div>
                                         </div>
-                                    ))}
+                                        <div className="text-right">
+                                            <div className="text-sm text-gray-400">
+                                                Best: <span className="text-cyan-400 font-medium">{exercise.best_score}%</span>
+                                            </div>
+                                            <div className="text-xs text-gray-500">
+                                                {exercise.attempts} attempts
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                            )}
-                            <div className="total-time">
-                                <strong>Total Time Recorded:</strong> {formatTime(stats.totalTimeSpent)}
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Dashboard Tab */}
+                    {activeTab === 'dashboard' && (
+                        <div className="space-y-6">
+                            {/* Notice */}
+                            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                                <span className="text-amber-400">⏸️</span>
+                                <span className="text-sm text-amber-400">Time tracking is paused while viewing statistics</span>
+                            </div>
+
+                            {/* Stats Grid */}
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div className="surface-card rounded-xl p-5 text-center">
+                                    <div className="text-3xl mb-1">📝</div>
+                                    <div className="text-2xl font-bold gradient-text">{stats.totalAttempts}</div>
+                                    <div className="text-sm text-gray-400">Total Attempts</div>
+                                </div>
+                                <div className="surface-card rounded-xl p-5 text-center">
+                                    <div className="text-3xl mb-1">📊</div>
+                                    <div className="text-2xl font-bold gradient-text">{stats.averageScore}%</div>
+                                    <div className="text-sm text-gray-400">Average Score</div>
+                                </div>
+                                <div className="surface-card rounded-xl p-5 text-center">
+                                    <div className="text-3xl mb-1">⏱️</div>
+                                    <div className="text-2xl font-bold gradient-text">{formatTime(stats.totalTimeSpent)}</div>
+                                    <div className="text-sm text-gray-400">Time Spent</div>
+                                </div>
+                                <div className="surface-card rounded-xl p-5 text-center">
+                                    <div className="text-3xl mb-1">✅</div>
+                                    <div className="text-2xl font-bold gradient-text">{stats.progressPercentage}%</div>
+                                    <div className="text-sm text-gray-400">Completed</div>
+                                </div>
+                            </div>
+
+                            {/* Progress Bar */}
+                            <div className="surface-card rounded-2xl p-6">
+                                <h3 className="text-lg font-semibold mb-4">Overall Progress</h3>
+                                <div className="progress-bar-container h-4 mb-3">
+                                    <div 
+                                        className="progress-bar"
+                                        style={{ width: `${stats.progressPercentage}%` }}
+                                    ></div>
+                                </div>
+                                <p className="text-sm text-gray-400">
+                                    {stats.completedExercises} of {stats.totalExercises} exercises completed
+                                </p>
+                            </div>
+
+                            {/* Submission History */}
+                            <div className="surface-card rounded-2xl p-6">
+                                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                    <span>📊</span> Submission History
+                                </h3>
+                                {submissions.length === 0 ? (
+                                    <p className="text-gray-400">No submissions yet. Start solving exercises!</p>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead>
+                                                <tr className="text-left text-sm text-gray-500 border-b border-white/5">
+                                                    <th className="pb-3 font-medium">Exercise</th>
+                                                    <th className="pb-3 font-medium">Score</th>
+                                                    <th className="pb-3 font-medium">Tests</th>
+                                                    <th className="pb-3 font-medium">Status</th>
+                                                    <th className="pb-3 font-medium">Date</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="text-sm">
+                                                {submissions.slice(0, 10).map((sub) => (
+                                                    <tr key={sub.id} className="border-b border-white/5">
+                                                        <td className="py-3 text-gray-300">{sub.exercise_title}</td>
+                                                        <td className="py-3">
+                                                            <span className={sub.score === 100 ? 'text-green-400' : 'text-cyan-400'}>
+                                                                {sub.score}%
+                                                            </span>
+                                                        </td>
+                                                        <td className="py-3 text-gray-400">{sub.tests_passed}/{sub.tests_total}</td>
+                                                        <td className="py-3">
+                                                            <span className={`badge text-xs ${
+                                                                sub.status === 'pass' ? 'badge-beginner' : 'badge-advanced'
+                                                            }`}>
+                                                                {sub.status}
+                                                            </span>
+                                                        </td>
+                                                        <td className="py-3 text-gray-500">{formatDate(sub.submitted_at)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Time Breakdown */}
+                            <div className="surface-card rounded-2xl p-6">
+                                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                    <span>⏱️</span> Time Spent by Day
+                                </h3>
+                                {timeBreakdown.length === 0 ? (
+                                    <p className="text-gray-400">No time tracking data yet.</p>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {timeBreakdown.map((day, index) => (
+                                            <div key={index} className="flex items-center gap-4">
+                                                <span className="text-sm text-gray-500 w-24">
+                                                    {new Date(day.date).toLocaleDateString()}
+                                                </span>
+                                                <div className="flex-1 h-3 rounded-full bg-white/5 overflow-hidden">
+                                                    <div 
+                                                        className="h-full gradient-bg rounded-full"
+                                                        style={{ width: `${Math.min((day.time_spent / 3600) * 100, 100)}%` }}
+                                                    ></div>
+                                                </div>
+                                                <span className="text-sm text-gray-400 w-16 text-right">
+                                                    {formatTime(day.time_spent)}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                <div className="mt-4 pt-4 border-t border-white/5">
+                                    <p className="text-sm text-gray-400">
+                                        <strong className="text-gray-300">Total Time Recorded:</strong> {formatTime(stats.totalTimeSpent)}
+                                    </p>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
         </div>
     );
