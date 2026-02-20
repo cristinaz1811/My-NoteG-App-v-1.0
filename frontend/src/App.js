@@ -23,6 +23,9 @@ const AnimatedBackground = () => (
         <div className="bg-orb bg-orb-2"></div>
         <div className="bg-orb bg-orb-3"></div>
         <div className="bg-orb bg-orb-4"></div>
+        <div className="bg-orb bg-orb-5"></div>
+        <div className="bg-orb bg-orb-6"></div>
+        <div className="bg-orb bg-orb-7"></div>
     </div>
 );
 
@@ -151,10 +154,10 @@ const RoleSelection = () => {
 
 const Home = () => {
     return (
-        <div className="min-h-screen pt-20">
+        <div className="min-h-screen pt-8">
             {/* Hero Section */}
-            <section className="min-h-[calc(100vh-5rem)] flex items-center px-6 py-12">
-                <div className="max-w-7xl mx-auto w-full grid lg:grid-cols-2 gap-12 items-center">
+            <section className="min-h-[calc(100vh-4rem)] flex items-start pt-36 px-6 py-12">
+                <div className="max-w-7xl mx-auto w-full grid lg:grid-cols-2 gap-12 items-start">
                     {/* Left Content */}
                     <div className="animate-slideUp">
                         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm mb-6" 
@@ -209,7 +212,7 @@ const Home = () => {
             </section>
 
             {/* Features Section */}
-            <section className="py-24 px-6" style={{ background: 'var(--surface-color)' }}>
+            <section className="pt-12 pb-24 px-6" style={{ background: 'rgba(35, 42, 54, 0.6)' }}>
                 <div className="max-w-7xl mx-auto">
                     <div className="text-center mb-16">
                         <h2 className="text-3xl sm:text-4xl font-bold mb-4">
@@ -285,7 +288,7 @@ function App() {
                         path="/courses/:id" 
                         element={
                             <ProtectedRoute>
-                                <Navbar /><div className="pt-16"><CourseDetail /></div>
+                                <Navbar /><div className="pt-24"><CourseDetail /></div>
                             </ProtectedRoute>
                         } 
                     />
@@ -293,7 +296,7 @@ function App() {
                         path="/exercises/:id" 
                         element={
                             <ProtectedRoute>
-                                <Navbar /><div className="pt-16"><Exercise /></div>
+                                <Navbar /><div className="pt-20"><Exercise /></div>
                             </ProtectedRoute>
                         } 
                     />
@@ -309,7 +312,7 @@ function App() {
                         path="/my-courses/:courseId" 
                         element={
                             <ProtectedRoute>
-                                <Navbar /><div className="pt-16"><MyCourseDetail /></div>
+                                <Navbar /><div className="pt-24"><MyCourseDetail /></div>
                             </ProtectedRoute>
                         } 
                     />

@@ -91,7 +91,7 @@ const Login = () => {
                     {/* Register Link */}
                     <p className="text-center text-gray-400">
                         Don't have an account?{' '}
-                        <Link to="/register" className="text-[#fef483] hover:text-[#fff9c4] font-medium">
+                        <Link to="/get-started" className="text-[#fef483] hover:text-[#fff9c4] font-medium">
                             Create one free
                         </Link>
                     </p>

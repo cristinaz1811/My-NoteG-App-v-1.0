@@ -1,24 +1,50 @@
 import React, { useContext } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
 const Navbar = () => {
     const { user, logout } = useContext(AuthContext);
     const navigate = useNavigate();
+    const location = useLocation();
+    
+    // Check if on auth pages where logo should not be clickable
+    const isAuthPage = ['/login', '/register', '/get-started'].includes(location.pathname);
 
     const handleLogout = () => {
         logout();
         navigate('/');
     };
 
+    // Logo content shared between clickable and non-clickable versions
+    const LogoContent = () => (
+        <>
+            <div className="absolute -inset-2 rounded-full opacity-40" style={{ background: 'radial-gradient(circle, rgba(254, 244, 131, 0.3), rgba(161, 96, 157, 0.15), transparent 70%)' }}></div>
+            <img src="/logo.png" alt="Note G" className="w-32 h-32 relative z-10" style={{ filter: 'drop-shadow(0 0 12px rgba(254, 244, 131, 0.4))' }} />
+            <span className="text-xl font-bold text-white relative z-10">Note G</span>
+        </>
+    );
+
     return (
-        <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-1 border-b border-white/5" style={{ background: 'linear-gradient(to bottom, rgba(18, 22, 28, 0.6) 0%, rgba(18, 22, 28, 0.3) 70%, transparent 100%)', backdropFilter: 'blur(12px)' }}>
-            <div className="max-w-7xl mx-auto flex items-center justify-between">
-                {/* Logo */}
-                <Link to="/student" className="flex items-center gap-2 no-underline">
-                    <img src="/logo.png" alt="Note G" className="w-16 h-16" />
-                    <span className="text-xl font-bold text-white">Note G</span>
-                </Link>
+        <nav className="fixed top-0 left-0 right-0 z-50 px-6 border-b border-white/5 overflow-hidden" style={{ background: 'linear-gradient(to bottom, rgba(18, 22, 28, 0.6) 0%, rgba(18, 22, 28, 0.3) 70%, transparent 100%)', backdropFilter: 'blur(12px)' }}>
+            {/* Decorative glow orbs */}
+            <div className="absolute top-2 left-[20%] w-16 h-16 rounded-full opacity-20 animate-pulse" style={{ background: 'radial-gradient(circle, rgba(254, 244, 131, 0.4), transparent 70%)', animationDuration: '3s' }}></div>
+            <div className="absolute top-4 left-[40%] w-8 h-8 rounded-full opacity-15 animate-pulse" style={{ background: 'radial-gradient(circle, rgba(161, 96, 157, 0.5), transparent 70%)', animationDuration: '4s' }}></div>
+            <div className="absolute top-1 right-[30%] w-12 h-12 rounded-full opacity-20 animate-pulse" style={{ background: 'radial-gradient(circle, rgba(184, 138, 181, 0.4), transparent 70%)', animationDuration: '5s' }}></div>
+            <div className="absolute top-3 right-[15%] w-20 h-20 rounded-full opacity-15 animate-pulse" style={{ background: 'radial-gradient(circle, rgba(254, 244, 131, 0.3), transparent 70%)', animationDuration: '3.5s' }}></div>
+            <div className="absolute top-0 left-[60%] w-6 h-6 rounded-full opacity-25 animate-pulse" style={{ background: 'radial-gradient(circle, rgba(161, 96, 157, 0.4), transparent 70%)', animationDuration: '2.5s' }}></div>
+            <div className="absolute top-5 right-[50%] w-10 h-10 rounded-full opacity-15 animate-pulse" style={{ background: 'radial-gradient(circle, rgba(254, 244, 131, 0.35), transparent 70%)', animationDuration: '4.5s' }}></div>
+            
+            <div className="max-w-7xl mx-auto flex items-center justify-between h-20 relative">
+                {/* Logo - non-clickable on auth pages */}
+                {isAuthPage ? (
+                    <div className="flex items-center gap-2 relative -my-4">
+                        <LogoContent />
+                    </div>
+                ) : (
+                    <Link to="/student" className="flex items-center gap-2 no-underline relative -my-4">
+                        <LogoContent />
+                    </Link>
+                )}
 
                 {/* Navigation Links */}
                 <div className="flex items-center gap-6">
@@ -46,7 +72,7 @@ const Navbar = () => {
                                 Sign In
                             </Link>
                             <Link 
-                                to="/register" 
+                                to="/get-started" 
                                 className="px-5 py-2 rounded-lg font-medium gradient-bg text-white no-underline hover:opacity-90 transition-opacity"
                             >
                                 Get Started

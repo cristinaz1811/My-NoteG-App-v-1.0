@@ -46,7 +46,7 @@ code, .font-mono {
 
 /* Glow effect */
 .glow {
-    box-shadow: 0 0 60px rgba(161, 96, 157, 0.3), 0 0 100px rgba(254, 244, 131, 0.15);
+    box-shadow: 0 0 40px rgba(161, 96, 157, 0.25), 0 0 70px rgba(254, 244, 131, 0.12);
 }
 
 .glow-sm {

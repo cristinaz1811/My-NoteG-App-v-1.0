@@ -20,7 +20,9 @@ const Exercise = () => {
         try {
             const response = await exerciseService.getExerciseById(id);
             setExercise(response.data);
-            setCode(response.data.starter_code || '');
+            // Replace literal \n strings with actual newlines
+            const starterCode = response.data.starter_code || '';
+            setCode(starterCode.replace(/\\n/g, '\n'));
         } catch (error) {
             console.error('Error loading exercise:', error);
         } finally {
