@@ -492,6 +492,30 @@ const deleteCourse = async (req, res) => {
             return res.status(403).json({ error: 'Not authorized to delete this course' });
         }
 
+        // Delete related records that don't have ON DELETE CASCADE
+        // Get all exercise IDs for this course
+        const exercises = await db.query('SELECT id FROM exercises WHERE course_id = $1', [id]);
+        const exerciseIds = exercises.rows.map(e => e.id);
+        
+        if (exerciseIds.length > 0) {
+            // Delete user_progress for these exercises
+            await db.query('DELETE FROM user_progress WHERE exercise_id = ANY($1)', [exerciseIds]);
+            // Delete submissions for these exercises
+            await db.query('DELETE FROM submissions WHERE exercise_id = ANY($1)', [exerciseIds]);
+        }
+        
+        // Delete enrollments for this course
+        await db.query('DELETE FROM enrollments WHERE course_id = $1', [id]);
+        
+        // Delete time_sessions for this course
+        await db.query('DELETE FROM time_sessions WHERE course_id = $1', [id]);
+        
+        // Delete chapters (exercises will cascade)
+        await db.query('DELETE FROM chapters WHERE course_id = $1', [id]);
+        
+        // Delete exercises (test_cases will cascade)
+        await db.query('DELETE FROM exercises WHERE course_id = $1', [id]);
+
         await db.query('DELETE FROM courses WHERE id = $1', [id]);
         res.json({ message: 'Course deleted successfully' });
     } catch (error) {
