@@ -5,6 +5,7 @@ const {
     getCourseById,
     createCourse,
     enrollInCourse,
+    unenrollFromCourse,
     getUserCourses,
     getEnrolledCourseDetails,
     startTimeSession,
@@ -28,6 +29,7 @@ router.post('/my-courses/:courseId/time/heartbeat', authMiddleware, updateTimeSe
 // Course management
 router.post('/', authMiddleware, isAdmin, createCourse);
 router.post('/:courseId/enroll', authMiddleware, enrollInCourse);
+router.delete('/:courseId/unenroll', authMiddleware, unenrollFromCourse);
 
 // This must come LAST - it's a catch-all for course IDs
 router.get('/:id', getCourseById);

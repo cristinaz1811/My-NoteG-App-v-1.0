@@ -36,6 +36,20 @@ const MyCourses = () => {
         navigate(`/my-courses/${courseId}`);
     };
 
+    const handleUnenroll = async (e, courseId) => {
+        e.stopPropagation(); // Prevent card click
+        if (!window.confirm('Are you sure you want to unenroll from this course? Your progress will be lost.')) {
+            return;
+        }
+        try {
+            await courseService.unenrollFromCourse(courseId);
+            setCourses(courses.filter(c => c.id !== courseId));
+        } catch (error) {
+            console.error('Error unenrolling:', error);
+            alert(error.response?.data?.error || 'Failed to unenroll');
+        }
+    };
+
     const getDifficultyBadgeClass = (difficulty) => {
         switch(difficulty) {
             case 'beginner': return 'badge-beginner';
@@ -191,6 +205,14 @@ const MyCourses = () => {
                                 {/* Continue Button */}
                                 <button className="w-full mt-4 py-2.5 rounded-lg font-medium text-sm border border-white/10 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/5">
                                     Continue Learning →
+                                </button>
+                                
+                                {/* Unenroll Button */}
+                                <button 
+                                    onClick={(e) => handleUnenroll(e, course.id)}
+                                    className="w-full mt-2 py-2 rounded-lg text-xs text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400 hover:bg-red-400/5"
+                                >
+                                    Unenroll
                                 </button>
                             </div>
                         );

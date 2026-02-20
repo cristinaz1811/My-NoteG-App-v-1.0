@@ -132,6 +132,38 @@ const enrollInCourse = async (req, res) => {
     }
 };
 
+const unenrollFromCourse = async (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const userId = req.user.id;
+
+        // Check if enrolled
+        const existing = await db.query(
+            'SELECT * FROM enrollments WHERE user_id = $1 AND course_id = $2',
+            [userId, courseId]
+        );
+
+        if (existing.rows.length === 0) {
+            return res.status(404).json({ error: 'Not enrolled in this course' });
+        }
+
+        // Delete enrollment and related data
+        await db.query(
+            'DELETE FROM time_sessions WHERE user_id = $1 AND course_id = $2',
+            [userId, courseId]
+        );
+        await db.query(
+            'DELETE FROM enrollments WHERE user_id = $1 AND course_id = $2',
+            [userId, courseId]
+        );
+
+        res.json({ message: 'Successfully unenrolled from course' });
+    } catch (error) {
+        console.error('Unenroll course error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 const getUserCourses = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -387,6 +419,7 @@ module.exports = {
     getCourseById,
     createCourse,
     enrollInCourse,
+    unenrollFromCourse,
     getUserCourses,
     getEnrolledCourseDetails,
     startTimeSession,
