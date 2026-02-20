@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/Navbar';
@@ -14,6 +14,87 @@ import MyCourseDetail from './pages/MyCourseDetail';
 const ProtectedRoute = ({ children }) => {
     const token = localStorage.getItem('token');
     return token ? children : <Navigate to="/login" />;
+};
+
+// Role Selection Landing Page
+const RoleSelection = () => {
+    return (
+        <div className="min-h-screen flex items-center justify-center px-6 py-12" style={{ background: 'var(--bg-color)' }}>
+            <div className="max-w-4xl w-full text-center">
+                {/* Logo */}
+                <div className="flex items-center justify-center gap-3 mb-8">
+                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center gradient-bg">
+                        <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                        </svg>
+                    </div>
+                    <span className="text-4xl font-bold text-white">CodeCraft</span>
+                </div>
+
+                {/* Title */}
+                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4">
+                    Welcome to <span className="gradient-text">CodeCraft</span>
+                </h1>
+                <p className="text-lg sm:text-xl text-gray-400 mb-12 max-w-2xl mx-auto">
+                    The interactive platform for learning and teaching programming. Choose your role to get started.
+                </p>
+
+                {/* Role Selection Cards */}
+                <div className="grid sm:grid-cols-2 gap-6 max-w-2xl mx-auto">
+                    {/* Student Card */}
+                    <Link 
+                        to="/register"
+                        className="surface-card card-hover p-8 rounded-2xl text-left group no-underline"
+                    >
+                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 text-4xl"
+                             style={{ background: 'linear-gradient(135deg, rgba(34, 211, 238, 0.2), rgba(99, 102, 241, 0.2))' }}>
+                            🎓
+                        </div>
+                        <h2 className="text-2xl font-bold mb-3 text-white group-hover:text-cyan-400 transition-colors">
+                            I'm a Student
+                        </h2>
+                        <p className="text-gray-400 mb-6">
+                            Learn programming through interactive courses, hands-on exercises, and real-time feedback.
+                        </p>
+                        <div className="flex items-center gap-2 text-cyan-400 font-medium">
+                            <span>Start Learning</span>
+                            <span className="group-hover:translate-x-1 transition-transform">→</span>
+                        </div>
+                    </Link>
+
+                    {/* Professor Card */}
+                    <div 
+                        className="surface-card p-8 rounded-2xl text-left opacity-60 cursor-not-allowed relative overflow-hidden"
+                    >
+                        {/* Coming Soon Badge */}
+                        <div className="absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-semibold"
+                             style={{ background: 'rgba(251, 191, 36, 0.2)', color: '#fbbf24' }}>
+                            Coming Soon
+                        </div>
+                        
+                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 text-4xl"
+                             style={{ background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(236, 72, 153, 0.2))' }}>
+                            👨‍🏫
+                        </div>
+                        <h2 className="text-2xl font-bold mb-3 text-white">
+                            I'm a Professor
+                        </h2>
+                        <p className="text-gray-400 mb-6">
+                            Create courses, design exercises, and track your students' progress in real-time.
+                        </p>
+                        <div className="flex items-center gap-2 text-gray-500 font-medium">
+                            <span>Available Soon</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <p className="text-sm text-gray-500 mt-12">
+                    Already have an account? <Link to="/login" className="text-cyan-400 hover:text-cyan-300">Sign in</Link>
+                </p>
+            </div>
+        </div>
+    );
 };
 
 const Home = () => {
@@ -39,37 +120,12 @@ const Home = () => {
                             Interactive lessons, real-world projects, and a supportive community to take you from beginner to professional developer.
                         </p>
                         
-                        <div className="flex flex-col sm:flex-row gap-4">
-                            <Link 
-                                to="/register" 
-                                className="px-8 py-4 rounded-xl font-semibold text-lg transition-all hover:scale-105 glow gradient-bg text-white text-center no-underline"
-                            >
-                                Start Learning Free
-                            </Link>
-                            <Link 
-                                to="/courses" 
-                                className="px-8 py-4 rounded-xl font-semibold text-lg transition-all hover:bg-white/10 flex items-center justify-center gap-2 no-underline text-white"
-                                style={{ border: '1px solid rgba(255,255,255,0.2)' }}
-                            >
-                                Browse Courses
-                            </Link>
-                        </div>
-
-                        {/* Stats */}
-                        <div className="flex items-center gap-6 mt-10">
-                            <div className="flex -space-x-3">
-                                <div className="w-10 h-10 rounded-full border-2 border-[#0a0a0f] bg-gradient-to-br from-pink-500 to-purple-500"></div>
-                                <div className="w-10 h-10 rounded-full border-2 border-[#0a0a0f] bg-gradient-to-br from-cyan-500 to-blue-500"></div>
-                                <div className="w-10 h-10 rounded-full border-2 border-[#0a0a0f] bg-gradient-to-br from-green-500 to-emerald-500"></div>
-                                <div className="w-10 h-10 rounded-full border-2 border-[#0a0a0f] bg-gradient-to-br from-orange-500 to-red-500"></div>
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-1 text-yellow-400">
-                                    <span>★★★★★</span>
-                                </div>
-                                <p className="text-sm opacity-70">4.9/5 from 2,500+ reviews</p>
-                            </div>
-                        </div>
+                        <Link 
+                            to="/courses" 
+                            className="inline-block px-8 py-4 rounded-xl font-semibold text-lg transition-all hover:scale-105 glow gradient-bg text-white text-center no-underline"
+                        >
+                            Browse Courses
+                        </Link>
                     </div>
 
                     {/* Code Editor Preview */}
@@ -133,26 +189,6 @@ const Home = () => {
                 </div>
             </section>
 
-            {/* CTA Section */}
-            <section className="py-24 px-6">
-                <div className="max-w-4xl mx-auto">
-                    <div className="rounded-3xl p-8 sm:p-12 text-center glow"
-                         style={{ background: 'linear-gradient(145deg, rgba(99, 102, 241, 0.2), rgba(34, 211, 238, 0.1))', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
-                        <h2 className="text-3xl sm:text-4xl font-bold mb-4">Ready to Start Coding?</h2>
-                        <p className="text-lg opacity-80 mb-8 max-w-xl mx-auto">
-                            Join thousands of developers who have transformed their careers with CodeCraft.
-                        </p>
-                        <Link 
-                            to="/register"
-                            className="inline-block px-10 py-4 rounded-xl font-semibold text-lg transition-all hover:scale-105 gradient-bg text-white no-underline"
-                        >
-                            Start Learning Free
-                        </Link>
-                        <p className="text-sm opacity-50 mt-4">No credit card required • Cancel anytime</p>
-                    </div>
-                </div>
-            </section>
-
             {/* Footer */}
             <footer className="py-12 px-6 border-t border-white/10">
                 <div className="max-w-7xl mx-auto">
@@ -177,54 +213,55 @@ function App() {
     return (
         <Router>
             <AuthProvider>
-                <Navbar />
-                <div className="pt-16">
-                    <Routes>
-                        <Route path="/" element={<Home />} />
-                        <Route path="/login" element={<Login />} />
-                        <Route path="/register" element={<Register />} />
-                        <Route 
-                            path="/courses" 
-                            element={
-                                <ProtectedRoute>
-                                    <Courses />
-                                </ProtectedRoute>
-                            } 
-                        />
-                        <Route 
-                            path="/courses/:id" 
-                            element={
-                                <ProtectedRoute>
-                                    <CourseDetail />
-                                </ProtectedRoute>
-                            } 
-                        />
-                        <Route 
-                            path="/exercises/:id" 
-                            element={
-                                <ProtectedRoute>
-                                    <Exercise />
-                                </ProtectedRoute>
-                            } 
-                        />
-                        <Route 
-                            path="/my-courses" 
-                            element={
-                                <ProtectedRoute>
-                                    <MyCourses />
-                                </ProtectedRoute>
-                            } 
-                        />
-                        <Route 
-                            path="/my-courses/:courseId" 
-                            element={
-                                <ProtectedRoute>
-                                    <MyCourseDetail />
-                                </ProtectedRoute>
-                            } 
-                        />
-                    </Routes>
-                </div>
+                <Routes>
+                    {/* Role Selection - No Navbar */}
+                    <Route path="/" element={<RoleSelection />} />
+                    
+                    {/* Student Routes - With Navbar */}
+                    <Route path="/student" element={<><Navbar /><div className="pt-16"><Home /></div></>} />
+                    <Route path="/login" element={<><Navbar /><div className="pt-16"><Login /></div></>} />
+                    <Route path="/register" element={<><Navbar /><div className="pt-16"><Register /></div></>} />
+                    <Route 
+                        path="/courses" 
+                        element={
+                            <ProtectedRoute>
+                                <Navbar /><div className="pt-16"><Courses /></div>
+                            </ProtectedRoute>
+                        } 
+                    />
+                    <Route 
+                        path="/courses/:id" 
+                        element={
+                            <ProtectedRoute>
+                                <Navbar /><div className="pt-16"><CourseDetail /></div>
+                            </ProtectedRoute>
+                        } 
+                    />
+                    <Route 
+                        path="/exercises/:id" 
+                        element={
+                            <ProtectedRoute>
+                                <Navbar /><div className="pt-16"><Exercise /></div>
+                            </ProtectedRoute>
+                        } 
+                    />
+                    <Route 
+                        path="/my-courses" 
+                        element={
+                            <ProtectedRoute>
+                                <Navbar /><div className="pt-16"><MyCourses /></div>
+                            </ProtectedRoute>
+                        } 
+                    />
+                    <Route 
+                        path="/my-courses/:courseId" 
+                        element={
+                            <ProtectedRoute>
+                                <Navbar /><div className="pt-16"><MyCourseDetail /></div>
+                            </ProtectedRoute>
+                        } 
+                    />
+                </Routes>
             </AuthProvider>
         </Router>
     );

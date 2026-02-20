@@ -15,7 +15,7 @@ const Login = () => {
 
         try {
             await login({ email, password });
-            navigate('/courses');
+            navigate('/student');
         } catch (err) {
             setError(err.response?.data?.error || 'Login failed');
         }

@@ -9,7 +9,7 @@ const Navbar = () => {
         <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-4" style={{ background: 'rgba(10, 10, 15, 0.8)', backdropFilter: 'blur(20px)' }}>
             <div className="max-w-7xl mx-auto flex items-center justify-between">
                 {/* Logo */}
-                <Link to="/" className="flex items-center gap-2 no-underline">
+                <Link to="/student" className="flex items-center gap-2 no-underline">
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center gradient-bg">
                         <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
