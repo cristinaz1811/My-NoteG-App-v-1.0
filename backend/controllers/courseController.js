@@ -90,13 +90,13 @@ const getCourseById = async (req, res) => {
 
 const createCourse = async (req, res) => {
     try {
-        const { title, description, difficulty, long_description, estimated_hours, tags, learning_objectives } = req.body;
+        const { title, description, difficulty, long_description, estimated_hours, tags, learning_objectives, language } = req.body;
         const createdBy = req.user.id;
 
         const result = await db.query(
-            `INSERT INTO courses (title, description, difficulty, created_by, long_description, estimated_hours, tags, learning_objectives) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-            [title, description, difficulty, createdBy, long_description || null, estimated_hours || 1, tags || [], learning_objectives || []]
+            `INSERT INTO courses (title, description, difficulty, created_by, long_description, estimated_hours, tags, learning_objectives, language) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+            [title, description, difficulty, createdBy, long_description || null, estimated_hours || 1, tags || [], learning_objectives || [], language || 'javascript']
         );
 
         res.status(201).json(result.rows[0]);

@@ -172,7 +172,14 @@ const Exercise = () => {
                             <div className="w-3 h-3 rounded-full bg-green-500"></div>
                         </div>
                         <span className="text-sm text-gray-400 font-mono">
-                            solution.{exercise.language === 'python' ? 'py' : exercise.language === 'javascript' ? 'js' : exercise.language}
+                            solution.{
+                                exercise.language === 'python' ? 'py' : 
+                                exercise.language === 'javascript' ? 'js' : 
+                                exercise.language === 'java' ? 'java' :
+                                exercise.language === 'cpp' ? 'cpp' :
+                                exercise.language === 'csharp' ? 'cs' :
+                                exercise.language
+                            }
                         </span>
                     </div>
                     <button

@@ -9,6 +9,7 @@ const CreateCourse = () => {
         title: '',
         description: '',
         difficulty: 'beginner',
+        language: 'javascript',
         long_description: '',
         estimated_hours: 1,
         tags: [],
@@ -137,17 +138,35 @@ const CreateCourse = () => {
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    Estimated Hours
+                                    Programming Language *
                                 </label>
-                                <input
-                                    type="number"
-                                    name="estimated_hours"
-                                    value={formData.estimated_hours}
+                                <select
+                                    name="language"
+                                    value={formData.language}
                                     onChange={handleChange}
-                                    min="1"
                                     className="w-full"
-                                />
+                                >
+                                    <option value="javascript">JavaScript</option>
+                                    <option value="python">Python</option>
+                                    <option value="java">Java</option>
+                                    <option value="cpp">C++</option>
+                                    <option value="csharp">C#</option>
+                                </select>
                             </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                                Estimated Hours
+                            </label>
+                            <input
+                                type="number"
+                                name="estimated_hours"
+                                value={formData.estimated_hours}
+                                onChange={handleChange}
+                                min="1"
+                                className="w-full"
+                            />
                         </div>
 
                         <div>

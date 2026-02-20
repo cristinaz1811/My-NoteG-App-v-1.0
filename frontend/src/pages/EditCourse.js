@@ -690,6 +690,9 @@ const ExerciseModal = ({ chapters, onClose, onSubmit }) => {
                             >
                                 <option value="javascript">JavaScript</option>
                                 <option value="python">Python</option>
+                                <option value="java">Java</option>
+                                <option value="cpp">C++</option>
+                                <option value="csharp">C#</option>
                             </select>
                         </div>
                     </div>
