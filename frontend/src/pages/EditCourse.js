@@ -162,13 +162,21 @@ const EditCourse = () => {
                             {course.difficulty}
                         </span>
                     </div>
-                    <Link
-                        to={`/courses/${id}`}
-                        className="px-4 py-2 rounded-lg text-sm border border-white/20 text-gray-300 hover:bg-white/5 no-underline"
-                        target="_blank"
-                    >
-                        View as Student →
-                    </Link>
+                    <div className="flex items-center gap-2">
+                        <Link
+                            to={`/professor/course/${id}/students`}
+                            className="px-4 py-2 rounded-lg text-sm font-medium text-[#fef483] border border-[#fef483]/30 hover:bg-[#fef483]/10 no-underline transition-colors"
+                        >
+                            👥 Students
+                        </Link>
+                        <Link
+                            to={`/courses/${id}`}
+                            className="px-4 py-2 rounded-lg text-sm border border-white/20 text-gray-300 hover:bg-white/5 no-underline"
+                            target="_blank"
+                        >
+                            View as Student →
+                        </Link>
+                    </div>
                 </div>
 
                 {/* Tabs */}

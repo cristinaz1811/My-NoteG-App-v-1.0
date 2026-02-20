@@ -17,6 +17,8 @@ const {
     startTimeSession,
     endTimeSession,
     updateTimeSession,
+    getCourseEnrolledStudents,
+    getStudentCourseDetails,
 } = require('../controllers/courseController');
 const { authMiddleware, isAdmin, isProfessor } = require('../middleware/auth');
 
@@ -42,6 +44,10 @@ router.delete('/professor/:id', authMiddleware, isProfessor, deleteCourse);
 router.post('/professor/:courseId/chapters', authMiddleware, isProfessor, addChapter);
 router.put('/professor/chapters/:chapterId', authMiddleware, isProfessor, updateChapter);
 router.delete('/professor/chapters/:chapterId', authMiddleware, isProfessor, deleteChapter);
+
+// Professor: View enrolled students
+router.get('/professor/:courseId/students', authMiddleware, isProfessor, getCourseEnrolledStudents);
+router.get('/professor/:courseId/students/:studentId', authMiddleware, isProfessor, getStudentCourseDetails);
 
 // Course management (legacy admin route)
 router.post('/', authMiddleware, isAdmin, createCourse);

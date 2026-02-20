@@ -48,6 +48,9 @@ export const courseService = {
     addChapter: (courseId, chapterData) => api.post(`/courses/professor/${courseId}/chapters`, chapterData),
     updateChapter: (chapterId, chapterData) => api.put(`/courses/professor/chapters/${chapterId}`, chapterData),
     deleteChapter: (chapterId) => api.delete(`/courses/professor/chapters/${chapterId}`),
+    // Student management (professor)
+    getCourseStudents: (courseId) => api.get(`/courses/professor/${courseId}/students`),
+    getStudentDetails: (courseId, studentId) => api.get(`/courses/professor/${courseId}/students/${studentId}`),
 };
 
 // Exercise services
