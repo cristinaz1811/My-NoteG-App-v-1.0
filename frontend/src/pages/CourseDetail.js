@@ -9,6 +9,9 @@ const CourseDetail = () => {
     const [isEnrolled, setIsEnrolled] = useState(false);
     const [checkingEnrollment, setCheckingEnrollment] = useState(true);
     const [expandedChapters, setExpandedChapters] = useState({});
+    const [enrollmentCode, setEnrollmentCode] = useState('');
+    const [showCodeInput, setShowCodeInput] = useState(false);
+    const [codeError, setCodeError] = useState('');
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -43,11 +46,17 @@ const CourseDetail = () => {
 
     const handleEnroll = async () => {
         try {
-            await courseService.enrollInCourse(id);
+            setCodeError('');
+            await courseService.enrollInCourse(id, enrollmentCode || undefined);
             navigate(`/my-courses/${id}`);
         } catch (error) {
             console.error('Error enrolling:', error);
-            alert(error.response?.data?.error || 'Failed to enroll');
+            if (error.response?.data?.requiresCode) {
+                setShowCodeInput(true);
+                setCodeError('This is a private course. Please enter the enrollment code.');
+            } else {
+                setCodeError(error.response?.data?.error || 'Failed to enroll');
+            }
         }
     };
 
@@ -193,26 +202,57 @@ const CourseDetail = () => {
                                 ) : (
                                     <>
                                         <h3 className="text-xl font-semibold mb-4">Start Learning Today</h3>
+                                        
+                                        {/* Private course badge */}
+                                        {course.is_private && (
+                                            <div className="flex items-center gap-2 mb-4 p-2 bg-[#a1609d]/10 rounded-lg border border-[#a1609d]/20">
+                                                <span>🔒</span>
+                                                <span className="text-sm text-[#b870ad]">Private Course — Enrollment code required</span>
+                                            </div>
+                                        )}
+
+                                        {/* Enrollment code input for private courses */}
+                                        {(course.is_private || showCodeInput) && (
+                                            <div className="mb-4">
+                                                <label className="block text-sm text-gray-400 mb-2">Enrollment Code</label>
+                                                <input
+                                                    type="text"
+                                                    value={enrollmentCode}
+                                                    onChange={(e) => { setEnrollmentCode(e.target.value.toUpperCase()); setCodeError(''); }}
+                                                    placeholder="Enter code..."
+                                                    className="w-full font-mono text-center text-lg tracking-widest uppercase"
+                                                    maxLength={6}
+                                                />
+                                                {codeError && (
+                                                    <p className="text-red-400 text-sm mt-2">{codeError}</p>
+                                                )}
+                                            </div>
+                                        )}
+
                                         <button 
                                             onClick={handleEnroll} 
                                             className="w-full btn-primary py-4 text-lg mb-4"
+                                            disabled={course.is_private && !enrollmentCode}
                                         >
-                                            Enroll Now - It's Free
+                                            {course.is_private ? 'Enroll with Code' : 'Enroll Now - It\'s Free'}
                                         </button>
-                                        <div className="space-y-3 text-sm text-gray-400">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-green-400">✓</span>
-                                                <span>Track your progress</span>
+
+                                        {!codeError && (
+                                            <div className="space-y-3 text-sm text-gray-400">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-green-400">✓</span>
+                                                    <span>Track your progress</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-green-400">✓</span>
+                                                    <span>Get instant feedback</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-green-400">✓</span>
+                                                    <span>Earn completion certificate</span>
+                                                </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-green-400">✓</span>
-                                                <span>Get instant feedback</span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-green-400">✓</span>
-                                                <span>Earn completion certificate</span>
-                                            </div>
-                                        </div>
+                                        )}
                                     </>
                                 )}
                             </div>
@@ -345,11 +385,25 @@ const CourseDetail = () => {
                         <div className="sticky top-24 space-y-6">
                             {/* Mobile Enroll Button */}
                             <div className="lg:hidden surface-card rounded-2xl p-6">
+                                {course.is_private && (
+                                    <div className="mb-3">
+                                        <label className="block text-sm text-gray-400 mb-2">Enrollment Code</label>
+                                        <input
+                                            type="text"
+                                            value={enrollmentCode}
+                                            onChange={(e) => { setEnrollmentCode(e.target.value.toUpperCase()); setCodeError(''); }}
+                                            placeholder="Enter code..."
+                                            className="w-full font-mono text-center text-lg tracking-widest uppercase"
+                                            maxLength={6}
+                                        />
+                                    </div>
+                                )}
                                 <button 
                                     onClick={handleEnroll} 
                                     className="w-full btn-primary py-4 text-lg"
+                                    disabled={course.is_private && !enrollmentCode}
                                 >
-                                    Enroll Now - It's Free
+                                    {course.is_private ? 'Enroll with Code' : 'Enroll Now - It\'s Free'}
                                 </button>
                             </div>
 

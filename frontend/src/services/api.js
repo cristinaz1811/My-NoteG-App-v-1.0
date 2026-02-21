@@ -43,7 +43,7 @@ export const courseService = {
     getCourseById: (id) => api.get(`/courses/${id}`),
     getUserCourses: () => api.get('/courses/my-courses/list'),
     getEnrolledCourseDetails: (courseId) => api.get(`/courses/my-courses/${courseId}/details`),
-    enrollInCourse: (courseId) => api.post(`/courses/${courseId}/enroll`),
+    enrollInCourse: (courseId, enrollmentCode) => api.post(`/courses/${courseId}/enroll`, { enrollment_code: enrollmentCode }),
     unenrollFromCourse: (courseId) => api.delete(`/courses/${courseId}/unenroll`),
     createCourse: (courseData) => api.post('/courses', courseData),
     // Time tracking
@@ -62,6 +62,10 @@ export const courseService = {
     // Student management (professor)
     getCourseStudents: (courseId) => api.get(`/courses/professor/${courseId}/students`),
     getStudentDetails: (courseId, studentId) => api.get(`/courses/professor/${courseId}/students/${studentId}`),
+    // Enrollment code
+    regenerateEnrollmentCode: (courseId) => api.post(`/courses/professor/${courseId}/regenerate-code`),
+    verifyEnrollmentCode: (courseId, code) => api.post(`/courses/${courseId}/verify-code`, { code }),
+    enrollByCode: (code) => api.post('/courses/enroll-by-code', { code }),
 };
 
 // Exercise services

@@ -1,7 +1,16 @@
+const crypto = require('crypto');
 const db = require('../config/database');
+
+// Generate a random enrollment code (6 alphanumeric characters)
+const generateEnrollmentCode = () => {
+    return crypto.randomBytes(3).toString('hex').toUpperCase();
+};
 
 const getAllCourses = async (req, res) => {
     try {
+        // Public listing: show all public courses. Private courses are only shown if the user is the creator or enrolled.
+        const userId = req.user?.id || null;
+
         const result = await db.query(`
             SELECT c.*, u.username as creator_name,
                    COUNT(DISTINCT e.id) as exercise_count,
@@ -10,9 +19,12 @@ const getAllCourses = async (req, res) => {
             LEFT JOIN users u ON c.created_by = u.id
             LEFT JOIN exercises e ON c.id = e.course_id
             LEFT JOIN chapters ch ON c.id = ch.course_id
+            WHERE c.is_private = false
+               OR c.created_by = $1
+               OR EXISTS (SELECT 1 FROM enrollments en WHERE en.course_id = c.id AND en.user_id = $1)
             GROUP BY c.id, u.username
             ORDER BY c.created_at DESC
-        `);
+        `, [userId]);
 
         res.json(result.rows);
     } catch (error) {
@@ -90,13 +102,25 @@ const getCourseById = async (req, res) => {
 
 const createCourse = async (req, res) => {
     try {
-        const { title, description, difficulty, long_description, estimated_hours, tags, learning_objectives, language } = req.body;
+        const { title, description, difficulty, long_description, estimated_hours, tags, learning_objectives, language, is_private } = req.body;
         const createdBy = req.user.id;
 
+        // Generate enrollment code if course is private
+        let enrollmentCode = null;
+        if (is_private) {
+            // Keep generating until we find a unique code
+            let isUnique = false;
+            while (!isUnique) {
+                enrollmentCode = generateEnrollmentCode();
+                const existing = await db.query('SELECT id FROM courses WHERE enrollment_code = $1', [enrollmentCode]);
+                if (existing.rows.length === 0) isUnique = true;
+            }
+        }
+
         const result = await db.query(
-            `INSERT INTO courses (title, description, difficulty, created_by, long_description, estimated_hours, tags, learning_objectives, language) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-            [title, description, difficulty, createdBy, long_description || null, estimated_hours || 1, tags || [], learning_objectives || [], language || 'javascript']
+            `INSERT INTO courses (title, description, difficulty, created_by, long_description, estimated_hours, tags, learning_objectives, language, is_private, enrollment_code) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+            [title, description, difficulty, createdBy, long_description || null, estimated_hours || 1, tags || [], learning_objectives || [], language || 'javascript', is_private || false, enrollmentCode]
         );
 
         res.status(201).json(result.rows[0]);
@@ -110,6 +134,7 @@ const enrollInCourse = async (req, res) => {
     try {
         const { courseId } = req.params;
         const userId = req.user.id;
+        const { enrollment_code } = req.body || {};
 
         // Check if already enrolled
         const existing = await db.query(
@@ -119,6 +144,24 @@ const enrollInCourse = async (req, res) => {
 
         if (existing.rows.length > 0) {
             return res.status(409).json({ error: 'Already enrolled in this course' });
+        }
+
+        // Check if course is private and validate enrollment code
+        const course = await db.query('SELECT * FROM courses WHERE id = $1', [courseId]);
+        if (course.rows.length === 0) {
+            return res.status(404).json({ error: 'Course not found' });
+        }
+
+        const courseData = course.rows[0];
+
+        // If the course is private, require a valid enrollment code (unless the user is the creator)
+        if (courseData.is_private && courseData.created_by !== userId) {
+            if (!enrollment_code) {
+                return res.status(403).json({ error: 'This is a private course. An enrollment code is required to join.', requiresCode: true });
+            }
+            if (enrollment_code.toUpperCase() !== courseData.enrollment_code) {
+                return res.status(403).json({ error: 'Invalid enrollment code.' });
+            }
         }
 
         const result = await db.query(
@@ -467,7 +510,7 @@ const getProfessorCourses = async (req, res) => {
 const updateCourse = async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, difficulty, long_description, learning_objectives, tags, estimated_hours } = req.body;
+        const { title, description, difficulty, long_description, learning_objectives, tags, estimated_hours, is_private } = req.body;
         const userId = req.user.id;
 
         // Verify ownership
@@ -479,6 +522,21 @@ const updateCourse = async (req, res) => {
             return res.status(403).json({ error: 'Not authorized to edit this course' });
         }
 
+        // Handle enrollment code when toggling privacy
+        let enrollmentCode = course.rows[0].enrollment_code;
+        if (is_private === true && !enrollmentCode) {
+            // Generate a new enrollment code if making course private
+            let isUnique = false;
+            while (!isUnique) {
+                enrollmentCode = generateEnrollmentCode();
+                const existing = await db.query('SELECT id FROM courses WHERE enrollment_code = $1 AND id != $2', [enrollmentCode, id]);
+                if (existing.rows.length === 0) isUnique = true;
+            }
+        } else if (is_private === false) {
+            // Remove enrollment code if making course public
+            enrollmentCode = null;
+        }
+
         const result = await db.query(`
             UPDATE courses 
             SET title = COALESCE($1, title),
@@ -488,10 +546,12 @@ const updateCourse = async (req, res) => {
                 learning_objectives = COALESCE($5, learning_objectives),
                 tags = COALESCE($6, tags),
                 estimated_hours = COALESCE($7, estimated_hours),
+                is_private = COALESCE($8, is_private),
+                enrollment_code = $9,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = $8
+            WHERE id = $10
             RETURNING *
-        `, [title, description, difficulty, long_description, learning_objectives, tags, estimated_hours, id]);
+        `, [title, description, difficulty, long_description, learning_objectives, tags, estimated_hours, is_private, enrollmentCode, id]);
 
         res.json(result.rows[0]);
     } catch (error) {
@@ -850,6 +910,133 @@ const getStudentCourseDetails = async (req, res) => {
     }
 };
 
+// Regenerate enrollment code for a private course
+const regenerateEnrollmentCode = async (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const userId = req.user.id;
+
+        // Verify ownership
+        const course = await db.query('SELECT * FROM courses WHERE id = $1', [courseId]);
+        if (course.rows.length === 0) {
+            return res.status(404).json({ error: 'Course not found' });
+        }
+        if (course.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+        if (!course.rows[0].is_private) {
+            return res.status(400).json({ error: 'Course is not private' });
+        }
+
+        // Generate new unique enrollment code
+        let enrollmentCode;
+        let isUnique = false;
+        while (!isUnique) {
+            enrollmentCode = generateEnrollmentCode();
+            const existing = await db.query('SELECT id FROM courses WHERE enrollment_code = $1 AND id != $2', [enrollmentCode, courseId]);
+            if (existing.rows.length === 0) isUnique = true;
+        }
+
+        const result = await db.query(
+            'UPDATE courses SET enrollment_code = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+            [enrollmentCode, courseId]
+        );
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Regenerate enrollment code error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Verify enrollment code (public endpoint for students to check before enrolling)
+const verifyEnrollmentCode = async (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const { code } = req.body;
+
+        if (!code) {
+            return res.status(400).json({ error: 'Enrollment code is required' });
+        }
+
+        const course = await db.query('SELECT id, enrollment_code, is_private FROM courses WHERE id = $1', [courseId]);
+        if (course.rows.length === 0) {
+            return res.status(404).json({ error: 'Course not found' });
+        }
+
+        if (!course.rows[0].is_private) {
+            return res.json({ valid: true });
+        }
+
+        const valid = code.toUpperCase() === course.rows[0].enrollment_code;
+        res.json({ valid });
+    } catch (error) {
+        console.error('Verify enrollment code error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Enroll in a private course using just the enrollment code (no course ID needed)
+const enrollByCode = async (req, res) => {
+    try {
+        const { code } = req.body;
+        const userId = req.user.id;
+
+        if (!code) {
+            return res.status(400).json({ error: 'Enrollment code is required' });
+        }
+
+        // Find the course with this enrollment code
+        const courseResult = await db.query(
+            `SELECT c.*, u.username as creator_name
+             FROM courses c
+             LEFT JOIN users u ON c.created_by = u.id
+             WHERE c.enrollment_code = $1 AND c.is_private = true`,
+            [code.toUpperCase()]
+        );
+
+        if (courseResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Invalid enrollment code. Please check the code and try again.' });
+        }
+
+        const course = courseResult.rows[0];
+
+        // Check if already enrolled
+        const existing = await db.query(
+            'SELECT * FROM enrollments WHERE user_id = $1 AND course_id = $2',
+            [userId, course.id]
+        );
+
+        if (existing.rows.length > 0) {
+            return res.status(409).json({ 
+                error: 'You are already enrolled in this course.',
+                courseId: course.id,
+                alreadyEnrolled: true
+            });
+        }
+
+        // Enroll the user
+        await db.query(
+            'INSERT INTO enrollments (user_id, course_id) VALUES ($1, $2)',
+            [userId, course.id]
+        );
+
+        res.status(201).json({
+            message: 'Successfully enrolled!',
+            course: {
+                id: course.id,
+                title: course.title,
+                description: course.description,
+                difficulty: course.difficulty,
+                creator_name: course.creator_name
+            }
+        });
+    } catch (error) {
+        console.error('Enroll by code error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 module.exports = {
     getAllCourses,
     getCourseById,
@@ -869,4 +1056,7 @@ module.exports = {
     updateTimeSession,
     getCourseEnrolledStudents,
     getStudentCourseDetails,
+    regenerateEnrollmentCode,
+    verifyEnrollmentCode,
+    enrollByCode,
 };
