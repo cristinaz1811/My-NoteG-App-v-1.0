@@ -20,6 +20,7 @@ import ResetPassword from './pages/ResetPassword';
 import VerificationPending from './pages/VerificationPending';
 import ResendVerification from './pages/ResendVerification';
 import ChooseUsername from './pages/ChooseUsername';
+import Leaderboard from './pages/Leaderboard';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -342,6 +343,14 @@ function App() {
                         element={
                             <ProtectedRoute>
                                 <Navbar /><div className="pt-24"><MyCourseDetail /></div>
+                            </ProtectedRoute>
+                        } 
+                    />
+                    <Route 
+                        path="/leaderboard" 
+                        element={
+                            <ProtectedRoute>
+                                <Navbar /><div className="pt-16"><Leaderboard /></div>
                             </ProtectedRoute>
                         } 
                     />

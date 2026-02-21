@@ -1,6 +1,7 @@
-import React, { useContext } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import { gamificationService } from '../services/api';
 
 const Navbar = () => {
     const { user, logout } = useContext(AuthContext);
@@ -9,6 +10,17 @@ const Navbar = () => {
     
     // Check if on auth pages where logo should not be clickable
     const isAuthPage = ['/login', '/register', '/get-started'].includes(location.pathname);
+
+    // XP summary for students
+    const [xpSummary, setXpSummary] = useState(null);
+
+    useEffect(() => {
+        if (user && user.role === 'student') {
+            gamificationService.getXPSummary()
+                .then(res => setXpSummary(res.data))
+                .catch(() => {});
+        }
+    }, [user, location.pathname]);
 
     const handleLogout = () => {
         logout();
@@ -69,12 +81,28 @@ const Navbar = () => {
                                     <Link to="/my-courses" className="text-gray-300 hover:text-[#fef483] transition-colors no-underline">
                                         My Courses
                                     </Link>
+                                    <Link to="/leaderboard" className="text-gray-300 hover:text-[#fef483] transition-colors no-underline">
+                                        🏆 Leaderboard
+                                    </Link>
                                 </>
                             )}
                             <span className="text-gray-400">
                                 Welcome, <span style={{ color: user.role === 'professor' ? '#a1609d' : '#fef483' }}>{user.username}</span>
                                 {user.role === 'professor' && <span className="ml-1 text-xs text-[#a1609d]">(Prof)</span>}
                             </span>
+                            {xpSummary && user.role === 'student' && (
+                                <Link to="/leaderboard" className="no-underline flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+                                    <span className="text-xs font-bold" style={{ color: xpSummary.level >= 10 ? '#ffd700' : '#fef483' }}>
+                                        Lv.{xpSummary.level}
+                                    </span>
+                                    <div className="w-12 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                                        <div className="h-full rounded-full" style={{ width: `${xpSummary.progressPercent}%`, background: 'linear-gradient(90deg, #a1609d, #fef483)' }} />
+                                    </div>
+                                    {xpSummary.streak > 0 && (
+                                        <span className="text-xs text-orange-400">{xpSummary.streak}🔥</span>
+                                    )}
+                                </Link>
+                            )}
                             <button 
                                 onClick={handleLogout}
                                 className="px-4 py-2 rounded-lg text-gray-300 hover:bg-white/10 transition-colors border-none bg-transparent cursor-pointer"

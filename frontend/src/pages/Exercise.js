@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { exerciseService } from '../services/api';
 
@@ -11,6 +11,8 @@ const Exercise = () => {
     const [results, setResults] = useState(null);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const [showBadgePopup, setShowBadgePopup] = useState(false);
+    const [earnedBadges, setEarnedBadges] = useState([]);
 
     useEffect(() => {
         loadExercise();
@@ -40,6 +42,12 @@ const Exercise = () => {
                 language: exercise.language,
             });
             setResults(response.data);
+            
+            // Show badge popup if new badges were earned
+            if (response.data.gamification?.newBadges?.length > 0) {
+                setEarnedBadges(response.data.gamification.newBadges);
+                setShowBadgePopup(true);
+            }
         } catch (error) {
             console.error('Error submitting solution:', error);
             alert('Failed to submit solution');
@@ -254,6 +262,30 @@ const Exercise = () => {
                             </div>
                         </div>
 
+                        {/* XP Reward Display */}
+                        {results.gamification && results.gamification.xpGained > 0 && (
+                            <div className="px-4 py-3 border-b border-white/5 bg-[#fef483]/5">
+                                <div className="flex items-center gap-3 flex-wrap">
+                                    <span className="text-[#fef483] font-bold text-sm">+{results.gamification.xpGained} XP</span>
+                                    {results.gamification.xpBreakdown?.map((item, i) => (
+                                        <span key={i} className="text-xs text-gray-400 bg-white/5 px-2 py-0.5 rounded-full">
+                                            {item.reason}: +{item.amount}
+                                        </span>
+                                    ))}
+                                    {results.gamification.levelUp && (
+                                        <span className="text-sm font-bold text-[#a1609d] animate-pulse">
+                                            🎉 Level Up! → Lv.{results.gamification.newLevel}
+                                        </span>
+                                    )}
+                                    {results.gamification.streakUpdate && (
+                                        <span className="text-xs text-orange-400">
+                                            🔥 {results.gamification.streakUpdate.current}-day streak!
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Test Results */}
                         <div className="p-4 space-y-3">
                             {results.results.map((result, index) => (
@@ -300,6 +332,41 @@ const Exercise = () => {
                     </div>
                 )}
             </div>
+
+            {/* Badge Earned Popup */}
+            {showBadgePopup && earnedBadges.length > 0 && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                     onClick={() => setShowBadgePopup(false)}>
+                    <div className="surface-card rounded-2xl p-8 max-w-sm mx-4 text-center animate-slideUp"
+                         style={{ border: '1px solid rgba(254, 244, 131, 0.3)', boxShadow: '0 0 60px rgba(254, 244, 131, 0.15)' }}
+                         onClick={e => e.stopPropagation()}>
+                        <div className="text-5xl mb-4">{earnedBadges[0].icon}</div>
+                        <h3 className="text-xl font-bold text-[#fef483] mb-1">Badge Earned!</h3>
+                        <div className="space-y-3 mt-4">
+                            {earnedBadges.map((badge, i) => (
+                                <div key={i} className="bg-white/5 rounded-xl p-3">
+                                    <div className="font-bold text-white">{badge.icon} {badge.name}</div>
+                                    <div className="text-xs text-gray-400 mt-1">{badge.description}</div>
+                                    {badge.xp_reward > 0 && (
+                                        <div className="text-xs text-[#fef483] mt-1">+{badge.xp_reward} XP bonus!</div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                        <button 
+                            onClick={() => setShowBadgePopup(false)}
+                            className="mt-6 px-8 py-2 rounded-xl gradient-bg text-white font-medium border-none cursor-pointer"
+                        >
+                            Awesome!
+                        </button>
+                        <div className="mt-3">
+                            <Link to="/leaderboard" className="text-xs text-gray-400 hover:text-[#fef483] no-underline">
+                                View all badges →
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

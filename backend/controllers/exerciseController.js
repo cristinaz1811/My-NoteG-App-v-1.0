@@ -128,12 +128,24 @@ const submitSolution = async (req, res) => {
             );
         }
 
+        // Award XP if exercise was just completed for the first time
+        const isFirstCompletion = status === 'passed' && 
+            (progressCheck.rows.length === 0 || !progressCheck.rows[0].completed);
+        
+        let gamificationResult = null;
+        try {
+            gamificationResult = await awardExerciseXP(userId, parseInt(id), score, isFirstCompletion);
+        } catch (xpError) {
+            console.error('XP award error (non-blocking):', xpError);
+        }
+
         res.json({
             submission: submissionResult.rows[0],
             results,
             score,
             testsPassed,
             testsTotal,
+            gamification: gamificationResult,
         });
     } catch (error) {
         console.error('Submit solution error:', error);

@@ -80,4 +80,15 @@ export const exerciseService = {
     deleteTestCase: (testCaseId) => api.delete(`/exercises/professor/test-cases/${testCaseId}`),
 };
 
+// Gamification services
+export const gamificationService = {
+    getLeaderboard: (type = 'xp', page = 1, limit = 50) => 
+        api.get(`/gamification/leaderboard?type=${type}&page=${page}&limit=${limit}`),
+    getCourseLeaderboard: (courseId) => 
+        api.get(`/gamification/leaderboard/course/${courseId}`),
+    getMyGamification: () => api.get('/gamification/me'),
+    getXPSummary: () => api.get('/gamification/xp-summary'),
+    getAllBadges: () => api.get('/gamification/badges'),
+};
+
 export default api;
