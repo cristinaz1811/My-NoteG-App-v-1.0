@@ -40,9 +40,32 @@ const Exercise = () => {
                 language: exercise.language,
             });
             setResults(response.data);
+            
+            // Update userProgress locally without full reload
+            const { score, testsPassed, testsTotal } = response.data;
+            setExercise(prev => ({
+                ...prev,
+                userProgress: {
+                    ...prev.userProgress,
+                    best_score: Math.max(prev.userProgress?.best_score || 0, score),
+                    attempts: (prev.userProgress?.attempts || 0) + 1,
+                    completed: testsPassed === testsTotal || prev.userProgress?.completed
+                }
+            }));
         } catch (error) {
             console.error('Error submitting solution:', error);
-            alert('Failed to submit solution');
+            setResults({
+                score: 0,
+                testsPassed: 0,
+                testsTotal: 0,
+                results: [{
+                    passed: false,
+                    input: '',
+                    expected: '',
+                    actual: '',
+                    error: error.response?.data?.error || error.response?.data?.details || 'Failed to submit solution'
+                }]
+            });
         } finally {
             setSubmitting(false);
         }
@@ -83,9 +106,9 @@ const Exercise = () => {
     }
 
     return (
-        <div className="min-h-screen flex flex-col lg:flex-row">
+        <div className="flex flex-col lg:flex-row" style={{ height: 'calc(100vh - 4rem)', overflow: 'hidden' }}>
             {/* Left Panel - Description */}
-            <div className="lg:w-1/2 xl:w-2/5 p-6 overflow-y-auto bg-[#0a0a0f] border-r border-white/5" style={{ maxHeight: 'calc(100vh - 4rem)' }}>
+            <div className="lg:w-1/2 xl:w-2/5 p-6 overflow-y-auto bg-[#0a0a0f] border-r border-white/5">
                 {/* Back Button */}
                 <button 
                     onClick={() => navigate(-1)}
@@ -136,33 +159,31 @@ const Exercise = () => {
                 </div>
 
                 {/* User Progress */}
-                {exercise.userProgress && (
-                    <div className="surface-card rounded-xl p-5">
-                        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Your Progress</h3>
-                        <div className="grid grid-cols-3 gap-4 text-center">
-                            <div>
-                                <div className="text-2xl font-bold gradient-text">{exercise.userProgress.best_score}%</div>
-                                <div className="text-xs text-gray-500">Best Score</div>
+                <div className="surface-card rounded-xl p-5">
+                    <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Your Progress</h3>
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                            <div className="text-2xl font-bold gradient-text">{exercise.userProgress?.best_score || 0}%</div>
+                            <div className="text-xs text-gray-500">Best Score</div>
+                        </div>
+                        <div>
+                            <div className="text-2xl font-bold gradient-text">{exercise.userProgress?.attempts || 0}</div>
+                            <div className="text-xs text-gray-500">Attempts</div>
+                        </div>
+                        <div>
+                            <div className={`text-2xl ${exercise.userProgress?.completed ? 'text-green-400' : 'text-gray-500'}`}>
+                                {exercise.userProgress?.completed ? '✓' : '○'}
                             </div>
-                            <div>
-                                <div className="text-2xl font-bold gradient-text">{exercise.userProgress.attempts}</div>
-                                <div className="text-xs text-gray-500">Attempts</div>
-                            </div>
-                            <div>
-                                <div className={`text-2xl ${exercise.userProgress.completed ? 'text-green-400' : 'text-gray-500'}`}>
-                                    {exercise.userProgress.completed ? '✓' : '○'}
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                    {exercise.userProgress.completed ? 'Completed' : 'In Progress'}
-                                </div>
+                            <div className="text-xs text-gray-500">
+                                {exercise.userProgress?.completed ? 'Completed' : 'In Progress'}
                             </div>
                         </div>
                     </div>
-                )}
+                </div>
             </div>
 
             {/* Right Panel - Editor */}
-            <div className="lg:w-1/2 xl:w-3/5 flex flex-col bg-[#1e242e]" style={{ height: 'calc(100vh - 4rem)' }}>
+            <div className="lg:w-1/2 xl:w-3/5 flex flex-col bg-[#1e242e]" style={{ height: '100%', overflow: 'hidden' }}>
                 {/* Editor Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-[#232a36]">
                     <div className="flex items-center gap-3">
@@ -203,7 +224,7 @@ const Exercise = () => {
                 </div>
 
                 {/* Monaco Editor */}
-                <div className="flex-1">
+                <div style={{ flex: results ? '0 0 40%' : '1 1 auto', minHeight: '200px', overflow: 'hidden' }}>
                     <Editor
                         height="100%"
                         language={exercise.language}
@@ -227,14 +248,14 @@ const Exercise = () => {
 
                 {/* Results Panel */}
                 {results && (
-                    <div className="border-t border-white/5 bg-[#0a0a0f] max-h-80 overflow-y-auto">
+                    <div className="border-t border-white/5 bg-[#0a0a0f] overflow-y-auto" style={{ flex: '1 1 60%' }}>
                         {/* Results Header */}
                         <div className={`px-4 py-3 border-b border-white/5 ${
-                            results.score === 100 ? 'bg-green-500/10' : 'bg-amber-500/10'
+                            (results.score || 0) === 100 ? 'bg-green-500/10' : 'bg-amber-500/10'
                         }`}>
                             <div className="flex items-center justify-between">
                                 <h3 className="font-semibold flex items-center gap-2">
-                                    {results.score === 100 ? (
+                                    {(results.score || 0) === 100 ? (
                                         <>
                                             <span className="text-green-400">✓</span>
                                             <span className="text-green-400">All Tests Passed!</span>
@@ -242,21 +263,21 @@ const Exercise = () => {
                                     ) : (
                                         <>
                                             <span className="text-amber-400">⚠</span>
-                                            <span className="text-amber-400">{results.testsPassed}/{results.testsTotal} Tests Passed</span>
+                                            <span className="text-amber-400">{results.testsPassed || 0}/{results.testsTotal || 0} Tests Passed</span>
                                         </>
                                     )}
                                 </h3>
                                 <span className={`text-lg font-bold ${
-                                    results.score === 100 ? 'text-green-400' : 'text-amber-400'
+                                    (results.score || 0) === 100 ? 'text-green-400' : 'text-amber-400'
                                 }`}>
-                                    {results.score.toFixed(0)}%
+                                    {(results.score || 0).toFixed(0)}%
                                 </span>
                             </div>
                         </div>
 
                         {/* Test Results */}
                         <div className="p-4 space-y-3">
-                            {results.results.map((result, index) => (
+                            {results.results && results.results.length > 0 ? results.results.map((result, index) => (
                                 <div
                                     key={index}
                                     className={`rounded-lg p-4 ${
@@ -290,12 +311,16 @@ const Exercise = () => {
                                         <div>
                                             <span className="text-gray-500">Output: </span>
                                             <span className={result.passed ? 'text-green-400' : 'text-red-400'}>
-                                                {result.actual || result.error}
+                                                {result.actual || result.error || 'No output'}
                                             </span>
                                         </div>
                                     </div>
                                 </div>
-                            ))}
+                            )) : (
+                                <div className="text-gray-400 text-center py-4">
+                                    {results.error || 'No test results available'}
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
