@@ -6,6 +6,7 @@ require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const courseRoutes = require('./routes/courses');
 const exerciseRoutes = require('./routes/exercises');
+const plagiarismRoutes = require('./routes/plagiarism');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -19,6 +20,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/exercises', exerciseRoutes);
+app.use('/api/plagiarism', plagiarismRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

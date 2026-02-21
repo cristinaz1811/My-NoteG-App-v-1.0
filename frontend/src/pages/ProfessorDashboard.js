@@ -107,6 +107,22 @@ const ProfessorDashboard = () => {
                     </div>
                 </div>
 
+                {/* Quick Actions */}
+                <div className="mb-10">
+                    <Link
+                        to="/professor/plagiarism"
+                        className="inline-flex items-center gap-3 px-6 py-4 rounded-xl no-underline transition-all hover:scale-[1.02] surface-card"
+                        style={{ border: '1px solid rgba(161, 96, 157, 0.3)' }}
+                    >
+                        <span className="text-2xl">🔍</span>
+                        <div>
+                            <div className="text-white font-semibold">Plagiarism Detection</div>
+                            <div className="text-xs text-gray-400">Compare submissions and detect suspicious similarities</div>
+                        </div>
+                        <span className="text-gray-500 ml-4">→</span>
+                    </Link>
+                </div>
+
                 {/* Courses Section */}
                 {courses.length === 0 ? (
                     <div className="surface-card rounded-3xl p-12 text-center">

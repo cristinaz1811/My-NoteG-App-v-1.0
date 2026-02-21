@@ -21,6 +21,8 @@ import VerificationPending from './pages/VerificationPending';
 import ResendVerification from './pages/ResendVerification';
 import ChooseUsername from './pages/ChooseUsername';
 import Profile from './pages/Profile';
+import PlagiarismDashboard from './pages/PlagiarismDashboard';
+import PlagiarismReport from './pages/PlagiarismReport';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -393,6 +395,22 @@ function App() {
                         element={
                             <ProfessorRoute>
                                 <Navbar /><div className="pt-16"><CourseStudents /></div>
+                            </ProfessorRoute>
+                        } 
+                    />
+                    <Route 
+                        path="/professor/plagiarism" 
+                        element={
+                            <ProfessorRoute>
+                                <Navbar /><div className="pt-16"><PlagiarismDashboard /></div>
+                            </ProfessorRoute>
+                        } 
+                    />
+                    <Route 
+                        path="/professor/plagiarism/report/:reportId" 
+                        element={
+                            <ProfessorRoute>
+                                <Navbar /><div className="pt-16"><PlagiarismReport /></div>
                             </ProfessorRoute>
                         } 
                     />

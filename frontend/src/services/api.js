@@ -89,4 +89,16 @@ export const exerciseService = {
     deleteTestCase: (testCaseId) => api.delete(`/exercises/professor/test-cases/${testCaseId}`),
 };
 
+// Plagiarism services (professor only)
+export const plagiarismService = {
+    runScan: (exerciseId, threshold) => api.post(`/plagiarism/scan/${exerciseId}`, { threshold }),
+    getCourseReports: (courseId) => api.get(`/plagiarism/course/${courseId}/reports`),
+    getReportDetails: (reportId) => api.get(`/plagiarism/report/${reportId}`),
+    updateVerdict: (matchId, verdict) => api.put(`/plagiarism/match/${matchId}/verdict`, { verdict }),
+    compareTwo: (submissionAId, submissionBId) => api.post('/plagiarism/compare', { submissionAId, submissionBId }),
+    getNotifications: () => api.get('/plagiarism/notifications'),
+    getUnreadCount: () => api.get('/plagiarism/notifications/unread-count'),
+    markRead: (notificationId) => api.put(`/plagiarism/notifications/${notificationId}/read`),
+};
+
 export default api;
