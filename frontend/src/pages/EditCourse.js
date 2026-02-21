@@ -632,7 +632,8 @@ const ExerciseModal = ({ chapters, onClose, onSubmit }) => {
         difficulty: 'easy',
         language: 'javascript',
         starterCode: '',
-        chapter_id: ''
+        chapter_id: '',
+        requires_efficiency: false
     });
 
     const handleSubmit = (e) => {
@@ -720,6 +721,19 @@ const ExerciseModal = ({ chapters, onClose, onSubmit }) => {
                             className="w-full font-mono text-sm"
                             placeholder="// Starter code for students"
                         />
+                    </div>
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
+                        <input
+                            type="checkbox"
+                            id="requires_efficiency"
+                            checked={formData.requires_efficiency}
+                            onChange={(e) => setFormData({ ...formData, requires_efficiency: e.target.checked })}
+                            className="w-4 h-4 rounded border-gray-600 accent-[#a1609d]"
+                        />
+                        <div>
+                            <label htmlFor="requires_efficiency" className="text-sm font-medium text-gray-300 cursor-pointer">Require Efficient Solution</label>
+                            <p className="text-xs text-gray-500">Students must achieve optimal time complexity for full marks (80% for correct but inefficient)</p>
+                        </div>
                     </div>
                     <div className="flex justify-end gap-3">
                         <button

@@ -55,6 +55,14 @@ const Exercise = () => {
             setExercise(response.data);
             const starterCode = response.data.starter_code || '';
             setCode(starterCode.replace(/\\n/g, '\n'));
+            
+            // Set initial hint mode based on completion status
+            const status = response.data.userProgress?.completion_status;
+            if (status === 'completed') {
+                setHintMode('solved');
+            } else if (status === 'inefficient') {
+                setHintMode('optimizing');
+            }
         } catch (error) {
             console.error('Error loading exercise:', error);
         } finally {
@@ -128,15 +136,24 @@ const Exercise = () => {
             setResults(response.data);
             
             const { score, testsPassed, testsTotal } = response.data;
-            setExercise(prev => ({
-                ...prev,
-                userProgress: {
-                    ...prev.userProgress,
-                    best_score: Math.max(prev.userProgress?.best_score || 0, score),
-                    attempts: (prev.userProgress?.attempts || 0) + 1,
-                    completed: testsPassed === testsTotal || prev.userProgress?.completed
+            const allPassed = testsPassed === testsTotal;
+            setExercise(prev => {
+                const prevStatus = prev.userProgress?.completion_status || 'in_progress';
+                let newStatus = prevStatus;
+                if (allPassed && prevStatus === 'in_progress') {
+                    newStatus = prev.requires_efficiency ? 'inefficient' : 'completed';
                 }
-            }));
+                return {
+                    ...prev,
+                    userProgress: {
+                        ...prev.userProgress,
+                        best_score: Math.max(prev.userProgress?.best_score || 0, score),
+                        attempts: (prev.userProgress?.attempts || 0) + 1,
+                        completed: allPassed || prev.userProgress?.completed,
+                        completion_status: newStatus,
+                    }
+                };
+            });
 
             // Refresh hints status after each submission (new hints may unlock)
             if (showAIPanel) {
@@ -151,8 +168,20 @@ const Exercise = () => {
                     setComplexity(complexityRes.data);
                     if (!showAIPanel) setShowAIPanel(true);
 
-                    // If not optimal, switch to optimization mode and reset hints
-                    if (!complexityRes.data.isOptimal) {
+                    if (complexityRes.data.isOptimal) {
+                        // Optimal! Update status accordingly
+                        setExercise(prev => ({
+                            ...prev,
+                            userProgress: {
+                                ...prev.userProgress,
+                                completion_status: 'completed',
+                                best_score: prev.requires_efficiency ? 100 : prev.userProgress?.best_score,
+                                efficiency_star: !prev.requires_efficiency ? true : prev.userProgress?.efficiency_star,
+                            }
+                        }));
+                        setHintMode('solved');
+                    } else if (!complexityRes.data.isOptimal) {
+                        // Not optimal — switch to optimization hints
                         setHintMode('optimizing');
                         setHints([
                             { number: 1, text: null, unlocked: false },
@@ -300,14 +329,35 @@ const Exercise = () => {
                             <div className="text-xs text-gray-500">Attempts</div>
                         </div>
                         <div>
-                            <div className={`text-2xl ${exercise.userProgress?.completed ? 'text-green-400' : 'text-gray-500'}`}>
-                                {exercise.userProgress?.completed ? '✓' : '○'}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                                {exercise.userProgress?.completed ? 'Completed' : 'In Progress'}
-                            </div>
+                            {(() => {
+                                const status = exercise.userProgress?.completion_status || 'in_progress';
+                                const star = exercise.userProgress?.efficiency_star;
+                                if (status === 'completed') return (
+                                    <>
+                                        <div className="text-2xl text-green-400">✓{star ? ' ⭐' : ''}</div>
+                                        <div className="text-xs text-green-400">Completed{star ? ' (Optimal)' : ''}</div>
+                                    </>
+                                );
+                                if (status === 'inefficient') return (
+                                    <>
+                                        <div className="text-2xl text-amber-400">⚠</div>
+                                        <div className="text-xs text-amber-400">Needs Optimization</div>
+                                    </>
+                                );
+                                return (
+                                    <>
+                                        <div className="text-2xl text-gray-500">○</div>
+                                        <div className="text-xs text-gray-500">In Progress</div>
+                                    </>
+                                );
+                            })()}
                         </div>
                     </div>
+                    {exercise.requires_efficiency && (
+                        <div className="mt-3 pt-3 border-t border-white/5 text-center">
+                            <span className="text-[10px] text-amber-400/70 bg-amber-500/10 px-2 py-1 rounded-full">⚡ Efficiency Required</span>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -510,14 +560,30 @@ const Exercise = () => {
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
                         {/* Hints Section */}
                         <div>
-                            <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center gap-2">
-                                <span>{hintMode === 'optimizing' ? '⚡' : '💡'}</span> {hintMode === 'optimizing' ? 'Optimization Hints' : 'Progressive Hints'}
-                            </h4>
-                            {hintMode === 'optimizing' && (
-                                <div className="mb-3 rounded-lg bg-amber-500/10 border border-amber-500/20 p-2">
-                                    <p className="text-[10px] text-amber-300">Your solution works but isn't optimal. Hints now guide you toward a more efficient approach.</p>
+                            {hintMode === 'solved' ? (
+                                /* Completed state — no hints needed */
+                                <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-5 text-center">
+                                    <div className="text-4xl mb-3">{exercise.userProgress?.efficiency_star || exercise.requires_efficiency ? '⭐' : '🎉'}</div>
+                                    <h4 className="font-semibold text-green-300 mb-1">Exercise Completed!</h4>
+                                    <p className="text-xs text-gray-400">
+                                        {exercise.requires_efficiency 
+                                            ? 'You achieved the optimal solution. Full marks awarded.'
+                                            : exercise.userProgress?.efficiency_star
+                                                ? 'Great work! You also achieved optimal complexity.'
+                                                : 'All tests passed. Well done!'}
+                                    </p>
                                 </div>
-                            )}
+                            ) : (
+                                /* Active hints */
+                                <>
+                                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center gap-2">
+                                        <span>{hintMode === 'optimizing' ? '⚡' : '💡'}</span> {hintMode === 'optimizing' ? 'Optimization Hints' : 'Progressive Hints'}
+                                    </h4>
+                                    {hintMode === 'optimizing' && (
+                                        <div className="mb-3 rounded-lg bg-amber-500/10 border border-amber-500/20 p-2">
+                                            <p className="text-[10px] text-amber-300">Your solution works but isn't optimal. Hints now guide you toward a more efficient approach.</p>
+                                        </div>
+                                    )}
                             <div className="space-y-3">
                                 {hints.map((hint) => {
                                     const isExpanded = expandedHints[hint.number];
@@ -611,6 +677,8 @@ const Exercise = () => {
                                     );
                                 })}
                             </div>
+                                </>
+                            )}
                         </div>
 
                         {/* Divider */}

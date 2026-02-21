@@ -17,7 +17,8 @@ const EditExercise = () => {
         description: '',
         difficulty: 'easy',
         language: 'javascript',
-        starter_code: ''
+        starter_code: '',
+        requires_efficiency: false
     });
 
     // New test case
@@ -41,7 +42,8 @@ const EditExercise = () => {
                 description: exerciseRes.data.description,
                 difficulty: exerciseRes.data.difficulty,
                 language: exerciseRes.data.language,
-                starter_code: exerciseRes.data.starter_code || ''
+                starter_code: exerciseRes.data.starter_code || '',
+                requires_efficiency: exerciseRes.data.requires_efficiency || false
             });
 
             // Load test cases
@@ -222,6 +224,19 @@ const EditExercise = () => {
                                     <option value="cpp">C++</option>
                                     <option value="csharp">C#</option>
                                 </select>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
+                            <input
+                                type="checkbox"
+                                id="edit_requires_efficiency"
+                                checked={formData.requires_efficiency}
+                                onChange={(e) => setFormData({ ...formData, requires_efficiency: e.target.checked })}
+                                className="w-4 h-4 rounded border-gray-600 accent-[#a1609d]"
+                            />
+                            <div>
+                                <label htmlFor="edit_requires_efficiency" className="text-sm font-medium text-gray-300 cursor-pointer">Require Efficient Solution</label>
+                                <p className="text-xs text-gray-500">Students must achieve optimal time complexity for full marks (80% for correct but inefficient)</p>
                             </div>
                         </div>
                         <button

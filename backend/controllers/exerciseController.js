@@ -43,13 +43,13 @@ const getExerciseById = async (req, res) => {
 
 const createExercise = async (req, res) => {
     try {
-        const { courseId, title, description, difficulty, starterCode, language, testCases, chapter_id } = req.body;
+        const { courseId, title, description, difficulty, starterCode, language, testCases, chapter_id, requires_efficiency } = req.body;
 
         // Create exercise
         const exerciseResult = await db.query(
-            `INSERT INTO exercises (course_id, title, description, difficulty, starter_code, language, chapter_id) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-            [courseId, title, description, difficulty, starterCode, language, chapter_id || null]
+            `INSERT INTO exercises (course_id, title, description, difficulty, starter_code, language, chapter_id, requires_efficiency) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+            [courseId, title, description, difficulty, starterCode, language, chapter_id || null, requires_efficiency || false]
         );
 
         const exercise = exerciseResult.rows[0];
@@ -96,8 +96,19 @@ const submitSolution = async (req, res) => {
 
         const testsPassed = results.filter(r => r.passed).length;
         const testsTotal = testCases.length;
-        const score = (testsPassed / testsTotal) * 100;
-        const status = testsPassed === testsTotal ? 'passed' : 'failed';
+        const allPassed = testsPassed === testsTotal;
+        const exercise = exerciseResult.rows[0];
+        
+        // Score logic:
+        // - If requires_efficiency: all tests pass = 80%, optimal complexity = 100%
+        // - If not requires_efficiency: all tests pass = 100%
+        let score;
+        if (allPassed && exercise.requires_efficiency) {
+            score = 80; // Will be upgraded to 100 when complexity analysis confirms optimal
+        } else {
+            score = (testsPassed / testsTotal) * 100;
+        }
+        const status = allPassed ? 'passed' : 'failed';
 
         // Save submission
         const submissionResult = await db.query(
@@ -113,19 +124,27 @@ const submitSolution = async (req, res) => {
         );
 
         if (progressCheck.rows.length === 0) {
+            const completionStatus = allPassed 
+                ? (exercise.requires_efficiency ? 'inefficient' : 'completed')
+                : 'in_progress';
             await db.query(
-                `INSERT INTO user_progress (user_id, exercise_id, completed, best_score, attempts, last_attempt_at)
-                 VALUES ($1, $2, $3, $4, 1, CURRENT_TIMESTAMP)`,
-                [userId, id, status === 'passed', score]
+                `INSERT INTO user_progress (user_id, exercise_id, completed, best_score, attempts, last_attempt_at, completion_status)
+                 VALUES ($1, $2, $3, $4, 1, CURRENT_TIMESTAMP, $5)`,
+                [userId, id, allPassed, score, completionStatus]
             );
         } else {
             const currentBestScore = progressCheck.rows[0].best_score;
             const newBestScore = Math.max(currentBestScore, score);
+            const currentStatus = progressCheck.rows[0].completion_status;
+            let newStatus = currentStatus;
+            if (allPassed && currentStatus === 'in_progress') {
+                newStatus = exercise.requires_efficiency ? 'inefficient' : 'completed';
+            }
             await db.query(
                 `UPDATE user_progress 
-                 SET completed = $3, best_score = $4, attempts = attempts + 1, last_attempt_at = CURRENT_TIMESTAMP
+                 SET completed = $3, best_score = $4, attempts = attempts + 1, last_attempt_at = CURRENT_TIMESTAMP, completion_status = $5
                  WHERE user_id = $1 AND exercise_id = $2`,
-                [userId, id, status === 'passed' || progressCheck.rows[0].completed, newBestScore]
+                [userId, id, allPassed || progressCheck.rows[0].completed, newBestScore, newStatus]
             );
         }
 
@@ -167,7 +186,7 @@ const getUserSubmissions = async (req, res) => {
 const updateExercise = async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, difficulty, starter_code, language, chapter_id, order_index } = req.body;
+        const { title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency } = req.body;
         const userId = req.user.id;
 
         // Verify ownership through course
@@ -194,10 +213,11 @@ const updateExercise = async (req, res) => {
                 language = COALESCE($5, language),
                 chapter_id = COALESCE($6, chapter_id),
                 order_index = COALESCE($7, order_index),
+                requires_efficiency = COALESCE($8, requires_efficiency),
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = $8
+            WHERE id = $9
             RETURNING *
-        `, [title, description, difficulty, starter_code, language, chapter_id, order_index, id]);
+        `, [title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency, id]);
 
         res.json(result.rows[0]);
     } catch (error) {
@@ -544,14 +564,38 @@ const getComplexityAnalysis = async (req, res) => {
             code,
         });
 
+        // Update completion status based on optimality
+        if (analysis.isOptimal) {
+            if (exercise.requires_efficiency) {
+                // Upgrade from inefficient (80%) to completed (100%)
+                await db.query(
+                    `UPDATE user_progress 
+                     SET completion_status = 'completed', best_score = 100
+                     WHERE user_id = $1 AND exercise_id = $2`,
+                    [userId, id]
+                );
+            } else {
+                // Award efficiency star for non-required exercises
+                await db.query(
+                    `UPDATE user_progress 
+                     SET efficiency_star = TRUE
+                     WHERE user_id = $1 AND exercise_id = $2`,
+                    [userId, id]
+                );
+            }
+        }
+
         // Save analysis
         await db.query(
             `INSERT INTO ai_complexity_analysis (user_id, exercise_id, code_snapshot, time_complexity, space_complexity, explanation, suggestions)
              VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [userId, id, code, analysis.timeComplexity, analysis.spaceComplexity, analysis.explanation, analysis.suggestions]
+            [userId, id, code, analysis.timeComplexity, analysis.spaceComplexity, analysis.explanation, analysis.suggestions || null]
         );
 
-        res.json(analysis);
+        res.json({
+            ...analysis,
+            requires_efficiency: exercise.requires_efficiency,
+        });
     } catch (error) {
         console.error('Complexity analysis error:', error);
         res.status(500).json({ error: 'Failed to analyze complexity' });
