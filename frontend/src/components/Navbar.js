@@ -69,6 +69,9 @@ const Navbar = () => {
                                     <Link to="/professor" className="text-gray-300 hover:text-[#a1609d] transition-colors no-underline">
                                         Dashboard
                                     </Link>
+                                    <Link to="/professor/plagiarism" className="text-gray-300 hover:text-[#a1609d] transition-colors no-underline">
+                                        🔍 Plagiarism
+                                    </Link>
                                     <Link to="/courses" className="text-gray-300 hover:text-[#a1609d] transition-colors no-underline">
                                         All Courses
                                     </Link>

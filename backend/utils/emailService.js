@@ -121,7 +121,60 @@ const sendPasswordResetEmail = async (email, username, resetToken) => {
     return transporter.sendMail(mailOptions);
 };
 
+const sendPlagiarismAlertEmail = async (email, username, courseTitle, exerciseTitle, flaggedPairs, maxSimilarity, reportId) => {
+    const transporter = createTransporter();
+    const reportUrl = `${process.env.FRONTEND_URL}/professor/plagiarism/report/${reportId}`;
+
+    const mailOptions = {
+        from: `"NoteG Learning" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: `⚠️ Plagiarism Alert - ${exerciseTitle}`,
+        html: `
+            <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; background: #1a1a2e; padding: 40px; border-radius: 16px;">
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <h1 style="color: #ef4444; margin: 0;">⚠️ Plagiarism Alert</h1>
+                </div>
+                
+                <div style="background: #232a36; padding: 30px; border-radius: 12px; margin-bottom: 30px;">
+                    <h2 style="color: #ffffff; margin-top: 0;">Hi ${username}!</h2>
+                    <p style="color: #9ca3af; line-height: 1.6;">
+                        Our plagiarism detection system has found <strong style="color: #ef4444;">${flaggedPairs} suspicious pair(s)</strong> 
+                        of similar submissions in your course.
+                    </p>
+                    
+                    <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 16px; margin: 20px 0;">
+                        <p style="color: #f87171; margin: 0 0 8px 0; font-weight: bold;">Details:</p>
+                        <p style="color: #9ca3af; margin: 4px 0;"><strong>Course:</strong> ${courseTitle}</p>
+                        <p style="color: #9ca3af; margin: 4px 0;"><strong>Exercise:</strong> ${exerciseTitle}</p>
+                        <p style="color: #9ca3af; margin: 4px 0;"><strong>Max Similarity:</strong> <span style="color: #ef4444; font-weight: bold;">${maxSimilarity.toFixed(1)}%</span></p>
+                    </div>
+                    
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="${reportUrl}" 
+                           style="background: linear-gradient(135deg, #a1609d, #b870ad); 
+                                  color: white; 
+                                  padding: 14px 32px; 
+                                  text-decoration: none; 
+                                  border-radius: 8px; 
+                                  font-weight: bold;
+                                  display: inline-block;">
+                            View Full Report
+                        </a>
+                    </div>
+                </div>
+                
+                <div style="text-align: center; color: #6b7280; font-size: 12px;">
+                    <p>Please review the flagged submissions and mark them as plagiarism or coincidence.</p>
+                </div>
+            </div>
+        `
+    };
+
+    return transporter.sendMail(mailOptions);
+};
+
 module.exports = {
     sendVerificationEmail,
-    sendPasswordResetEmail
+    sendPasswordResetEmail,
+    sendPlagiarismAlertEmail
 };
