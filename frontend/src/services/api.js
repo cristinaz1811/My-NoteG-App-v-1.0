@@ -68,6 +68,10 @@ export const exerciseService = {
     getExerciseById: (id) => api.get(`/exercises/${id}`),
     submitSolution: (id, data) => api.post(`/exercises/${id}/submit`, data),
     getUserSubmissions: (exerciseId) => api.get(`/exercises/${exerciseId}/submissions`),
+    // AI Hints
+    getAIHints: (id, mode) => api.get(`/exercises/${id}/ai-hints`, { params: { mode } }),
+    generateAIHint: (id, data) => api.post(`/exercises/${id}/ai-hints/generate`, data),
+    getComplexityAnalysis: (id, data) => api.post(`/exercises/${id}/ai-complexity`, data),
     createExercise: (exerciseData) => api.post('/exercises', exerciseData),
     // Professor endpoints
     createProfessorExercise: (exerciseData) => api.post('/exercises/professor/create', exerciseData),

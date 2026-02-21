@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { generateHints, generateOptimizationHints, analyzeComplexity } = require('../utils/openaiService');
 
 const getExerciseById = async (req, res) => {
     try {
@@ -371,6 +372,192 @@ const getExerciseTestCases = async (req, res) => {
     }
 };
 
+// AI Hints - get hints for an exercise (unlocks progressively)
+const getAIHints = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+        const mode = req.query.mode || 'solving'; // 'solving' or 'optimizing'
+
+        // Get exercise details
+        const exerciseResult = await db.query('SELECT * FROM exercises WHERE id = $1', [id]);
+        if (exerciseResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Exercise not found' });
+        }
+
+        // Get user's attempts count
+        const progressResult = await db.query(
+            'SELECT attempts, best_score FROM user_progress WHERE user_id = $1 AND exercise_id = $2',
+            [userId, id]
+        );
+        const attempts = progressResult.rows[0]?.attempts || 0;
+        const bestScore = progressResult.rows[0]?.best_score || 0;
+
+        let hintsUnlocked, failedAttempts;
+
+        if (mode === 'optimizing') {
+            // For optimization mode: count attempts AFTER first solve
+            // Get the number of submissions after the first passing one
+            const optimizationAttemptsResult = await db.query(
+                `SELECT COUNT(*) as count FROM submissions 
+                 WHERE user_id = $1 AND exercise_id = $2 
+                 AND submitted_at > (
+                     SELECT MIN(submitted_at) FROM submissions 
+                     WHERE user_id = $1 AND exercise_id = $2 AND status = 'passed'
+                 )`,
+                [userId, id]
+            );
+            failedAttempts = parseInt(optimizationAttemptsResult.rows[0]?.count || 0);
+            hintsUnlocked = Math.min(3, Math.floor(failedAttempts / 2));
+        } else {
+            // For solving mode: count failed attempts before passing
+            failedAttempts = bestScore >= 100 ? 0 : attempts;
+            hintsUnlocked = Math.min(3, Math.floor(failedAttempts / 2));
+        }
+
+        // Get already generated hints from DB for this mode
+        const existingHints = await db.query(
+            'SELECT hint_number, hint_text, unlocked_at FROM ai_hints WHERE user_id = $1 AND exercise_id = $2 AND hint_mode = $3 ORDER BY hint_number',
+            [userId, id, mode]
+        );
+
+        const hints = [];
+        for (let i = 1; i <= 3; i++) {
+            const existing = existingHints.rows.find(h => h.hint_number === i);
+            if (i <= hintsUnlocked) {
+                if (existing) {
+                    hints.push({ number: i, text: existing.hint_text, unlocked: true });
+                } else {
+                    hints.push({ number: i, text: null, unlocked: true, needsGeneration: true });
+                }
+            } else {
+                hints.push({ number: i, text: null, unlocked: false });
+            }
+        }
+
+        res.json({
+            hints,
+            hintsUnlocked,
+            failedAttempts,
+            mode,
+            attemptsUntilNextHint: hintsUnlocked >= 3 ? 0 : ((hintsUnlocked + 1) * 2) - failedAttempts,
+        });
+    } catch (error) {
+        console.error('Get AI hints error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// AI Hints - generate a specific hint
+const generateAIHint = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { hintNumber, code, failedTests, mode, currentComplexity, optimalComplexity } = req.body;
+        const userId = req.user.id;
+        const hintMode = mode || 'solving';
+
+        if (!hintNumber || hintNumber < 1 || hintNumber > 3) {
+            return res.status(400).json({ error: 'Invalid hint number' });
+        }
+
+        // Check if hint already exists for this mode
+        const existingHint = await db.query(
+            'SELECT hint_text FROM ai_hints WHERE user_id = $1 AND exercise_id = $2 AND hint_number = $3 AND hint_mode = $4',
+            [userId, id, hintNumber, hintMode]
+        );
+
+        if (existingHint.rows.length > 0) {
+            return res.json({ hint: existingHint.rows[0].hint_text });
+        }
+
+        // Get exercise details
+        const exerciseResult = await db.query('SELECT * FROM exercises WHERE id = $1', [id]);
+        const exercise = exerciseResult.rows[0];
+
+        let hintText;
+
+        if (hintMode === 'optimizing') {
+            // Generate optimization hint
+            hintText = await generateOptimizationHints({
+                exerciseTitle: exercise.title,
+                exerciseDescription: exercise.description,
+                language: exercise.language,
+                code: code || '',
+                currentComplexity: currentComplexity || 'unknown',
+                optimalComplexity: optimalComplexity || 'unknown',
+                hintNumber,
+            });
+        } else {
+            // Generate solving hint
+            const testCasesResult = await db.query(
+                'SELECT input, expected_output FROM test_cases WHERE exercise_id = $1 LIMIT 3',
+                [id]
+            );
+
+            hintText = await generateHints({
+                exerciseTitle: exercise.title,
+                exerciseDescription: exercise.description,
+                language: exercise.language,
+                code: code || '',
+                testCases: testCasesResult.rows,
+                failedTests: failedTests || [],
+                hintNumber,
+            });
+        }
+
+        // Save hint to DB
+        await db.query(
+            'INSERT INTO ai_hints (user_id, exercise_id, hint_number, hint_text, hint_mode) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (user_id, exercise_id, hint_number, hint_mode) DO UPDATE SET hint_text = $4',
+            [userId, id, hintNumber, hintText, hintMode]
+        );
+
+        res.json({ hint: hintText });
+    } catch (error) {
+        console.error('Generate AI hint error:', error);
+        res.status(500).json({ error: 'Failed to generate hint' });
+    }
+};
+
+// AI Complexity Analysis
+const getComplexityAnalysis = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { code } = req.body;
+        const userId = req.user.id;
+
+        if (!code || code.trim().length === 0) {
+            return res.status(400).json({ error: 'No code provided' });
+        }
+
+        // Get exercise details
+        const exerciseResult = await db.query('SELECT * FROM exercises WHERE id = $1', [id]);
+        if (exerciseResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Exercise not found' });
+        }
+        const exercise = exerciseResult.rows[0];
+
+        // Analyze via OpenAI
+        const analysis = await analyzeComplexity({
+            exerciseTitle: exercise.title,
+            exerciseDescription: exercise.description,
+            language: exercise.language,
+            code,
+        });
+
+        // Save analysis
+        await db.query(
+            `INSERT INTO ai_complexity_analysis (user_id, exercise_id, code_snapshot, time_complexity, space_complexity, explanation, suggestions)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [userId, id, code, analysis.timeComplexity, analysis.spaceComplexity, analysis.explanation, analysis.suggestions]
+        );
+
+        res.json(analysis);
+    } catch (error) {
+        console.error('Complexity analysis error:', error);
+        res.status(500).json({ error: 'Failed to analyze complexity' });
+    }
+};
+
 module.exports = {
     getExerciseById,
     createExercise,
@@ -382,4 +569,7 @@ module.exports = {
     updateTestCase,
     deleteTestCase,
     getExerciseTestCases,
+    getAIHints,
+    generateAIHint,
+    getComplexityAnalysis,
 };
