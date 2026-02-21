@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { exerciseService } from '../services/api';
@@ -11,6 +11,24 @@ const Exercise = () => {
     const [results, setResults] = useState(null);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const editorRef = useRef(null);
+    const isMountedRef = useRef(true);
+
+    // Cleanup editor on unmount
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+            if (editorRef.current) {
+                try {
+                    editorRef.current.dispose();
+                } catch (e) {
+                    // Ignore disposal errors
+                }
+                editorRef.current = null;
+            }
+        };
+    }, []);
 
     useEffect(() => {
         loadExercise();
@@ -229,7 +247,21 @@ const Exercise = () => {
                         height="100%"
                         language={exercise.language}
                         value={code}
-                        onChange={(value) => setCode(value || '')}
+                        onChange={(value) => { if (isMountedRef.current) setCode(value || ''); }}
+                        onMount={(editor) => { 
+                            if (isMountedRef.current) {
+                                editorRef.current = editor;
+                                // Disable browser autofill on Monaco's textarea
+                                const textArea = editor.getDomNode()?.querySelector('textarea');
+                                if (textArea) {
+                                    textArea.setAttribute('autocomplete', 'off');
+                                    textArea.setAttribute('autocorrect', 'off');
+                                    textArea.setAttribute('autocapitalize', 'off');
+                                    textArea.setAttribute('spellcheck', 'false');
+                                    textArea.setAttribute('data-form-type', 'other');
+                                }
+                            }
+                        }}
                         theme="vs-dark"
                         options={{
                             fontSize: 14,
