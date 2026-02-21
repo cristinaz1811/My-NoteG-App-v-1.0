@@ -9,6 +9,7 @@ const MyCourseDetail = () => {
     const [activeTab, setActiveTab] = useState('content');
     const [liveTime, setLiveTime] = useState(0);
     const [isTracking, setIsTracking] = useState(false);
+    const [expandedSubmission, setExpandedSubmission] = useState(null);
     const navigate = useNavigate();
     const heartbeatRef = useRef(null);
     const timerRef = useRef(null);
@@ -364,39 +365,67 @@ const MyCourseDetail = () => {
                                 {submissions.length === 0 ? (
                                     <p className="text-gray-400">No submissions yet. Start solving exercises!</p>
                                 ) : (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full">
-                                            <thead>
-                                                <tr className="text-left text-sm text-gray-500 border-b border-white/5">
-                                                    <th className="pb-3 font-medium">Exercise</th>
-                                                    <th className="pb-3 font-medium">Score</th>
-                                                    <th className="pb-3 font-medium">Tests</th>
-                                                    <th className="pb-3 font-medium">Status</th>
-                                                    <th className="pb-3 font-medium">Date</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="text-sm">
-                                                {submissions.slice(0, 10).map((sub) => (
-                                                    <tr key={sub.id} className="border-b border-white/5">
-                                                        <td className="py-3 text-gray-300">{sub.exercise_title}</td>
-                                                        <td className="py-3">
-                                                            <span className={sub.score === 100 ? 'text-green-400' : 'text-[#fef483]'}>
-                                                                {sub.score}%
-                                                            </span>
-                                                        </td>
-                                                        <td className="py-3 text-gray-400">{sub.tests_passed}/{sub.tests_total}</td>
-                                                        <td className="py-3">
-                                                            <span className={`badge text-xs ${
-                                                                sub.status === 'pass' ? 'badge-beginner' : 'badge-advanced'
+                                    <div className="space-y-2">
+                                        {submissions.slice(0, 20).map((sub) => {
+                                            const isExpanded = expandedSubmission === sub.id;
+                                            return (
+                                                <div key={sub.id} className="rounded-xl border border-white/5 overflow-hidden transition-all">
+                                                    {/* Row header — clickable */}
+                                                    <div
+                                                        onClick={() => setExpandedSubmission(isExpanded ? null : sub.id)}
+                                                        className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
+                                                            isExpanded ? 'bg-white/[0.06]' : 'hover:bg-white/[0.03]'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-3 min-w-0">
+                                                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                                                sub.status === 'passed' ? 'bg-green-500' : sub.status === 'failed' ? 'bg-red-500' : 'bg-amber-500'
+                                                            }`}></span>
+                                                            <span className="text-sm text-gray-300 truncate">{sub.exercise_title}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-4 flex-shrink-0">
+                                                            <span className={`text-sm font-medium ${
+                                                                Number(sub.score) === 100 ? 'text-green-400' : 'text-[#fef483]'
                                                             }`}>
-                                                                {sub.status}
+                                                                {Number(sub.score).toFixed(0)}%
                                                             </span>
-                                                        </td>
-                                                        <td className="py-3 text-gray-500">{formatDate(sub.submitted_at)}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                                            <span className="text-xs text-gray-500">{sub.tests_passed}/{sub.tests_total}</span>
+                                                            <span className="text-xs text-gray-600">{formatDate(sub.submitted_at)}</span>
+                                                            <span className={`text-[10px] text-gray-500 transition-transform duration-200 ${
+                                                                isExpanded ? 'rotate-180' : ''
+                                                            }`}>▼</span>
+                                                        </div>
+                                                    </div>
+                                                    {/* Expanded code view */}
+                                                    {isExpanded && (
+                                                        <div className="border-t border-white/5">
+                                                            <div className="flex items-center justify-between px-4 py-2 bg-white/[0.03]">
+                                                                <span className="text-[10px] text-gray-500 uppercase tracking-wide">Submitted Code</span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-[10px] text-gray-600 font-mono">{sub.language || 'code'}</span>
+                                                                    {sub.code && (
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                navigator.clipboard.writeText(sub.code);
+                                                                            }}
+                                                                            className="text-[10px] px-2 py-0.5 rounded bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                                                                        >
+                                                                            Copy
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            {sub.code ? (
+                                                                <pre className="px-4 py-3 text-xs font-mono text-gray-300 overflow-x-auto max-h-[400px] overflow-y-auto leading-5 whitespace-pre bg-black/20">{sub.code}</pre>
+                                                            ) : (
+                                                                <div className="px-4 py-4 text-xs text-gray-500 text-center">Code not available for this submission</div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>

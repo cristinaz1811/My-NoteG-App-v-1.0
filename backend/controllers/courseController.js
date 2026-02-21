@@ -276,6 +276,8 @@ const getEnrolledCourseDetails = async (req, res) => {
                 s.id,
                 s.exercise_id,
                 ex.title as exercise_title,
+                s.code,
+                s.language,
                 s.score,
                 s.tests_passed,
                 s.tests_total,
