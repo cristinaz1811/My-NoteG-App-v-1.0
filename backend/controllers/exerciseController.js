@@ -179,19 +179,48 @@ const getUserSubmissions = async (req, res) => {
     try {
         const { exerciseId } = req.params;
         const userId = req.user.id;
+        const includeCode = req.query.includeCode === 'true';
+
+        const fields = includeCode
+            ? 'id, code, language, status, score, tests_passed, tests_total, execution_time, submitted_at'
+            : 'id, status, score, tests_passed, tests_total, execution_time, submitted_at';
 
         const result = await db.query(
-            `SELECT id, status, score, tests_passed, tests_total, execution_time, submitted_at
+            `SELECT ${fields}
              FROM submissions 
              WHERE user_id = $1 AND exercise_id = $2
              ORDER BY submitted_at DESC
-             LIMIT 20`,
+             LIMIT 50`,
             [userId, exerciseId]
         );
 
         res.json(result.rows);
     } catch (error) {
         console.error('Get submissions error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Get a single submission detail (with code)
+const getSubmissionDetail = async (req, res) => {
+    try {
+        const { submissionId } = req.params;
+        const userId = req.user.id;
+
+        const result = await db.query(
+            `SELECT id, code, language, status, score, tests_passed, tests_total, execution_time, error_message, submitted_at
+             FROM submissions 
+             WHERE id = $1 AND user_id = $2`,
+            [submissionId, userId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Submission not found' });
+        }
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Get submission detail error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };
@@ -623,6 +652,7 @@ module.exports = {
     deleteExercise,
     submitSolution,
     getUserSubmissions,
+    getSubmissionDetail,
     addTestCase,
     updateTestCase,
     deleteTestCase,

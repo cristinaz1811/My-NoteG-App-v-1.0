@@ -73,6 +73,8 @@ export const exerciseService = {
     getExerciseById: (id) => api.get(`/exercises/${id}`),
     submitSolution: (id, data) => api.post(`/exercises/${id}/submit`, data),
     getUserSubmissions: (exerciseId) => api.get(`/exercises/${exerciseId}/submissions`),
+    getUserSubmissionsWithCode: (exerciseId) => api.get(`/exercises/${exerciseId}/submissions`, { params: { includeCode: 'true' } }),
+    getSubmissionDetail: (submissionId) => api.get(`/exercises/submissions/${submissionId}/detail`),
     // AI Hints
     getAIHints: (id, mode) => api.get(`/exercises/${id}/ai-hints`, { params: { mode } }),
     generateAIHint: (id, data) => api.post(`/exercises/${id}/ai-hints/generate`, data),

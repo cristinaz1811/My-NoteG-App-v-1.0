@@ -7,6 +7,7 @@ const {
     deleteExercise,
     submitSolution,
     getUserSubmissions,
+    getSubmissionDetail,
     addTestCase,
     updateTestCase,
     deleteTestCase,
@@ -18,6 +19,7 @@ const {
 const { authMiddleware, isAdmin, isProfessor } = require('../middleware/auth');
 
 // Student routes
+router.get('/submissions/:submissionId/detail', authMiddleware, getSubmissionDetail);
 router.get('/:id', authMiddleware, getExerciseById);
 router.post('/:id/submit', authMiddleware, submitSolution);
 router.get('/:exerciseId/submissions', authMiddleware, getUserSubmissions);

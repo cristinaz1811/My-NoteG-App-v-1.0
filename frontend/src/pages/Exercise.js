@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { exerciseService, notificationService } from '../services/api';
+import SubmissionHistory from '../components/SubmissionHistory';
 
 const Exercise = () => {
     const { id } = useParams();
@@ -14,8 +15,12 @@ const Exercise = () => {
     const editorRef = useRef(null);
     const isMountedRef = useRef(true);
 
-    // AI Hints state
+    // Panel state
     const [showAIPanel, setShowAIPanel] = useState(false);
+    const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+    const historyRefreshRef = useRef(0);
+
+    // AI Hints state
     const [hints, setHints] = useState([
         { number: 1, text: null, unlocked: false },
         { number: 2, text: null, unlocked: false },
@@ -184,6 +189,9 @@ const Exercise = () => {
                 setTimeout(() => loadHintsStatus(), 500);
             }
 
+            // Refresh history panel
+            historyRefreshRef.current += 1;
+
             // Auto-analyze complexity only when ALL tests pass
             if (testsPassed === testsTotal && code && code.trim().length > 0) {
                 setAnalyzingComplexity(true);
@@ -290,7 +298,7 @@ const Exercise = () => {
     return (
         <div className="flex flex-col lg:flex-row" style={{ height: 'calc(100vh - 4rem)', overflow: 'hidden' }}>
             {/* Left Panel - Description */}
-            <div className={`${showAIPanel ? 'lg:w-[30%]' : 'lg:w-1/2 xl:w-2/5'} p-6 overflow-y-auto bg-[#0a0a0f] border-r border-white/5 transition-all duration-300`}>
+            <div className={`${(showAIPanel || showHistoryPanel) ? 'lg:w-[30%]' : 'lg:w-1/2 xl:w-2/5'} p-6 overflow-y-auto bg-[#0a0a0f] border-r border-white/5 transition-all duration-300`}>
                 {/* Back Button */}
                 <button 
                     onClick={() => navigate(-1)}
@@ -386,7 +394,7 @@ const Exercise = () => {
             </div>
 
             {/* Center Panel - Editor */}
-            <div className={`${showAIPanel ? 'lg:w-[45%]' : 'lg:w-1/2 xl:w-3/5'} flex flex-col bg-[#1e242e] transition-all duration-300`} style={{ height: '100%', overflow: 'hidden' }}>
+            <div className={`${(showAIPanel || showHistoryPanel) ? 'lg:w-[45%]' : 'lg:w-1/2 xl:w-3/5'} flex flex-col bg-[#1e242e] transition-all duration-300`} style={{ height: '100%', overflow: 'hidden' }}>
                 {/* Editor Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-[#232a36]">
                     <div className="flex items-center gap-3">
@@ -415,7 +423,22 @@ const Exercise = () => {
                             🆘 Help
                         </button>
                         <button
-                            onClick={() => setShowAIPanel(!showAIPanel)}
+                            onClick={() => { setShowHistoryPanel(!showHistoryPanel); if (!showHistoryPanel) setShowAIPanel(false); }}
+                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                                showHistoryPanel
+                                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                                    : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/10'
+                            }`}
+                            title="Submission History"
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                            History
+                        </button>
+                        <button
+                            onClick={() => { setShowAIPanel(!showAIPanel); if (!showAIPanel) setShowHistoryPanel(false); }}
                             className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
                                 showAIPanel
                                     ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
@@ -568,6 +591,34 @@ const Exercise = () => {
                     </div>
                 )}
             </div>
+
+            {/* Right Panel - Submission History */}
+            {showHistoryPanel && (
+                <div className="lg:w-[25%] flex flex-col bg-[#0d0f15] border-l border-white/5 overflow-hidden" style={{ height: '100%' }}>
+                    {/* History Panel Header */}
+                    <div className="px-4 py-3 border-b border-white/5 bg-gradient-to-r from-blue-500/10 to-cyan-500/10">
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-semibold text-sm flex items-center gap-2">
+                                <span className="text-blue-400">⏱</span>
+                                Submission History
+                            </h3>
+                            <button
+                                onClick={() => setShowHistoryPanel(false)}
+                                className="text-gray-500 hover:text-white transition-colors text-lg"
+                            >
+                                ×
+                            </button>
+                        </div>
+                    </div>
+                    <SubmissionHistory
+                        key={historyRefreshRef.current}
+                        exerciseId={id}
+                        exerciseService={exerciseService}
+                        starterCode={(exercise?.starter_code || '').replace(/\\n/g, '\n')}
+                        onLoadCode={(loadedCode) => setCode(loadedCode)}
+                    />
+                </div>
+            )}
 
             {/* Right Panel - AI Assistant */}
             {showAIPanel && (
