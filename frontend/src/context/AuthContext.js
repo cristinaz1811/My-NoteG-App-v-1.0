@@ -39,6 +39,27 @@ export const AuthProvider = ({ children }) => {
 
     const register = async (userData) => {
         const response = await authService.register(userData);
+        const { user, token, emailVerificationRequired } = response.data;
+        
+        // Only store token/user if email verification is not required
+        // or for showing pending verification state
+        if (!emailVerificationRequired) {
+            localStorage.setItem('token', token);
+            localStorage.setItem('user', JSON.stringify(user));
+            setUser(user);
+        }
+        
+        return response;
+    };
+
+    const googleLogin = async (credential, role = 'student') => {
+        const response = await authService.googleAuth(credential, role);
+        
+        // If user needs to choose username, return the response without setting auth
+        if (response.data.needsUsername) {
+            return response;
+        }
+        
         const { user, token } = response.data;
         
         localStorage.setItem('token', token);
@@ -48,13 +69,27 @@ export const AuthProvider = ({ children }) => {
         return response;
     };
 
+    const setUserAfterVerification = (userData, token) => {
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(userData));
+        setUser(userData);
+    };
+
     const logout = () => {
         authService.logout();
         setUser(null);
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+        <AuthContext.Provider value={{ 
+            user, 
+            login, 
+            register, 
+            googleLogin,
+            setUserAfterVerification,
+            logout, 
+            loading 
+        }}>
             {children}
         </AuthContext.Provider>
     );

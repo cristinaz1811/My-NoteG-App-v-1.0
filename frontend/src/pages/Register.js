@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
@@ -10,19 +10,80 @@ const Register = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    const { register } = useContext(AuthContext);
+    const { register, googleLogin } = useContext(AuthContext);
     const navigate = useNavigate();
 
     const isProfessor = role === 'professor';
+
+    // Initialize Google Sign-In
+    useEffect(() => {
+        const initGoogleSignIn = () => {
+            if (window.google) {
+                window.google.accounts.id.initialize({
+                    client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID,
+                    callback: handleGoogleResponse
+                });
+                window.google.accounts.id.renderButton(
+                    document.getElementById('google-signup-btn'),
+                    { 
+                        theme: 'filled_black', 
+                        size: 'large', 
+                        width: '100%',
+                        text: 'signup_with'
+                    }
+                );
+            }
+        };
+
+        // Load Google Identity Services script if not already loaded
+        if (!window.google) {
+            const script = document.createElement('script');
+            script.src = 'https://accounts.google.com/gsi/client';
+            script.async = true;
+            script.defer = true;
+            script.onload = initGoogleSignIn;
+            document.body.appendChild(script);
+        } else {
+            initGoogleSignIn();
+        }
+    }, [role]);
+
+    const handleGoogleResponse = async (response) => {
+        try {
+            setError('');
+            const result = await googleLogin(response.credential, role);
+            
+            // Check if user needs to choose username
+            if (result.data.needsUsername) {
+                // Store temp token and redirect to username selection
+                const params = new URLSearchParams({
+                    token: result.data.tempToken,
+                    email: result.data.email,
+                    name: result.data.name || '',
+                    role: role
+                });
+                navigate(`/choose-username?${params.toString()}`);
+            } else {
+                navigate(isProfessor ? '/professor' : '/student');
+            }
+        } catch (err) {
+            setError(err.response?.data?.error || 'Google sign-up failed');
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
 
         try {
-            await register({ username, email, password, role });
-            // Redirect based on role
-            navigate(isProfessor ? '/professor' : '/student');
+            const response = await register({ username, email, password, role });
+            
+            // Check if email verification is required
+            if (response.data.emailVerificationRequired) {
+                navigate(`/verification-pending?email=${encodeURIComponent(email)}`);
+            } else {
+                navigate(isProfessor ? '/professor' : '/student');
+            }
         } catch (err) {
             setError(err.response?.data?.error || 'Registration failed');
         }
@@ -159,9 +220,12 @@ const Register = () => {
                             <div className="w-full border-t border-gray-700"></div>
                         </div>
                         <div className="relative flex justify-center text-sm">
-                            <span className="px-4 bg-[#232a36] text-gray-400">or</span>
+                            <span className="px-4 bg-[#232a36] text-gray-400">or continue with</span>
                         </div>
                     </div>
+
+                    {/* Google Sign-Up Button */}
+                    <div id="google-signup-btn" className="flex justify-center mb-6"></div>
 
                     {/* Login Link */}
                     <p className="text-center text-gray-400">

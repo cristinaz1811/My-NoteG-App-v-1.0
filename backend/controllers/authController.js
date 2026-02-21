@@ -1,6 +1,13 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const db = require('../config/database');
+const { sendVerificationEmail, sendPasswordResetEmail } = require('../utils/emailService');
+
+// Generate a random token
+const generateToken = () => {
+    return crypto.randomBytes(32).toString('hex');
+};
 
 const register = async (req, res) => {
     try {
@@ -30,16 +37,30 @@ const register = async (req, res) => {
         // Hash password
         const saltRounds = 10;
         const passwordHash = await bcrypt.hash(password, saltRounds);
+        
+        // Generate verification token
+        const verificationToken = generateToken();
+        const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-        // Create user with role
+        // Create user with role and verification token
         const result = await db.query(
-            'INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, username, email, role',
-            [username, email, passwordHash, role]
+            `INSERT INTO users (username, email, password_hash, role, email_verified, verification_token, verification_token_expires) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7) 
+             RETURNING id, username, email, role, email_verified`,
+            [username, email, passwordHash, role, false, verificationToken, verificationExpires]
         );
 
         const user = result.rows[0];
 
-        // Generate token
+        // Send verification email
+        try {
+            await sendVerificationEmail(email, username, verificationToken);
+        } catch (emailError) {
+            console.error('Failed to send verification email:', emailError);
+            // Don't fail registration if email fails - user can request resend
+        }
+
+        // Generate token (but user needs to verify email before full access)
         const token = jwt.sign(
             { id: user.id, username: user.username, role: user.role },
             process.env.JWT_SECRET,
@@ -47,9 +68,10 @@ const register = async (req, res) => {
         );
 
         res.status(201).json({
-            message: 'User registered successfully',
+            message: 'User registered successfully. Please check your email to verify your account.',
             user,
             token,
+            emailVerificationRequired: true
         });
     } catch (error) {
         console.error('Registration error:', error);
@@ -78,11 +100,25 @@ const login = async (req, res) => {
 
         const user = result.rows[0];
 
+        // Check if user has a password (Google OAuth users might not)
+        if (!user.password_hash) {
+            return res.status(401).json({ error: 'Please use Google to sign in' });
+        }
+
         // Verify password
         const isValidPassword = await bcrypt.compare(password, user.password_hash);
 
         if (!isValidPassword) {
             return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        // Check if email is verified
+        if (!user.email_verified) {
+            return res.status(403).json({ 
+                error: 'Please verify your email before logging in',
+                emailNotVerified: true,
+                email: user.email
+            });
         }
 
         // Generate token
@@ -111,7 +147,7 @@ const login = async (req, res) => {
 const getProfile = async (req, res) => {
     try {
         const result = await db.query(
-            'SELECT id, username, email, role, created_at FROM users WHERE id = $1',
+            'SELECT id, username, email, role, created_at, email_verified FROM users WHERE id = $1',
             [req.user.id]
         );
 
@@ -126,4 +162,402 @@ const getProfile = async (req, res) => {
     }
 };
 
-module.exports = { register, login, getProfile };
+// Verify email with token
+const verifyEmail = async (req, res) => {
+    try {
+        const { token } = req.body;
+
+        if (!token) {
+            return res.status(400).json({ error: 'Verification token is required' });
+        }
+
+        // Find user with this verification token
+        const result = await db.query(
+            'SELECT * FROM users WHERE verification_token = $1 AND verification_token_expires > NOW()',
+            [token]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(400).json({ error: 'Invalid or expired verification token' });
+        }
+
+        const user = result.rows[0];
+
+        // Update user as verified
+        await db.query(
+            'UPDATE users SET email_verified = true, verification_token = NULL, verification_token_expires = NULL WHERE id = $1',
+            [user.id]
+        );
+
+        // Generate auth token
+        const authToken = jwt.sign(
+            { id: user.id, username: user.username, role: user.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        res.json({
+            message: 'Email verified successfully',
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                role: user.role
+            },
+            token: authToken
+        });
+    } catch (error) {
+        console.error('Email verification error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Resend verification email
+const resendVerificationEmail = async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+
+        // Find user
+        const result = await db.query(
+            'SELECT * FROM users WHERE email = $1',
+            [email]
+        );
+
+        if (result.rows.length === 0) {
+            // Don't reveal if email exists
+            return res.json({ message: 'If an account exists, a verification email will be sent' });
+        }
+
+        const user = result.rows[0];
+
+        if (user.email_verified) {
+            return res.status(400).json({ error: 'Email is already verified' });
+        }
+
+        // Generate new verification token
+        const verificationToken = generateToken();
+        const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+        await db.query(
+            'UPDATE users SET verification_token = $1, verification_token_expires = $2 WHERE id = $3',
+            [verificationToken, verificationExpires, user.id]
+        );
+
+        // Send verification email
+        await sendVerificationEmail(email, user.username, verificationToken);
+
+        res.json({ message: 'Verification email sent' });
+    } catch (error) {
+        console.error('Resend verification error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Request password reset
+const forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+
+        // Find user
+        const result = await db.query(
+            'SELECT * FROM users WHERE email = $1',
+            [email]
+        );
+
+        // Always return success to prevent email enumeration
+        if (result.rows.length === 0) {
+            return res.json({ message: 'If an account exists, a password reset email will be sent' });
+        }
+
+        const user = result.rows[0];
+
+        // Don't allow password reset for Google OAuth users without passwords
+        if (!user.password_hash && user.google_id) {
+            return res.json({ message: 'If an account exists, a password reset email will be sent' });
+        }
+
+        // Generate password reset token
+        const resetToken = generateToken();
+        const resetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+        await db.query(
+            'UPDATE users SET password_reset_token = $1, password_reset_expires = $2 WHERE id = $3',
+            [resetToken, resetExpires, user.id]
+        );
+
+        // Send password reset email
+        await sendPasswordResetEmail(email, user.username, resetToken);
+
+        res.json({ message: 'If an account exists, a password reset email will be sent' });
+    } catch (error) {
+        console.error('Forgot password error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Reset password with token
+const resetPassword = async (req, res) => {
+    try {
+        const { token, password } = req.body;
+
+        if (!token || !password) {
+            return res.status(400).json({ error: 'Token and new password are required' });
+        }
+
+        if (password.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters' });
+        }
+
+        // Find user with this reset token
+        const result = await db.query(
+            'SELECT * FROM users WHERE password_reset_token = $1 AND password_reset_expires > NOW()',
+            [token]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(400).json({ error: 'Invalid or expired reset token' });
+        }
+
+        const user = result.rows[0];
+
+        // Hash new password
+        const saltRounds = 10;
+        const passwordHash = await bcrypt.hash(password, saltRounds);
+
+        // Update password and clear reset token
+        await db.query(
+            'UPDATE users SET password_hash = $1, password_reset_token = NULL, password_reset_expires = NULL WHERE id = $2',
+            [passwordHash, user.id]
+        );
+
+        res.json({ message: 'Password reset successfully' });
+    } catch (error) {
+        console.error('Reset password error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Google OAuth login/register
+const googleAuth = async (req, res) => {
+    try {
+        const { credential, role = 'student' } = req.body;
+
+        if (!credential) {
+            return res.status(400).json({ error: 'Google credential is required' });
+        }
+
+        // Verify the Google token
+        // In production, verify with Google's API: https://oauth2.googleapis.com/tokeninfo?id_token=<token>
+        const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`);
+        
+        if (!response.ok) {
+            return res.status(401).json({ error: 'Invalid Google token' });
+        }
+
+        const googleUser = await response.json();
+        
+        // Verify the audience (client ID)
+        if (googleUser.aud !== process.env.GOOGLE_CLIENT_ID) {
+            return res.status(401).json({ error: 'Invalid token audience' });
+        }
+
+        const { email, name, sub: googleId, picture } = googleUser;
+
+        // Check if user exists
+        let result = await db.query(
+            'SELECT * FROM users WHERE google_id = $1 OR email = $2',
+            [googleId, email]
+        );
+
+        let user;
+        let isNewUser = false;
+
+        if (result.rows.length === 0) {
+            // New user - they need to choose a username
+            isNewUser = true;
+            
+            // Generate a temporary token with Google info for username selection
+            const tempToken = jwt.sign(
+                { googleId, email, name, role, isTemp: true },
+                process.env.JWT_SECRET,
+                { expiresIn: '15m' } // Short expiry for security
+            );
+
+            return res.json({
+                needsUsername: true,
+                tempToken,
+                suggestedUsername: name.replace(/\s+/g, '_').toLowerCase(),
+                email
+            });
+        } else {
+            user = result.rows[0];
+            
+            // If user exists but wasn't using Google, link the accounts
+            if (!user.google_id) {
+                await db.query(
+                    'UPDATE users SET google_id = $1, email_verified = true WHERE id = $2',
+                    [googleId, user.id]
+                );
+            }
+        }
+
+        // Generate JWT token
+        const token = jwt.sign(
+            { id: user.id, username: user.username, role: user.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        res.json({
+            message: 'Google authentication successful',
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                role: user.role
+            },
+            token
+        });
+    } catch (error) {
+        console.error('Google auth error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Complete Google signup with chosen username
+const completeGoogleSignup = async (req, res) => {
+    try {
+        const { tempToken, username } = req.body;
+
+        if (!tempToken || !username) {
+            return res.status(400).json({ error: 'Token and username are required' });
+        }
+
+        // Validate username format
+        if (username.length < 3 || username.length > 30) {
+            return res.status(400).json({ error: 'Username must be 3-30 characters' });
+        }
+
+        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+            return res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores' });
+        }
+
+        // Verify temp token
+        let decoded;
+        try {
+            decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
+        } catch (e) {
+            return res.status(401).json({ error: 'Invalid or expired token. Please sign in with Google again.' });
+        }
+
+        if (!decoded.isTemp) {
+            return res.status(401).json({ error: 'Invalid token type' });
+        }
+
+        const { googleId, email, role } = decoded;
+
+        // Check if username is taken
+        const existingUser = await db.query(
+            'SELECT id FROM users WHERE username = $1',
+            [username]
+        );
+
+        if (existingUser.rows.length > 0) {
+            return res.status(409).json({ error: 'Username is already taken' });
+        }
+
+        // Check if user was already created (double-submit protection)
+        const existingGoogleUser = await db.query(
+            'SELECT * FROM users WHERE google_id = $1 OR email = $2',
+            [googleId, email]
+        );
+
+        if (existingGoogleUser.rows.length > 0) {
+            // User already exists, just log them in
+            const user = existingGoogleUser.rows[0];
+            const token = jwt.sign(
+                { id: user.id, username: user.username, role: user.role },
+                process.env.JWT_SECRET,
+                { expiresIn: '7d' }
+            );
+            return res.json({
+                message: 'Login successful',
+                user: { id: user.id, username: user.username, email: user.email, role: user.role },
+                token
+            });
+        }
+
+        // Create the user with chosen username
+        const result = await db.query(
+            `INSERT INTO users (username, email, google_id, role, email_verified) 
+             VALUES ($1, $2, $3, $4, $5) 
+             RETURNING id, username, email, role, email_verified`,
+            [username, email, googleId, role, true]
+        );
+
+        const user = result.rows[0];
+
+        // Generate JWT token
+        const token = jwt.sign(
+            { id: user.id, username: user.username, role: user.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        res.json({
+            message: 'Account created successfully',
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                role: user.role
+            },
+            token
+        });
+    } catch (error) {
+        console.error('Complete Google signup error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Check if username is available
+const checkUsername = async (req, res) => {
+    try {
+        const { username } = req.query;
+
+        if (!username) {
+            return res.status(400).json({ error: 'Username is required' });
+        }
+
+        const result = await db.query(
+            'SELECT id FROM users WHERE username = $1',
+            [username]
+        );
+
+        res.json({ available: result.rows.length === 0 });
+    } catch (error) {
+        console.error('Check username error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+module.exports = { 
+    register, 
+    login, 
+    getProfile, 
+    verifyEmail, 
+    resendVerificationEmail, 
+    forgotPassword, 
+    resetPassword,
+    googleAuth,
+    completeGoogleSignup,
+    checkUsername
+};

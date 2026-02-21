@@ -24,6 +24,16 @@ export const authService = {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
     },
+    // Email verification
+    verifyEmail: (token) => api.post('/auth/verify-email', { token }),
+    resendVerification: (email) => api.post('/auth/resend-verification', { email }),
+    // Password reset
+    forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+    resetPassword: (token, password) => api.post('/auth/reset-password', { token, password }),
+    // Google OAuth
+    googleAuth: (credential, role) => api.post('/auth/google', { credential, role }),
+    completeGoogleSignup: (tempToken, username) => api.post('/auth/google/complete', { tempToken, username }),
+    checkUsername: (username) => api.get(`/auth/check-username?username=${encodeURIComponent(username)}`),
 };
 
 // Course services
