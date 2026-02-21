@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { notifyNewChapter, notifyNewEnrollment } = require('../utils/notificationService');
 
 const getAllCourses = async (req, res) => {
     try {
@@ -125,6 +126,9 @@ const enrollInCourse = async (req, res) => {
             'INSERT INTO enrollments (user_id, course_id) VALUES ($1, $2) RETURNING *',
             [userId, courseId]
         );
+
+        // Notify the course professor about the new enrollment
+        notifyNewEnrollment({ studentId: userId, courseId: parseInt(courseId) });
 
         res.status(201).json(result.rows[0]);
     } catch (error) {
@@ -573,6 +577,9 @@ const addChapter = async (req, res) => {
             'INSERT INTO chapters (course_id, title, description, order_index) VALUES ($1, $2, $3, $4) RETURNING *',
             [courseId, title, description, maxOrder.rows[0].next_order]
         );
+
+        // Notify enrolled students about the new chapter
+        notifyNewChapter({ courseId: parseInt(courseId), chapterTitle: title, professorId: userId });
 
         res.status(201).json(result.rows[0]);
     } catch (error) {

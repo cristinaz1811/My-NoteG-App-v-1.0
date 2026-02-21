@@ -85,4 +85,16 @@ export const exerciseService = {
     deleteTestCase: (testCaseId) => api.delete(`/exercises/professor/test-cases/${testCaseId}`),
 };
 
+// Notification services
+export const notificationService = {
+    getNotifications: (params) => api.get('/notifications', { params }),
+    getUnreadCount: () => api.get('/notifications/unread-count'),
+    markAsRead: (id) => api.put(`/notifications/${id}/read`),
+    markAllAsRead: () => api.put('/notifications/read-all'),
+    deleteNotification: (id) => api.delete(`/notifications/${id}`),
+    requestHelp: (exerciseId, message) => api.post(`/notifications/help/${exerciseId}`, { message }),
+    getHelpRequests: (status) => api.get('/notifications/help-requests', { params: { status } }),
+    resolveHelpRequest: (id) => api.put(`/notifications/help-requests/${id}/resolve`),
+};
+
 export default api;

@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { NotificationProvider } from './context/NotificationContext';
 import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -21,6 +22,7 @@ import VerificationPending from './pages/VerificationPending';
 import ResendVerification from './pages/ResendVerification';
 import ChooseUsername from './pages/ChooseUsername';
 import Profile from './pages/Profile';
+import Notifications from './pages/Notifications';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -285,6 +287,7 @@ function App() {
     return (
         <Router>
             <AuthProvider>
+                <NotificationProvider>
                 <AnimatedBackground />
                 <Routes>
                     {/* Landing Page - No Navbar */}
@@ -396,7 +399,18 @@ function App() {
                             </ProfessorRoute>
                         } 
                     />
+                    
+                    {/* Notifications Route */}
+                    <Route 
+                        path="/notifications" 
+                        element={
+                            <ProtectedRoute>
+                                <Navbar /><div className="pt-16"><Notifications /></div>
+                            </ProtectedRoute>
+                        } 
+                    />
                 </Routes>
+                </NotificationProvider>
             </AuthProvider>
         </Router>
     );

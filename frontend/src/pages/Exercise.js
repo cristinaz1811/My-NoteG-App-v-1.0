@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
-import { exerciseService } from '../services/api';
+import { exerciseService, notificationService } from '../services/api';
 
 const Exercise = () => {
     const { id } = useParams();
@@ -28,6 +28,30 @@ const Exercise = () => {
     const [analyzingComplexity, setAnalyzingComplexity] = useState(false);
     const [hintMode, setHintMode] = useState('solving'); // 'solving' or 'optimizing'
     const [expandedHints, setExpandedHints] = useState({});
+
+    // Help request state
+    const [showHelpModal, setShowHelpModal] = useState(false);
+    const [helpMessage, setHelpMessage] = useState('');
+    const [helpSending, setHelpSending] = useState(false);
+    const [helpSent, setHelpSent] = useState(false);
+
+    const handleRequestHelp = async () => {
+        if (helpSending) return;
+        setHelpSending(true);
+        try {
+            await notificationService.requestHelp(id, helpMessage);
+            setHelpSent(true);
+            setHelpMessage('');
+            setTimeout(() => {
+                setShowHelpModal(false);
+                setHelpSent(false);
+            }, 2000);
+        } catch (error) {
+            alert(error.response?.data?.error || 'Failed to send help request');
+        } finally {
+            setHelpSending(false);
+        }
+    };
 
     // Cleanup editor on unmount
     useEffect(() => {
@@ -383,6 +407,13 @@ const Exercise = () => {
                         </span>
                     </div>
                     <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setShowHelpModal(true)}
+                            className="px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 bg-white/5 text-gray-400 hover:text-orange-300 hover:bg-orange-500/10 border border-white/10"
+                            title="Request help from professor"
+                        >
+                            🆘 Help
+                        </button>
                         <button
                             onClick={() => setShowAIPanel(!showAIPanel)}
                             className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
@@ -745,6 +776,56 @@ const Exercise = () => {
                                 </div>
                             )}
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Help Request Modal */}
+            {showHelpModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => !helpSending && setShowHelpModal(false)}>
+                    <div 
+                        className="surface-card rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl border border-white/10"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {helpSent ? (
+                            <div className="text-center py-4">
+                                <div className="text-5xl mb-3">✅</div>
+                                <h3 className="text-lg font-semibold text-white mb-1">Help request sent!</h3>
+                                <p className="text-sm text-gray-400">Your professor will be notified.</p>
+                            </div>
+                        ) : (
+                            <>
+                                <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
+                                    🆘 Request Help
+                                </h3>
+                                <p className="text-sm text-gray-400 mb-4">
+                                    Send a help request to your professor for this exercise.
+                                </p>
+                                <textarea
+                                    value={helpMessage}
+                                    onChange={(e) => setHelpMessage(e.target.value)}
+                                    placeholder="Describe what you're struggling with (optional)..."
+                                    className="w-full h-24 px-3 py-2 rounded-lg text-sm text-white placeholder-gray-500 resize-none border border-white/10 focus:outline-none focus:border-[#a1609d]/50"
+                                    style={{ background: 'rgba(255,255,255,0.05)' }}
+                                />
+                                <div className="flex items-center justify-end gap-3 mt-4">
+                                    <button
+                                        onClick={() => setShowHelpModal(false)}
+                                        className="px-4 py-2 rounded-lg text-sm text-gray-400 hover:text-white transition-colors border-none bg-transparent cursor-pointer"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleRequestHelp}
+                                        disabled={helpSending}
+                                        className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all border-none cursor-pointer"
+                                        style={{ background: 'linear-gradient(135deg, #a1609d, #e74c3c)' }}
+                                    >
+                                        {helpSending ? 'Sending...' : 'Send Request'}
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
