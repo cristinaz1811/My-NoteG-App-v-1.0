@@ -1,11 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { courseService } from '../services/api';
+import { AuthContext } from '../context/AuthContext';
 
 const Courses = () => {
     const [courses, setCourses] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('all');
+    const [showCodeModal, setShowCodeModal] = useState(false);
+    const [enrollCode, setEnrollCode] = useState('');
+    const [codeError, setCodeError] = useState('');
+    const [codeSuccess, setCodeSuccess] = useState(null);
+    const [enrolling, setEnrolling] = useState(false);
+    const { user } = useContext(AuthContext);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -25,6 +32,29 @@ const Courses = () => {
 
     const handleCourseClick = (courseId) => {
         navigate(`/courses/${courseId}`);
+    };
+
+    const handleEnrollByCode = async () => {
+        if (!enrollCode.trim()) {
+            setCodeError('Please enter an enrollment code.');
+            return;
+        }
+        setEnrolling(true);
+        setCodeError('');
+        setCodeSuccess(null);
+        try {
+            const response = await courseService.enrollByCode(enrollCode.trim());
+            setCodeSuccess(response.data);
+            setEnrollCode('');
+        } catch (error) {
+            if (error.response?.data?.alreadyEnrolled) {
+                navigate(`/my-courses/${error.response.data.courseId}`);
+                return;
+            }
+            setCodeError(error.response?.data?.error || 'Invalid enrollment code.');
+        } finally {
+            setEnrolling(false);
+        }
     };
 
     const filteredCourses = filter === 'all' 
@@ -78,10 +108,75 @@ const Courses = () => {
                     <h1 className="text-4xl sm:text-5xl font-bold mb-4">
                         Popular <span className="gradient-text">Learning Paths</span>
                     </h1>
-                    <p className="text-lg text-gray-400 max-w-2xl mx-auto">
+                    <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-6">
                         Choose your path and start building the skills employers are looking for.
                     </p>
+                    {user && (
+                        <button
+                            onClick={() => { setShowCodeModal(true); setCodeError(''); setCodeSuccess(null); setEnrollCode(''); }}
+                            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-[#a1609d] border border-[#a1609d]/30 hover:bg-[#a1609d]/10 transition-colors"
+                        >
+                            🔑 Join with Enrollment Code
+                        </button>
+                    )}
                 </div>
+
+                {/* Join with Code Modal */}
+                {showCodeModal && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 px-4" onClick={() => setShowCodeModal(false)}>
+                        <div className="surface-card rounded-2xl p-8 max-w-md w-full glow-sm" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-xl font-bold">Join a Private Course</h2>
+                                <button onClick={() => setShowCodeModal(false)} className="text-gray-400 hover:text-white text-xl">✕</button>
+                            </div>
+                            <p className="text-gray-400 text-sm mb-6">
+                                Enter the enrollment code provided by your professor to join a private course.
+                            </p>
+
+                            {codeSuccess ? (
+                                <div className="text-center">
+                                    <div className="text-5xl mb-4">🎉</div>
+                                    <h3 className="text-lg font-semibold mb-2">Successfully enrolled!</h3>
+                                    <p className="text-gray-400 mb-2">{codeSuccess.course.title}</p>
+                                    <p className="text-sm text-gray-500 mb-6">by {codeSuccess.course.creator_name}</p>
+                                    <button
+                                        onClick={() => { setShowCodeModal(false); navigate(`/my-courses/${codeSuccess.course.id}`); }}
+                                        className="w-full py-3 rounded-xl font-semibold text-white"
+                                        style={{ background: 'linear-gradient(135deg, #a1609d, #b870ad)' }}
+                                    >
+                                        Go to Course →
+                                    </button>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="mb-4">
+                                        <input
+                                            type="text"
+                                            value={enrollCode}
+                                            onChange={(e) => { setEnrollCode(e.target.value.toUpperCase()); setCodeError(''); }}
+                                            placeholder="e.g. A3F1B2"
+                                            className="w-full text-center font-mono text-2xl tracking-[0.3em] uppercase py-4"
+                                            maxLength={6}
+                                            autoFocus
+                                            onKeyDown={(e) => e.key === 'Enter' && handleEnrollByCode()}
+                                        />
+                                    </div>
+                                    {codeError && (
+                                        <p className="text-red-400 text-sm mb-4 text-center">{codeError}</p>
+                                    )}
+                                    <button
+                                        onClick={handleEnrollByCode}
+                                        disabled={enrolling || !enrollCode.trim()}
+                                        className="w-full py-3 rounded-xl font-semibold text-white disabled:opacity-50"
+                                        style={{ background: 'linear-gradient(135deg, #a1609d, #b870ad)' }}
+                                    >
+                                        {enrolling ? 'Joining...' : 'Join Course'}
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* Filters */}
                 <div className="flex flex-wrap justify-center gap-3 mb-12">
@@ -122,6 +217,11 @@ const Courses = () => {
                                     <span className={`badge ${getDifficultyBadgeClass(course.difficulty)}`}>
                                         {course.difficulty}
                                     </span>
+                                    {course.is_private && (
+                                        <span className="badge bg-[#a1609d]/20 text-[#a1609d]" title="Private - Enrollment code required">
+                                            🔒
+                                        </span>
+                                    )}
                                     {course.tags && course.tags.slice(0, 1).map((tag, i) => (
                                         <span key={i} className="badge bg-white/5 text-gray-400">
                                             {tag}

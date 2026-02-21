@@ -13,7 +13,8 @@ const CreateCourse = () => {
         long_description: '',
         estimated_hours: 1,
         tags: [],
-        learning_objectives: []
+        learning_objectives: [],
+        is_private: false
     });
     const [tagInput, setTagInput] = useState('');
     const [objectiveInput, setObjectiveInput] = useState('');
@@ -181,6 +182,38 @@ const CreateCourse = () => {
                                 rows={4}
                                 className="w-full"
                             />
+                        </div>
+
+                        {/* Privacy Toggle */}
+                        <div className="border border-white/10 rounded-xl p-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <label className="text-sm font-medium text-gray-300">Private Course</label>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Only students with the enrollment code can access this course.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setFormData(prev => ({ ...prev, is_private: !prev.is_private }))}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                        formData.is_private ? 'bg-[#a1609d]' : 'bg-white/20'
+                                    }`}
+                                >
+                                    <span
+                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                            formData.is_private ? 'translate-x-6' : 'translate-x-1'
+                                        }`}
+                                    />
+                                </button>
+                            </div>
+                            {formData.is_private && (
+                                <div className="mt-3 p-3 bg-[#a1609d]/10 rounded-lg border border-[#a1609d]/20">
+                                    <p className="text-sm text-[#b870ad]">
+                                        🔒 An enrollment code will be generated automatically when you create this course. You can share it with your students.
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </div>
 

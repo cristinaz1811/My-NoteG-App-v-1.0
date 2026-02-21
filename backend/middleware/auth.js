@@ -16,6 +16,20 @@ const authMiddleware = (req, res, next) => {
     }
 };
 
+// Optional auth - attaches user if token is valid, but doesn't block if no token
+const optionalAuth = (req, res, next) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        if (token) {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            req.user = decoded;
+        }
+    } catch (error) {
+        // Token invalid - just continue without user
+    }
+    next();
+};
+
 const isAdmin = (req, res, next) => {
     if (req.user.role !== 'admin') {
         return res.status(403).json({ error: 'Access denied. Admin only.' });
@@ -30,4 +44,4 @@ const isProfessor = (req, res, next) => {
     next();
 };
 
-module.exports = { authMiddleware, isAdmin, isProfessor };
+module.exports = { authMiddleware, optionalAuth, isAdmin, isProfessor };
