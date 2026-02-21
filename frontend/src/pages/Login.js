@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
@@ -6,18 +6,83 @@ const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    const { login } = useContext(AuthContext);
+    const [showResendVerification, setShowResendVerification] = useState(false);
+    const [unverifiedEmail, setUnverifiedEmail] = useState('');
+    const { login, googleLogin } = useContext(AuthContext);
     const navigate = useNavigate();
+
+    // Initialize Google Sign-In
+    useEffect(() => {
+        const initGoogleSignIn = () => {
+            if (window.google) {
+                window.google.accounts.id.initialize({
+                    client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID,
+                    callback: handleGoogleResponse
+                });
+                window.google.accounts.id.renderButton(
+                    document.getElementById('google-signin-btn'),
+                    { 
+                        theme: 'filled_black', 
+                        size: 'large', 
+                        width: '100%',
+                        text: 'continue_with'
+                    }
+                );
+            }
+        };
+
+        // Load Google Identity Services script if not already loaded
+        if (!window.google) {
+            const script = document.createElement('script');
+            script.src = 'https://accounts.google.com/gsi/client';
+            script.async = true;
+            script.defer = true;
+            script.onload = initGoogleSignIn;
+            document.body.appendChild(script);
+        } else {
+            initGoogleSignIn();
+        }
+    }, []);
+
+    const handleGoogleResponse = async (response) => {
+        try {
+            setError('');
+            const result = await googleLogin(response.credential);
+            
+            // Check if user needs to choose username
+            if (result.data.needsUsername) {
+                // Store temp token and redirect to username selection
+                const params = new URLSearchParams({
+                    token: result.data.tempToken,
+                    email: result.data.email,
+                    name: result.data.name || ''
+                });
+                navigate(`/choose-username?${params.toString()}`);
+            } else {
+                navigate('/student');
+            }
+        } catch (err) {
+            setError(err.response?.data?.error || 'Google sign-in failed');
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
+        setShowResendVerification(false);
 
         try {
             await login({ email, password });
             navigate('/student');
         } catch (err) {
-            setError(err.response?.data?.error || 'Login failed');
+            const errorData = err.response?.data;
+            setError(errorData?.error || 'Login failed');
+            
+            // Check if email needs verification
+            if (errorData?.emailNotVerified) {
+                setShowResendVerification(true);
+                setUnverifiedEmail(errorData.email);
+            }
         }
     };
 
@@ -37,6 +102,16 @@ const Login = () => {
                     {error && (
                         <div className="error-message mb-6">
                             {error}
+                            {showResendVerification && (
+                                <div className="mt-2">
+                                    <Link 
+                                        to={`/verification-pending?email=${encodeURIComponent(unverifiedEmail)}`}
+                                        className="text-[#fef483] hover:text-[#fff9c4] font-medium text-sm"
+                                    >
+                                        Resend verification email →
+                                    </Link>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -57,9 +132,17 @@ const Login = () => {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Password
-                            </label>
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="block text-sm font-medium text-gray-300">
+                                    Password
+                                </label>
+                                <Link 
+                                    to="/forgot-password" 
+                                    className="text-sm text-[#fef483] hover:text-[#fff9c4]"
+                                >
+                                    Forgot password?
+                                </Link>
+                            </div>
                             <input
                                 type="password"
                                 value={password}
@@ -84,9 +167,12 @@ const Login = () => {
                             <div className="w-full border-t border-gray-700"></div>
                         </div>
                         <div className="relative flex justify-center text-sm">
-                            <span className="px-4 bg-[#232a36] text-gray-400">or</span>
+                            <span className="px-4 bg-[#232a36] text-gray-400">or continue with</span>
                         </div>
                     </div>
+
+                    {/* Google Sign-In Button */}
+                    <div id="google-signin-btn" className="flex justify-center mb-6"></div>
 
                     {/* Register Link */}
                     <p className="text-center text-gray-400">

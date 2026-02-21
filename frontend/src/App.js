@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
@@ -14,6 +14,12 @@ import CreateCourse from './pages/CreateCourse';
 import EditCourse from './pages/EditCourse';
 import EditExercise from './pages/EditExercise';
 import CourseStudents from './pages/CourseStudents';
+import VerifyEmail from './pages/VerifyEmail';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import VerificationPending from './pages/VerificationPending';
+import ResendVerification from './pages/ResendVerification';
+import ChooseUsername from './pages/ChooseUsername';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -290,6 +296,15 @@ function App() {
                     <Route path="/student" element={<><Navbar /><div className="pt-16"><Home /></div></>} />
                     <Route path="/login" element={<><Navbar /><div className="pt-16"><Login /></div></>} />
                     <Route path="/register" element={<><Navbar /><div className="pt-16"><Register /></div></>} />
+                    
+                    {/* Email Verification & Password Reset Routes */}
+                    <Route path="/verify-email" element={<><Navbar /><div className="pt-16"><VerifyEmail /></div></>} />
+                    <Route path="/verification-pending" element={<><Navbar /><div className="pt-16"><VerificationPending /></div></>} />
+                    <Route path="/resend-verification" element={<><Navbar /><div className="pt-16"><ResendVerification /></div></>} />
+                    <Route path="/forgot-password" element={<><Navbar /><div className="pt-16"><ForgotPassword /></div></>} />
+                    <Route path="/reset-password" element={<><Navbar /><div className="pt-16"><ResetPassword /></div></>} />
+                    <Route path="/choose-username" element={<><Navbar /><div className="pt-16"><ChooseUsername /></div></>} />
+                    
                     <Route 
                         path="/courses" 
                         element={
