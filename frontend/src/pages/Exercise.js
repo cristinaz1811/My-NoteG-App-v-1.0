@@ -27,6 +27,7 @@ const Exercise = () => {
     const [complexity, setComplexity] = useState(null);
     const [analyzingComplexity, setAnalyzingComplexity] = useState(false);
     const [hintMode, setHintMode] = useState('solving'); // 'solving' or 'optimizing'
+    const [expandedHints, setExpandedHints] = useState({});
 
     // Cleanup editor on unmount
     useEffect(() => {
@@ -106,6 +107,8 @@ const Exercise = () => {
                     ? { ...h, text: response.data.hint, unlocked: true, needsGeneration: false }
                     : h
             ));
+            // Auto-expand the hint after generation
+            setExpandedHints(prev => ({ ...prev, [hintNumber]: true }));
         } catch (error) {
             console.error('Error generating hint:', error);
         } finally {
@@ -516,75 +519,97 @@ const Exercise = () => {
                                 </div>
                             )}
                             <div className="space-y-3">
-                                {hints.map((hint) => (
-                                    <div
-                                        key={hint.number}
-                                        className={`rounded-lg border transition-all ${
-                                            hint.unlocked
-                                                ? 'border-purple-500/30 bg-purple-500/5'
-                                                : 'border-white/5 bg-white/[0.02]'
-                                        }`}
-                                    >
-                                        <div className="p-3">
-                                            <div className="flex items-center justify-between mb-2">
-                                                <span className={`text-xs font-semibold ${
-                                                    hint.unlocked ? 'text-purple-300' : 'text-gray-500'
-                                                }`}>
-                                                    Hint {hint.number}
-                                                </span>
-                                                {!hint.unlocked && (
-                                                    <span className="text-[10px] text-gray-600 flex items-center gap-1">
-                                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-                                                            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM12 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2z"/>
-                                                        </svg>
-                                                        Locked
+                                {hints.map((hint) => {
+                                    const isExpanded = expandedHints[hint.number];
+                                    const hasText = !!hint.text;
+                                    const toggleExpand = () => {
+                                        if (hasText) {
+                                            setExpandedHints(prev => ({ ...prev, [hint.number]: !prev[hint.number] }));
+                                        }
+                                    };
+
+                                    return (
+                                        <div
+                                            key={hint.number}
+                                            className={`rounded-lg border transition-all ${
+                                                hint.unlocked
+                                                    ? 'border-purple-500/30 bg-purple-500/5'
+                                                    : 'border-white/5 bg-white/[0.02]'
+                                            }`}
+                                        >
+                                            <div
+                                                className={`p-3 ${hasText ? 'cursor-pointer select-none' : ''}`}
+                                                onClick={hasText ? toggleExpand : undefined}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <span className={`text-xs font-semibold ${
+                                                        hint.unlocked ? 'text-purple-300' : 'text-gray-500'
+                                                    }`}>
+                                                        Hint {hint.number}
                                                     </span>
+                                                    {hasText ? (
+                                                        <span className="text-[10px] text-gray-500 transition-transform duration-200" style={{ display: 'inline-block', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                                                            ▼
+                                                        </span>
+                                                    ) : !hint.unlocked ? (
+                                                        <span className="text-[10px] text-gray-600 flex items-center gap-1">
+                                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                                                                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM12 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2z"/>
+                                                            </svg>
+                                                            Locked
+                                                        </span>
+                                                    ) : null}
+                                                </div>
+                                                {/* Reveal button for unlocked but not yet generated */}
+                                                {!hasText && hint.unlocked && (
+                                                    <div className="mt-2">
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleGenerateHint(hint.number); }}
+                                                            disabled={loadingHint === hint.number}
+                                                            className="w-full py-2 px-3 rounded-md bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs font-medium transition-all flex items-center justify-center gap-2"
+                                                        >
+                                                            {loadingHint === hint.number ? (
+                                                                <>
+                                                                    <div className="w-3 h-3 border-2 border-purple-300/30 border-t-purple-300 rounded-full animate-spin"></div>
+                                                                    Generating...
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span>✦</span> Reveal Hint
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                {/* Locked message */}
+                                                {!hint.unlocked && (
+                                                    <div className="text-xs text-gray-600 mt-2">
+                                                        {attemptsUntilNextHint > 0 && hint.number === hintsUnlocked + 1 ? (
+                                                            <span>{attemptsUntilNextHint} more {hintMode === 'optimizing' ? 'submission' : 'failed attempt'}{attemptsUntilNextHint !== 1 ? 's' : ''} to unlock</span>
+                                                        ) : (
+                                                            <span>Keep trying to unlock</span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {/* Collapsible hint text */}
+                                                {hasText && isExpanded && (
+                                                    <p className="text-sm text-gray-300 leading-relaxed mt-2">{hint.text}</p>
                                                 )}
                                             </div>
-                                            {hint.unlocked ? (
-                                                hint.text ? (
-                                                    <p className="text-sm text-gray-300 leading-relaxed">{hint.text}</p>
-                                                ) : (
-                                                    <button
-                                                        onClick={() => handleGenerateHint(hint.number)}
-                                                        disabled={loadingHint === hint.number}
-                                                        className="w-full py-2 px-3 rounded-md bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs font-medium transition-all flex items-center justify-center gap-2"
-                                                    >
-                                                        {loadingHint === hint.number ? (
-                                                            <>
-                                                                <div className="w-3 h-3 border-2 border-purple-300/30 border-t-purple-300 rounded-full animate-spin"></div>
-                                                                Generating...
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <span>✦</span> Reveal Hint
-                                                            </>
-                                                        )}
-                                                    </button>
-                                                )
-                                            ) : (
-                                                <div className="text-xs text-gray-600">
-                                                    {attemptsUntilNextHint > 0 && hint.number === hintsUnlocked + 1 ? (
-                                                        <span>{attemptsUntilNextHint} more failed attempt{attemptsUntilNextHint !== 1 ? 's' : ''} to unlock</span>
-                                                    ) : (
-                                                        <span>Keep trying to unlock</span>
-                                                    )}
+                                            {/* Progress bar for next unlock */}
+                                            {!hint.unlocked && hint.number === hintsUnlocked + 1 && (
+                                                <div className="px-3 pb-3">
+                                                    <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                                                        <div
+                                                            className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-500"
+                                                            style={{ width: `${Math.max(0, ((hint.number * 2 - attemptsUntilNextHint) / (hint.number * 2)) * 100)}%` }}
+                                                        ></div>
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
-                                        {/* Progress bar for next unlock */}
-                                        {!hint.unlocked && hint.number === hintsUnlocked + 1 && (
-                                            <div className="px-3 pb-3">
-                                                <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-500"
-                                                        style={{ width: `${Math.max(0, ((hint.number * 2 - attemptsUntilNextHint) / (hint.number * 2)) * 100)}%` }}
-                                                    ></div>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
 
