@@ -11,6 +11,9 @@ const {
     updateTestCase,
     deleteTestCase,
     getExerciseTestCases,
+    getAIHints,
+    generateAIHint,
+    getComplexityAnalysis,
 } = require('../controllers/exerciseController');
 const { authMiddleware, isAdmin, isProfessor } = require('../middleware/auth');
 
@@ -18,6 +21,11 @@ const { authMiddleware, isAdmin, isProfessor } = require('../middleware/auth');
 router.get('/:id', authMiddleware, getExerciseById);
 router.post('/:id/submit', authMiddleware, submitSolution);
 router.get('/:exerciseId/submissions', authMiddleware, getUserSubmissions);
+
+// AI Hints routes
+router.get('/:id/ai-hints', authMiddleware, getAIHints);
+router.post('/:id/ai-hints/generate', authMiddleware, generateAIHint);
+router.post('/:id/ai-complexity', authMiddleware, getComplexityAnalysis);
 
 // Professor routes - Exercise management
 router.post('/professor/create', authMiddleware, isProfessor, createExercise);

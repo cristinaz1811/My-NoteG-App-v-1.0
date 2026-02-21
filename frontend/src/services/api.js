@@ -31,9 +31,10 @@ export const authService = {
     forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
     resetPassword: (token, password) => api.post('/auth/reset-password', { token, password }),
     // Google OAuth
-    googleAuth: (credential, role) => api.post('/auth/google', { credential, role }),
+    googleAuth: (credential, role, mode) => api.post('/auth/google', { credential, role, mode }),
     completeGoogleSignup: (tempToken, username) => api.post('/auth/google/complete', { tempToken, username }),
     checkUsername: (username) => api.get(`/auth/check-username?username=${encodeURIComponent(username)}`),
+    deleteAccount: () => api.delete('/auth/delete-account'),
 };
 
 // Course services
@@ -68,6 +69,10 @@ export const exerciseService = {
     getExerciseById: (id) => api.get(`/exercises/${id}`),
     submitSolution: (id, data) => api.post(`/exercises/${id}/submit`, data),
     getUserSubmissions: (exerciseId) => api.get(`/exercises/${exerciseId}/submissions`),
+    // AI Hints
+    getAIHints: (id, mode) => api.get(`/exercises/${id}/ai-hints`, { params: { mode } }),
+    generateAIHint: (id, data) => api.post(`/exercises/${id}/ai-hints/generate`, data),
+    getComplexityAnalysis: (id, data) => api.post(`/exercises/${id}/ai-complexity`, data),
     createExercise: (exerciseData) => api.post('/exercises', exerciseData),
     // Professor endpoints
     createProfessorExercise: (exerciseData) => api.post('/exercises/professor/create', exerciseData),

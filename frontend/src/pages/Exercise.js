@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { exerciseService } from '../services/api';
@@ -11,6 +11,39 @@ const Exercise = () => {
     const [results, setResults] = useState(null);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const editorRef = useRef(null);
+    const isMountedRef = useRef(true);
+
+    // AI Hints state
+    const [showAIPanel, setShowAIPanel] = useState(false);
+    const [hints, setHints] = useState([
+        { number: 1, text: null, unlocked: false },
+        { number: 2, text: null, unlocked: false },
+        { number: 3, text: null, unlocked: false },
+    ]);
+    const [hintsUnlocked, setHintsUnlocked] = useState(0);
+    const [attemptsUntilNextHint, setAttemptsUntilNextHint] = useState(2);
+    const [loadingHint, setLoadingHint] = useState(null);
+    const [complexity, setComplexity] = useState(null);
+    const [analyzingComplexity, setAnalyzingComplexity] = useState(false);
+    const [hintMode, setHintMode] = useState('solving'); // 'solving' or 'optimizing'
+    const [expandedHints, setExpandedHints] = useState({});
+
+    // Cleanup editor on unmount
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+            if (editorRef.current) {
+                try {
+                    editorRef.current.dispose();
+                } catch (e) {
+                    // Ignore disposal errors
+                }
+                editorRef.current = null;
+            }
+        };
+    }, []);
 
     useEffect(() => {
         loadExercise();
@@ -20,13 +53,74 @@ const Exercise = () => {
         try {
             const response = await exerciseService.getExerciseById(id);
             setExercise(response.data);
-            // Replace literal \n strings with actual newlines
             const starterCode = response.data.starter_code || '';
             setCode(starterCode.replace(/\\n/g, '\n'));
+            
+            // Set initial hint mode based on completion status
+            const status = response.data.userProgress?.completion_status;
+            if (status === 'completed') {
+                setHintMode('solved');
+            } else if (status === 'inefficient') {
+                setHintMode('optimizing');
+            }
         } catch (error) {
             console.error('Error loading exercise:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Load AI hints status
+    const loadHintsStatus = useCallback(async (mode) => {
+        const m = mode || hintMode;
+        try {
+            const response = await exerciseService.getAIHints(id, m);
+            const data = response.data;
+            setHints(data.hints);
+            setHintsUnlocked(data.hintsUnlocked);
+            setAttemptsUntilNextHint(data.attemptsUntilNextHint);
+        } catch (error) {
+            console.error('Error loading hints:', error);
+        }
+    }, [id, hintMode]);
+
+    // Load hints when panel is opened
+    useEffect(() => {
+        if (showAIPanel) {
+            loadHintsStatus();
+        }
+    }, [showAIPanel, loadHintsStatus]);
+
+    // Generate a specific hint
+    const handleGenerateHint = async (hintNumber) => {
+        setLoadingHint(hintNumber);
+        try {
+            const failedTests = results?.results?.filter(r => !r.passed)?.slice(0, 3).map(r => ({
+                input: r.input,
+                expected: r.expected,
+                actual: r.actual || r.error || 'No output',
+            })) || [];
+
+            const response = await exerciseService.generateAIHint(id, {
+                hintNumber,
+                code,
+                failedTests,
+                mode: hintMode,
+                currentComplexity: complexity ? `${complexity.timeComplexity} time, ${complexity.spaceComplexity} space` : undefined,
+                optimalComplexity: complexity ? `${complexity.optimalTimeComplexity} time, ${complexity.optimalSpaceComplexity} space` : undefined,
+            });
+
+            setHints(prev => prev.map(h =>
+                h.number === hintNumber
+                    ? { ...h, text: response.data.hint, unlocked: true, needsGeneration: false }
+                    : h
+            ));
+            // Auto-expand the hint after generation
+            setExpandedHints(prev => ({ ...prev, [hintNumber]: true }));
+        } catch (error) {
+            console.error('Error generating hint:', error);
+        } finally {
+            setLoadingHint(null);
         }
     };
 
@@ -40,9 +134,96 @@ const Exercise = () => {
                 language: exercise.language,
             });
             setResults(response.data);
+            
+            const { score, testsPassed, testsTotal } = response.data;
+            const allPassed = testsPassed === testsTotal;
+            setExercise(prev => {
+                const prevStatus = prev.userProgress?.completion_status || 'in_progress';
+                let newStatus = prevStatus;
+                if (allPassed && prevStatus === 'in_progress') {
+                    newStatus = prev.requires_efficiency ? 'inefficient' : 'completed';
+                }
+                return {
+                    ...prev,
+                    userProgress: {
+                        ...prev.userProgress,
+                        best_score: Math.max(prev.userProgress?.best_score || 0, score),
+                        attempts: (prev.userProgress?.attempts || 0) + 1,
+                        completed: allPassed || prev.userProgress?.completed,
+                        completion_status: newStatus,
+                    }
+                };
+            });
+
+            // Refresh hints status after each submission (new hints may unlock)
+            if (showAIPanel) {
+                setTimeout(() => loadHintsStatus(), 500);
+            }
+
+            // Auto-analyze complexity only when ALL tests pass
+            if (testsPassed === testsTotal && code && code.trim().length > 0) {
+                setAnalyzingComplexity(true);
+                try {
+                    const complexityRes = await exerciseService.getComplexityAnalysis(id, { code });
+                    setComplexity(complexityRes.data);
+                    if (!showAIPanel) setShowAIPanel(true);
+
+                    if (complexityRes.data.isOptimal) {
+                        // Optimal! Update status accordingly
+                        setExercise(prev => ({
+                            ...prev,
+                            userProgress: {
+                                ...prev.userProgress,
+                                completion_status: 'completed',
+                                best_score: prev.requires_efficiency ? 100 : prev.userProgress?.best_score,
+                                efficiency_star: !prev.requires_efficiency ? true : prev.userProgress?.efficiency_star,
+                            }
+                        }));
+                        setHintMode('solved');
+                    } else if (!complexityRes.data.isOptimal) {
+                        // Not optimal — switch to optimization hints
+                        setHintMode('optimizing');
+                        setHints([
+                            { number: 1, text: null, unlocked: false },
+                            { number: 2, text: null, unlocked: false },
+                            { number: 3, text: null, unlocked: false },
+                        ]);
+                        setHintsUnlocked(0);
+                        setTimeout(() => loadHintsStatus('optimizing'), 500);
+                    }
+                } catch (err) {
+                    console.error('Auto complexity analysis failed:', err);
+                } finally {
+                    setAnalyzingComplexity(false);
+                }
+            } else if (testsPassed !== testsTotal) {
+                // Reset complexity and go back to solving mode
+                setComplexity(null);
+                if (hintMode !== 'solving') {
+                    setHintMode('solving');
+                    setHints([
+                        { number: 1, text: null, unlocked: false },
+                        { number: 2, text: null, unlocked: false },
+                        { number: 3, text: null, unlocked: false },
+                    ]);
+                    setHintsUnlocked(0);
+                    setTimeout(() => loadHintsStatus('solving'), 500);
+                }
+            }
         } catch (error) {
             console.error('Error submitting solution:', error);
-            alert('Failed to submit solution');
+            setResults({
+                score: 0,
+                testsPassed: 0,
+                testsTotal: 0,
+                results: [{
+                    passed: false,
+                    input: '',
+                    expected: '',
+                    actual: '',
+                    error: error.response?.data?.error || error.response?.data?.details || 'Failed to submit solution'
+                }]
+            });
         } finally {
             setSubmitting(false);
         }
@@ -83,9 +264,9 @@ const Exercise = () => {
     }
 
     return (
-        <div className="min-h-screen flex flex-col lg:flex-row">
+        <div className="flex flex-col lg:flex-row" style={{ height: 'calc(100vh - 4rem)', overflow: 'hidden' }}>
             {/* Left Panel - Description */}
-            <div className="lg:w-1/2 xl:w-2/5 p-6 overflow-y-auto bg-[#0a0a0f] border-r border-white/5" style={{ maxHeight: 'calc(100vh - 4rem)' }}>
+            <div className={`${showAIPanel ? 'lg:w-[30%]' : 'lg:w-1/2 xl:w-2/5'} p-6 overflow-y-auto bg-[#0a0a0f] border-r border-white/5 transition-all duration-300`}>
                 {/* Back Button */}
                 <button 
                     onClick={() => navigate(-1)}
@@ -136,33 +317,52 @@ const Exercise = () => {
                 </div>
 
                 {/* User Progress */}
-                {exercise.userProgress && (
-                    <div className="surface-card rounded-xl p-5">
-                        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Your Progress</h3>
-                        <div className="grid grid-cols-3 gap-4 text-center">
-                            <div>
-                                <div className="text-2xl font-bold gradient-text">{exercise.userProgress.best_score}%</div>
-                                <div className="text-xs text-gray-500">Best Score</div>
-                            </div>
-                            <div>
-                                <div className="text-2xl font-bold gradient-text">{exercise.userProgress.attempts}</div>
-                                <div className="text-xs text-gray-500">Attempts</div>
-                            </div>
-                            <div>
-                                <div className={`text-2xl ${exercise.userProgress.completed ? 'text-green-400' : 'text-gray-500'}`}>
-                                    {exercise.userProgress.completed ? '✓' : '○'}
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                    {exercise.userProgress.completed ? 'Completed' : 'In Progress'}
-                                </div>
-                            </div>
+                <div className="surface-card rounded-xl p-5">
+                    <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-4">Your Progress</h3>
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                            <div className="text-2xl font-bold gradient-text">{exercise.userProgress?.best_score || 0}%</div>
+                            <div className="text-xs text-gray-500">Best Score</div>
+                        </div>
+                        <div>
+                            <div className="text-2xl font-bold gradient-text">{exercise.userProgress?.attempts || 0}</div>
+                            <div className="text-xs text-gray-500">Attempts</div>
+                        </div>
+                        <div>
+                            {(() => {
+                                const status = exercise.userProgress?.completion_status || 'in_progress';
+                                const star = exercise.userProgress?.efficiency_star;
+                                if (status === 'completed') return (
+                                    <>
+                                        <div className="text-2xl text-green-400">✓{star ? ' ⭐' : ''}</div>
+                                        <div className="text-xs text-green-400">Completed{star ? ' (Optimal)' : ''}</div>
+                                    </>
+                                );
+                                if (status === 'inefficient') return (
+                                    <>
+                                        <div className="text-2xl text-amber-400">⚠</div>
+                                        <div className="text-xs text-amber-400">Needs Optimization</div>
+                                    </>
+                                );
+                                return (
+                                    <>
+                                        <div className="text-2xl text-gray-500">○</div>
+                                        <div className="text-xs text-gray-500">In Progress</div>
+                                    </>
+                                );
+                            })()}
                         </div>
                     </div>
-                )}
+                    {exercise.requires_efficiency && (
+                        <div className="mt-3 pt-3 border-t border-white/5 text-center">
+                            <span className="text-[10px] text-amber-400/70 bg-amber-500/10 px-2 py-1 rounded-full">⚡ Efficiency Required</span>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {/* Right Panel - Editor */}
-            <div className="lg:w-1/2 xl:w-3/5 flex flex-col bg-[#1e242e]" style={{ height: 'calc(100vh - 4rem)' }}>
+            {/* Center Panel - Editor */}
+            <div className={`${showAIPanel ? 'lg:w-[45%]' : 'lg:w-1/2 xl:w-3/5'} flex flex-col bg-[#1e242e] transition-all duration-300`} style={{ height: '100%', overflow: 'hidden' }}>
                 {/* Editor Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 bg-[#232a36]">
                     <div className="flex items-center gap-3">
@@ -182,33 +382,66 @@ const Exercise = () => {
                             }
                         </span>
                     </div>
-                    <button
-                        onClick={handleSubmit}
-                        disabled={submitting}
-                        className={`px-6 py-2 rounded-lg font-semibold text-sm transition-all ${
-                            submitting 
-                                ? 'bg-gray-600 cursor-not-allowed' 
-                                : 'gradient-bg hover:opacity-90'
-                        }`}
-                    >
-                        {submitting ? (
-                            <span className="flex items-center gap-2">
-                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                Running...
-                            </span>
-                        ) : (
-                            '▶ Run Code'
-                        )}
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setShowAIPanel(!showAIPanel)}
+                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                                showAIPanel
+                                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                    : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/10'
+                            }`}
+                            title="AI Assistant"
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 2a4 4 0 0 1 4 4v1a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2V6a4 4 0 0 1 4-4z"/>
+                                <path d="M9 14v1a3 3 0 0 0 6 0v-1"/>
+                                <line x1="9" y1="9" x2="9.01" y2="9"/>
+                                <line x1="15" y1="9" x2="15.01" y2="9"/>
+                                <path d="M5 20a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2H5v-2z"/>
+                            </svg>
+                            AI
+                        </button>
+                        <button
+                            onClick={handleSubmit}
+                            disabled={submitting}
+                            className={`px-6 py-2 rounded-lg font-semibold text-sm transition-all ${
+                                submitting 
+                                    ? 'bg-gray-600 cursor-not-allowed' 
+                                    : 'gradient-bg hover:opacity-90'
+                            }`}
+                        >
+                            {submitting ? (
+                                <span className="flex items-center gap-2">
+                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                    Running...
+                                </span>
+                            ) : (
+                                '▶ Run Code'
+                            )}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Monaco Editor */}
-                <div className="flex-1">
+                <div style={{ flex: results ? '0 0 40%' : '1 1 auto', minHeight: '200px', overflow: 'hidden' }}>
                     <Editor
                         height="100%"
                         language={exercise.language}
                         value={code}
-                        onChange={(value) => setCode(value || '')}
+                        onChange={(value) => { if (isMountedRef.current) setCode(value || ''); }}
+                        onMount={(editor) => { 
+                            if (isMountedRef.current) {
+                                editorRef.current = editor;
+                                const textArea = editor.getDomNode()?.querySelector('textarea');
+                                if (textArea) {
+                                    textArea.setAttribute('autocomplete', 'off');
+                                    textArea.setAttribute('autocorrect', 'off');
+                                    textArea.setAttribute('autocapitalize', 'off');
+                                    textArea.setAttribute('spellcheck', 'false');
+                                    textArea.setAttribute('data-form-type', 'other');
+                                }
+                            }
+                        }}
                         theme="vs-dark"
                         options={{
                             fontSize: 14,
@@ -227,14 +460,14 @@ const Exercise = () => {
 
                 {/* Results Panel */}
                 {results && (
-                    <div className="border-t border-white/5 bg-[#0a0a0f] max-h-80 overflow-y-auto">
+                    <div className="border-t border-white/5 bg-[#0a0a0f] overflow-y-auto" style={{ flex: '1 1 60%' }}>
                         {/* Results Header */}
                         <div className={`px-4 py-3 border-b border-white/5 ${
-                            results.score === 100 ? 'bg-green-500/10' : 'bg-amber-500/10'
+                            (results.score || 0) === 100 ? 'bg-green-500/10' : 'bg-amber-500/10'
                         }`}>
                             <div className="flex items-center justify-between">
                                 <h3 className="font-semibold flex items-center gap-2">
-                                    {results.score === 100 ? (
+                                    {(results.score || 0) === 100 ? (
                                         <>
                                             <span className="text-green-400">✓</span>
                                             <span className="text-green-400">All Tests Passed!</span>
@@ -242,21 +475,21 @@ const Exercise = () => {
                                     ) : (
                                         <>
                                             <span className="text-amber-400">⚠</span>
-                                            <span className="text-amber-400">{results.testsPassed}/{results.testsTotal} Tests Passed</span>
+                                            <span className="text-amber-400">{results.testsPassed || 0}/{results.testsTotal || 0} Tests Passed</span>
                                         </>
                                     )}
                                 </h3>
                                 <span className={`text-lg font-bold ${
-                                    results.score === 100 ? 'text-green-400' : 'text-amber-400'
+                                    (results.score || 0) === 100 ? 'text-green-400' : 'text-amber-400'
                                 }`}>
-                                    {results.score.toFixed(0)}%
+                                    {(results.score || 0).toFixed(0)}%
                                 </span>
                             </div>
                         </div>
 
                         {/* Test Results */}
                         <div className="p-4 space-y-3">
-                            {results.results.map((result, index) => (
+                            {results.results && results.results.length > 0 ? results.results.map((result, index) => (
                                 <div
                                     key={index}
                                     className={`rounded-lg p-4 ${
@@ -290,16 +523,231 @@ const Exercise = () => {
                                         <div>
                                             <span className="text-gray-500">Output: </span>
                                             <span className={result.passed ? 'text-green-400' : 'text-red-400'}>
-                                                {result.actual || result.error}
+                                                {result.actual || result.error || 'No output'}
                                             </span>
                                         </div>
                                     </div>
                                 </div>
-                            ))}
+                            )) : (
+                                <div className="text-gray-400 text-center py-4">
+                                    {results.error || 'No test results available'}
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
             </div>
+
+            {/* Right Panel - AI Assistant */}
+            {showAIPanel && (
+                <div className="lg:w-[25%] flex flex-col bg-[#0d0f15] border-l border-white/5 overflow-hidden" style={{ height: '100%' }}>
+                    {/* AI Panel Header */}
+                    <div className="px-4 py-3 border-b border-white/5 bg-gradient-to-r from-purple-500/10 to-pink-500/10">
+                        <div className="flex items-center justify-between">
+                            <h3 className="font-semibold text-sm flex items-center gap-2">
+                                <span className="text-purple-400">✦</span>
+                                AI Assistant
+                            </h3>
+                            <button
+                                onClick={() => setShowAIPanel(false)}
+                                className="text-gray-500 hover:text-white transition-colors text-lg"
+                            >
+                                ×
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        {/* Hints Section */}
+                        <div>
+                            {hintMode === 'solved' ? (
+                                /* Completed state — no hints needed */
+                                <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-5 text-center">
+                                    <div className="text-4xl mb-3">{exercise.userProgress?.efficiency_star || exercise.requires_efficiency ? '⭐' : '🎉'}</div>
+                                    <h4 className="font-semibold text-green-300 mb-1">Exercise Completed!</h4>
+                                    <p className="text-xs text-gray-400">
+                                        {exercise.requires_efficiency 
+                                            ? 'You achieved the optimal solution. Full marks awarded.'
+                                            : exercise.userProgress?.efficiency_star
+                                                ? 'Great work! You also achieved optimal complexity.'
+                                                : 'All tests passed. Well done!'}
+                                    </p>
+                                </div>
+                            ) : (
+                                /* Active hints */
+                                <>
+                                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center gap-2">
+                                        <span>{hintMode === 'optimizing' ? '⚡' : '💡'}</span> {hintMode === 'optimizing' ? 'Optimization Hints' : 'Progressive Hints'}
+                                    </h4>
+                                    {hintMode === 'optimizing' && (
+                                        <div className="mb-3 rounded-lg bg-amber-500/10 border border-amber-500/20 p-2">
+                                            <p className="text-[10px] text-amber-300">Your solution works but isn't optimal. Hints now guide you toward a more efficient approach.</p>
+                                        </div>
+                                    )}
+                            <div className="space-y-3">
+                                {hints.map((hint) => {
+                                    const isExpanded = expandedHints[hint.number];
+                                    const hasText = !!hint.text;
+                                    const toggleExpand = () => {
+                                        if (hasText) {
+                                            setExpandedHints(prev => ({ ...prev, [hint.number]: !prev[hint.number] }));
+                                        }
+                                    };
+
+                                    return (
+                                        <div
+                                            key={hint.number}
+                                            className={`rounded-lg border transition-all ${
+                                                hint.unlocked
+                                                    ? 'border-purple-500/30 bg-purple-500/5'
+                                                    : 'border-white/5 bg-white/[0.02]'
+                                            }`}
+                                        >
+                                            <div
+                                                className={`p-3 ${hasText ? 'cursor-pointer select-none' : ''}`}
+                                                onClick={hasText ? toggleExpand : undefined}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <span className={`text-xs font-semibold ${
+                                                        hint.unlocked ? 'text-purple-300' : 'text-gray-500'
+                                                    }`}>
+                                                        Hint {hint.number}
+                                                    </span>
+                                                    {hasText ? (
+                                                        <span className="text-[10px] text-gray-500 transition-transform duration-200" style={{ display: 'inline-block', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                                                            ▼
+                                                        </span>
+                                                    ) : !hint.unlocked ? (
+                                                        <span className="text-[10px] text-gray-600 flex items-center gap-1">
+                                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                                                                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM12 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2z"/>
+                                                            </svg>
+                                                            Locked
+                                                        </span>
+                                                    ) : null}
+                                                </div>
+                                                {/* Reveal button for unlocked but not yet generated */}
+                                                {!hasText && hint.unlocked && (
+                                                    <div className="mt-2">
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleGenerateHint(hint.number); }}
+                                                            disabled={loadingHint === hint.number}
+                                                            className="w-full py-2 px-3 rounded-md bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-xs font-medium transition-all flex items-center justify-center gap-2"
+                                                        >
+                                                            {loadingHint === hint.number ? (
+                                                                <>
+                                                                    <div className="w-3 h-3 border-2 border-purple-300/30 border-t-purple-300 rounded-full animate-spin"></div>
+                                                                    Generating...
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span>✦</span> Reveal Hint
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                {/* Locked message */}
+                                                {!hint.unlocked && (
+                                                    <div className="text-xs text-gray-600 mt-2">
+                                                        {attemptsUntilNextHint > 0 && hint.number === hintsUnlocked + 1 ? (
+                                                            <span>{attemptsUntilNextHint} more {hintMode === 'optimizing' ? 'submission' : 'failed attempt'}{attemptsUntilNextHint !== 1 ? 's' : ''} to unlock</span>
+                                                        ) : (
+                                                            <span>Keep trying to unlock</span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {/* Collapsible hint text */}
+                                                {hasText && isExpanded && (
+                                                    <p className="text-sm text-gray-300 leading-relaxed mt-2">{hint.text}</p>
+                                                )}
+                                            </div>
+                                            {/* Progress bar for next unlock */}
+                                            {!hint.unlocked && hint.number === hintsUnlocked + 1 && (
+                                                <div className="px-3 pb-3">
+                                                    <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                                                        <div
+                                                            className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-500"
+                                                            style={{ width: `${Math.max(0, ((hint.number * 2 - attemptsUntilNextHint) / (hint.number * 2)) * 100)}%` }}
+                                                        ></div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                                </>
+                            )}
+                        </div>
+
+                        {/* Divider */}
+                        <div className="border-t border-white/5"></div>
+
+                        {/* Complexity Analysis Section */}
+                        <div>
+                            <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center gap-2">
+                                <span>📊</span> Complexity Analysis
+                            </h4>
+                            
+                            {analyzingComplexity ? (
+                                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-4 flex flex-col items-center gap-2">
+                                    <div className="w-5 h-5 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin"></div>
+                                    <span className="text-xs text-gray-500">Analyzing complexity...</span>
+                                </div>
+                            ) : complexity ? (
+                                <div className="space-y-3">
+                                    {/* Bonus Test Case - Optimal Complexity */}
+                                    <div className={`rounded-lg border p-3 ${
+                                        complexity.isOptimal
+                                            ? 'border-green-500/30 bg-green-500/5'
+                                            : 'border-amber-500/30 bg-amber-500/5'
+                                    }`}>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className={complexity.isOptimal ? 'text-green-400' : 'text-amber-400'}>
+                                                {complexity.isOptimal ? '✓' : '✗'}
+                                            </span>
+                                            <span className="text-xs font-semibold text-white">Bonus: Optimal Complexity</span>
+                                        </div>
+                                        <div className="text-[10px] text-gray-500 space-y-1">
+                                            <div>Your solution: <span className="font-mono text-gray-300">{complexity.timeComplexity}</span> time, <span className="font-mono text-gray-300">{complexity.spaceComplexity}</span> space</div>
+                                            <div>Optimal: <span className="font-mono text-gray-300">{complexity.optimalTimeComplexity || '—'}</span> time, <span className="font-mono text-gray-300">{complexity.optimalSpaceComplexity || '—'}</span> space</div>
+                                        </div>
+                                    </div>
+
+                                    {/* Complexity Badges */}
+                                    <div className="flex gap-2">
+                                        <div className="flex-1 rounded-lg bg-blue-500/10 border border-blue-500/20 p-3 text-center">
+                                            <div className="text-[10px] text-blue-400/70 uppercase tracking-wide mb-1">Time</div>
+                                            <div className="font-mono text-sm font-bold text-blue-300">{complexity.timeComplexity}</div>
+                                        </div>
+                                        <div className="flex-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 text-center">
+                                            <div className="text-[10px] text-emerald-400/70 uppercase tracking-wide mb-1">Space</div>
+                                            <div className="font-mono text-sm font-bold text-emerald-300">{complexity.spaceComplexity}</div>
+                                        </div>
+                                    </div>
+
+                                    {/* Explanation */}
+                                    <div className="rounded-lg bg-white/[0.03] border border-white/5 p-3">
+                                        <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-1.5">Analysis</div>
+                                        <p className="text-xs text-gray-300 leading-relaxed">{complexity.explanation}</p>
+                                    </div>
+
+                                </div>
+                            ) : (
+                                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-4 text-center">
+                                    <div className="text-gray-600 mb-2">
+                                        <svg className="w-6 h-6 mx-auto" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM12 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2z"/>
+                                        </svg>
+                                    </div>
+                                    <p className="text-xs text-gray-500">Pass all tests to unlock complexity analysis & bonus challenge</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

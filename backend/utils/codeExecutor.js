@@ -78,20 +78,19 @@ const executeJavaScript = (code, testCase) => {
     // Parse input
     const inputs = JSON.parse(testCase.input);
     
+    // Extract function name before entering the sandbox
+    const functionMatch = code.match(/function\s+(\w+)/);
+    if (!functionMatch) {
+        throw new Error('No function found in code');
+    }
+    const functionName = functionMatch[1];
+    
     // Prepare the code to execute
     const fullCode = `
         ${code}
         
-        // Extract function name from code
-        const functionMatch = code.match(/function\\s+(\\w+)/);
-        if (!functionMatch) {
-            throw new Error('No function found in code');
-        }
-        const functionName = functionMatch[1];
-        
-        // Execute function with inputs
         const inputs = ${testCase.input};
-        const result = eval(functionName)(...inputs);
+        const result = ${functionName}(...inputs);
         JSON.stringify(result);
     `;
 

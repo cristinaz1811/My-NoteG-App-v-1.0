@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
@@ -6,9 +6,22 @@ const Navbar = () => {
     const { user, logout } = useContext(AuthContext);
     const navigate = useNavigate();
     const location = useLocation();
+    const [profileOpen, setProfileOpen] = useState(false);
+    const profileRef = useRef(null);
     
     // Check if on auth pages where logo should not be clickable
     const isAuthPage = ['/login', '/register', '/get-started'].includes(location.pathname);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (profileRef.current && !profileRef.current.contains(e.target)) {
+                setProfileOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const handleLogout = () => {
         logout();
@@ -25,7 +38,7 @@ const Navbar = () => {
     );
 
     return (
-        <nav className="fixed top-0 left-0 right-0 z-50 px-6 border-b border-white/5 overflow-hidden" style={{ background: 'linear-gradient(to bottom, rgba(18, 22, 28, 0.6) 0%, rgba(18, 22, 28, 0.3) 70%, transparent 100%)', backdropFilter: 'blur(12px)' }}>
+        <nav className="fixed top-0 left-0 right-0 z-50 px-6 border-b border-white/5" style={{ background: 'linear-gradient(to bottom, rgba(18, 22, 28, 0.6) 0%, rgba(18, 22, 28, 0.3) 70%, transparent 100%)', backdropFilter: 'blur(12px)' }}>
             {/* Decorative glow orbs */}
             <div className="absolute top-2 left-[20%] w-16 h-16 rounded-full opacity-20 animate-pulse" style={{ background: 'radial-gradient(circle, rgba(254, 244, 131, 0.4), transparent 70%)', animationDuration: '3s' }}></div>
             <div className="absolute top-4 left-[40%] w-8 h-8 rounded-full opacity-15 animate-pulse" style={{ background: 'radial-gradient(circle, rgba(161, 96, 157, 0.5), transparent 70%)', animationDuration: '4s' }}></div>
@@ -75,12 +88,44 @@ const Navbar = () => {
                                 Welcome, <span style={{ color: user.role === 'professor' ? '#a1609d' : '#fef483' }}>{user.username}</span>
                                 {user.role === 'professor' && <span className="ml-1 text-xs text-[#a1609d]">(Prof)</span>}
                             </span>
-                            <button 
-                                onClick={handleLogout}
-                                className="px-4 py-2 rounded-lg text-gray-300 hover:bg-white/10 transition-colors border-none bg-transparent cursor-pointer"
-                            >
-                                Logout
-                            </button>
+                            {/* Profile Dropdown */}
+                            <div className="relative" ref={profileRef}>
+                                <button 
+                                    onClick={() => setProfileOpen(!profileOpen)}
+                                    className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm border-2 cursor-pointer transition-all hover:scale-105"
+                                    style={{ 
+                                        background: user.role === 'professor' 
+                                            ? 'linear-gradient(135deg, #a1609d, #b88ab5)' 
+                                            : 'linear-gradient(135deg, #fef483, #a1609d)',
+                                        borderColor: user.role === 'professor' ? '#a1609d' : '#fef483'
+                                    }}
+                                >
+                                    {user.username?.charAt(0).toUpperCase()}
+                                </button>
+                                {profileOpen && (
+                                    <div className="absolute right-0 top-full mt-2 w-48 rounded-xl overflow-hidden shadow-2xl border border-white/10 z-50"
+                                         style={{ background: 'rgba(30, 35, 44, 0.98)', backdropFilter: 'blur(20px)' }}>
+                                        <div className="px-4 py-3 border-b border-white/10">
+                                            <p className="text-sm font-medium text-white truncate">{user.username}</p>
+                                            <p className="text-xs text-gray-400 truncate">{user.email}</p>
+                                        </div>
+                                        <div className="py-1">
+                                            <button
+                                                onClick={() => { setProfileOpen(false); navigate('/profile'); }}
+                                                className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-white/5 transition-colors border-none bg-transparent cursor-pointer flex items-center gap-2"
+                                            >
+                                                <span>👤</span> Profile
+                                            </button>
+                                            <button
+                                                onClick={() => { setProfileOpen(false); handleLogout(); }}
+                                                className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-white/5 transition-colors border-none bg-transparent cursor-pointer flex items-center gap-2"
+                                            >
+                                                <span>🚪</span> Logout
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </>
                     ) : (
                         <>

@@ -10,6 +10,7 @@ const Register = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [showLoginLink, setShowLoginLink] = useState(false);
     const { register, googleLogin } = useContext(AuthContext);
     const navigate = useNavigate();
 
@@ -51,7 +52,7 @@ const Register = () => {
     const handleGoogleResponse = async (response) => {
         try {
             setError('');
-            const result = await googleLogin(response.credential, role);
+            const result = await googleLogin(response.credential, role, 'signup');
             
             // Check if user needs to choose username
             if (result.data.needsUsername) {
@@ -67,13 +68,21 @@ const Register = () => {
                 navigate(isProfessor ? '/professor' : '/student');
             }
         } catch (err) {
-            setError(err.response?.data?.error || 'Google sign-up failed');
+            const errorData = err.response?.data;
+            if (errorData?.existingAccount) {
+                setError('An account with this email already exists. Please log in instead.');
+                setShowLoginLink(true);
+            } else {
+                setError(errorData?.error || 'Google sign-up failed');
+                setShowLoginLink(false);
+            }
         }
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
+        setShowLoginLink(false);
 
         try {
             const response = await register({ username, email, password, role });
@@ -120,6 +129,16 @@ const Register = () => {
                     {error && (
                         <div className="error-message mb-6">
                             {error}
+                            {showLoginLink && (
+                                <div className="mt-2">
+                                    <Link 
+                                        to="/login" 
+                                        className="text-[#fef483] hover:text-[#fff9c4] font-medium text-sm"
+                                    >
+                                        Go to Login →
+                                    </Link>
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -147,10 +166,11 @@ const Register = () => {
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                placeholder="you@example.com"
+                                placeholder="you@university.edu"
                                 required
                                 className="w-full"
                             />
+                            <p className="text-xs text-gray-500 mt-1">Use your academic/university email address</p>
                         </div>
 
                         <div>

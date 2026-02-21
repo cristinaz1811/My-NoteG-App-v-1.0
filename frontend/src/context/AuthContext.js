@@ -52,8 +52,8 @@ export const AuthProvider = ({ children }) => {
         return response;
     };
 
-    const googleLogin = async (credential, role = 'student') => {
-        const response = await authService.googleAuth(credential, role);
+    const googleLogin = async (credential, role = 'student', mode) => {
+        const response = await authService.googleAuth(credential, role, mode);
         
         // If user needs to choose username, return the response without setting auth
         if (response.data.needsUsername) {

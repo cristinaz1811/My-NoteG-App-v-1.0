@@ -148,11 +148,33 @@ const unenrollFromCourse = async (req, res) => {
             return res.status(404).json({ error: 'Not enrolled in this course' });
         }
 
-        // Delete enrollment and related data
+        // Delete all progress data for this course
+        // First, delete data linked through exercises in this course
+        await db.query(
+            `DELETE FROM ai_complexity_analysis 
+             WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
+            [userId, courseId]
+        );
+        await db.query(
+            `DELETE FROM ai_hints 
+             WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
+            [userId, courseId]
+        );
+        await db.query(
+            `DELETE FROM submissions 
+             WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
+            [userId, courseId]
+        );
+        await db.query(
+            `DELETE FROM user_progress 
+             WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
+            [userId, courseId]
+        );
         await db.query(
             'DELETE FROM time_sessions WHERE user_id = $1 AND course_id = $2',
             [userId, courseId]
         );
+        // Finally, delete the enrollment itself
         await db.query(
             'DELETE FROM enrollments WHERE user_id = $1 AND course_id = $2',
             [userId, courseId]

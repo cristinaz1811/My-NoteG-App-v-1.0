@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hide webpack dev server error overlay for Monaco errors */
+#webpack-dev-server-client-overlay,
+#webpack-dev-server-client-overlay-div {
+    display: none !important;
+}
+
 /* CSS Variables for the dark theme - matches logo colors */
 :root {
     --bg-color: #1a1f28;

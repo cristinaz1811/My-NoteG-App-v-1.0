@@ -10,7 +10,8 @@ const {
     resetPassword,
     googleAuth,
     completeGoogleSignup,
-    checkUsername
+    checkUsername,
+    deleteAccount
 } = require('../controllers/authController');
 const { authMiddleware } = require('../middleware/auth');
 
@@ -33,5 +34,8 @@ router.post('/google/complete', completeGoogleSignup);
 
 // Username check
 router.get('/check-username', checkUsername);
+
+// Delete account
+router.delete('/delete-account', authMiddleware, deleteAccount);
 
 module.exports = router;
