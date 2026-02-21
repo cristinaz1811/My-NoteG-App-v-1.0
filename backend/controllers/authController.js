@@ -3,6 +3,14 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const db = require('../config/database');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../utils/emailService');
+const swot = require('swot-node');
+
+// Validate that an email is from an academic institution
+const validateAcademicEmail = async (email) => {
+    // Skip check if disabled via env variable
+    if (process.env.REQUIRE_ACADEMIC_EMAIL === 'false') return true;
+    return await swot.isAcademic(email);
+};
 
 // Generate a random token
 const generateToken = () => {
@@ -22,6 +30,12 @@ const register = async (req, res) => {
         const validRoles = ['student', 'professor'];
         if (!validRoles.includes(role)) {
             return res.status(400).json({ error: 'Invalid role' });
+        }
+
+        // Validate academic email for new registrations
+        const isAcademic = await validateAcademicEmail(email);
+        if (!isAcademic) {
+            return res.status(400).json({ error: 'Only academic email addresses are allowed. Please use your university email to register.' });
         }
 
         // Check if user already exists
@@ -348,7 +362,7 @@ const resetPassword = async (req, res) => {
 // Google OAuth login/register
 const googleAuth = async (req, res) => {
     try {
-        const { credential, role = 'student' } = req.body;
+        const { credential, role = 'student', mode } = req.body;
 
         if (!credential) {
             return res.status(400).json({ error: 'Google credential is required' });
@@ -381,6 +395,12 @@ const googleAuth = async (req, res) => {
         let isNewUser = false;
 
         if (result.rows.length === 0) {
+            // New user - validate academic email
+            const isAcademic = await validateAcademicEmail(email);
+            if (!isAcademic) {
+                return res.status(400).json({ error: 'Only academic email addresses are allowed. Please use a Google account linked to your university email.' });
+            }
+
             // New user - they need to choose a username
             isNewUser = true;
             
@@ -399,6 +419,14 @@ const googleAuth = async (req, res) => {
             });
         } else {
             user = result.rows[0];
+
+            // If this is a signup attempt and the user already exists, don't auto-login
+            if (mode === 'signup') {
+                return res.status(409).json({ 
+                    error: 'An account with this email already exists. Please log in instead.',
+                    existingAccount: true
+                });
+            }
             
             // If user exists but wasn't using Google, link the accounts
             if (!user.google_id) {
@@ -528,6 +556,66 @@ const completeGoogleSignup = async (req, res) => {
     }
 };
 
+// Delete user account and all associated data
+const deleteAccount = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        // Get all courses the user is enrolled in
+        const enrollments = await db.query(
+            'SELECT course_id FROM enrollments WHERE user_id = $1',
+            [userId]
+        );
+
+        // Delete all progress data for each enrolled course
+        for (const enrollment of enrollments.rows) {
+            const courseId = enrollment.course_id;
+            await db.query(
+                `DELETE FROM ai_complexity_analysis 
+                 WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
+                [userId, courseId]
+            );
+            await db.query(
+                `DELETE FROM ai_hints 
+                 WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
+                [userId, courseId]
+            );
+            await db.query(
+                `DELETE FROM submissions 
+                 WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
+                [userId, courseId]
+            );
+            await db.query(
+                `DELETE FROM user_progress 
+                 WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
+                [userId, courseId]
+            );
+            await db.query(
+                'DELETE FROM time_sessions WHERE user_id = $1 AND course_id = $2',
+                [userId, courseId]
+            );
+        }
+
+        // Delete enrollments
+        await db.query('DELETE FROM enrollments WHERE user_id = $1', [userId]);
+
+        // Delete any remaining submissions/progress not tied to enrollments
+        await db.query('DELETE FROM ai_complexity_analysis WHERE user_id = $1', [userId]);
+        await db.query('DELETE FROM ai_hints WHERE user_id = $1', [userId]);
+        await db.query('DELETE FROM submissions WHERE user_id = $1', [userId]);
+        await db.query('DELETE FROM user_progress WHERE user_id = $1', [userId]);
+        await db.query('DELETE FROM time_sessions WHERE user_id = $1', [userId]);
+
+        // Finally delete the user
+        await db.query('DELETE FROM users WHERE id = $1', [userId]);
+
+        res.json({ message: 'Account deleted successfully' });
+    } catch (error) {
+        console.error('Delete account error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 // Check if username is available
 const checkUsername = async (req, res) => {
     try {
@@ -559,5 +647,6 @@ module.exports = {
     resetPassword,
     googleAuth,
     completeGoogleSignup,
-    checkUsername
+    checkUsername,
+    deleteAccount
 };

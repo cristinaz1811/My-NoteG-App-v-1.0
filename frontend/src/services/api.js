@@ -31,9 +31,10 @@ export const authService = {
     forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
     resetPassword: (token, password) => api.post('/auth/reset-password', { token, password }),
     // Google OAuth
-    googleAuth: (credential, role) => api.post('/auth/google', { credential, role }),
+    googleAuth: (credential, role, mode) => api.post('/auth/google', { credential, role, mode }),
     completeGoogleSignup: (tempToken, username) => api.post('/auth/google/complete', { tempToken, username }),
     checkUsername: (username) => api.get(`/auth/check-username?username=${encodeURIComponent(username)}`),
+    deleteAccount: () => api.delete('/auth/delete-account'),
 };
 
 // Course services
