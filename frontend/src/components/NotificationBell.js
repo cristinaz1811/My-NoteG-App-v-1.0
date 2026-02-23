@@ -80,7 +80,7 @@ const NotificationBell = () => {
             {isOpen && (
                 <div 
                     className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-2xl overflow-hidden shadow-2xl border border-white/10 z-50"
-                    style={{ background: 'rgba(30, 35, 44, 0.98)', backdropFilter: 'blur(20px)', maxHeight: '480px' }}
+                    style={{ background: 'var(--dropdown-bg)', backdropFilter: 'blur(20px)', maxHeight: '480px' }}
                 >
                     {/* Header */}
                     <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">

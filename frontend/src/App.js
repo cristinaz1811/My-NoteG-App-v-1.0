@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
+import { ThemeProvider } from './context/ThemeContext';
 import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -61,7 +62,7 @@ const AnimatedBackground = () => (
 // Main Landing Page (simple welcome screen)
 const LandingPage = () => {
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #1a1f28 0%, #252c38 50%, #1a1f28 100%)' }}>
+        <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden" style={{ background: 'var(--gradient-page)' }}>
             {/* Floating background shapes */}
             <div className="absolute w-96 h-96 rounded-full -top-48 -left-48 opacity-10 animate-pulse" style={{ background: 'radial-gradient(circle, rgba(161, 96, 157, 0.6), transparent)' }}></div>
             <div className="absolute w-72 h-72 rounded-full -bottom-36 -right-36 opacity-10 animate-pulse" style={{ background: 'radial-gradient(circle, rgba(254, 244, 131, 0.6), transparent)', animationDelay: '1s' }}></div>
@@ -237,7 +238,7 @@ const Home = () => {
             </section>
 
             {/* Features Section */}
-            <section className="pt-12 pb-24 px-6" style={{ background: 'rgba(35, 42, 54, 0.6)' }}>
+            <section className="pt-12 pb-24 px-6" style={{ background: 'var(--section-bg)' }}>
                 <div className="max-w-7xl mx-auto">
                     <div className="text-center mb-16">
                         <h2 className="text-3xl sm:text-4xl font-bold mb-4">
@@ -288,6 +289,7 @@ const Home = () => {
 function App() {
     return (
         <Router>
+            <ThemeProvider>
             <AuthProvider>
                 <NotificationProvider>
                 <AnimatedBackground />
@@ -430,6 +432,7 @@ function App() {
                 </Routes>
                 </NotificationProvider>
             </AuthProvider>
+            </ThemeProvider>
         </Router>
     );
 }

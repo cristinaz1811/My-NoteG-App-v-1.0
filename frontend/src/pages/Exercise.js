@@ -3,10 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { exerciseService, notificationService } from '../services/api';
 import SubmissionHistory from '../components/SubmissionHistory';
+import { useTheme } from '../context/ThemeContext';
 
 const Exercise = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { isDark } = useTheme();
     const [exercise, setExercise] = useState(null);
     const [code, setCode] = useState('');
     const [results, setResults] = useState(null);
@@ -496,7 +498,7 @@ const Exercise = () => {
                                 }
                             }
                         }}
-                        theme="vs-dark"
+                        theme={isDark ? "vs-dark" : "light"}
                         options={{
                             fontSize: 14,
                             fontFamily: "'JetBrains Mono', 'Fira Code', monospace",

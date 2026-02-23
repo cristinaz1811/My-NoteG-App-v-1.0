@@ -135,7 +135,7 @@ const PlagiarismDashboard = () => {
                             </h3>
                             <div className="space-y-2">
                                 {notifications.filter(n => !n.is_read).slice(0, 5).map(notif => (
-                                    <div key={notif.id} className="flex items-center justify-between p-3 rounded-lg" style={{ background: 'rgba(30, 35, 44, 0.8)' }}>
+                                    <div key={notif.id} className="flex items-center justify-between p-3 rounded-lg" style={{ background: 'var(--surface-color)' }}>
                                         <div className="flex-1">
                                             <p className="text-sm text-gray-300">{notif.message}</p>
                                             <p className="text-xs text-gray-500 mt-1">
@@ -182,7 +182,7 @@ const PlagiarismDashboard = () => {
                                         style={{ 
                                             background: selectedCourse?.id === course.id 
                                                 ? 'linear-gradient(135deg, rgba(161, 96, 157, 0.3), rgba(184, 138, 181, 0.2))' 
-                                                : 'rgba(30, 35, 44, 0.5)',
+                                                : 'var(--overlay-light)',
                                             border: selectedCourse?.id === course.id ? '1px solid rgba(161, 96, 157, 0.5)' : '1px solid transparent'
                                         }}
                                     >
@@ -230,7 +230,7 @@ const PlagiarismDashboard = () => {
                                     {exercises.length > 0 ? (
                                         <div className="space-y-3">
                                             {exercises.map(ex => (
-                                                <div key={ex.id} className="flex items-center justify-between p-4 rounded-lg" style={{ background: 'rgba(30, 35, 44, 0.6)' }}>
+                                                <div key={ex.id} className="flex items-center justify-between p-4 rounded-lg" style={{ background: 'var(--overlay-light)' }}>
                                                     <div className="flex-1">
                                                         <div className="font-medium text-white">{ex.title}</div>
                                                         <div className="text-xs text-gray-500 mt-1">
@@ -284,17 +284,17 @@ const PlagiarismDashboard = () => {
                                                         Scan Complete
                                                     </h3>
                                                     <div className="grid grid-cols-3 gap-4 mb-4">
-                                                        <div className="text-center p-3 rounded-lg" style={{ background: 'rgba(30, 35, 44, 0.8)' }}>
+                                                        <div className="text-center p-3 rounded-lg" style={{ background: 'var(--surface-color)' }}>
                                                             <div className="text-2xl font-bold text-white">{scanResult.report?.totalSubmissions || 0}</div>
                                                             <div className="text-xs text-gray-500">Submissions</div>
                                                         </div>
-                                                        <div className="text-center p-3 rounded-lg" style={{ background: 'rgba(30, 35, 44, 0.8)' }}>
+                                                        <div className="text-center p-3 rounded-lg" style={{ background: 'var(--surface-color)' }}>
                                                             <div className="text-2xl font-bold" style={{ color: scanResult.report?.flaggedPairs > 0 ? '#ef4444' : '#22c55e' }}>
                                                                 {scanResult.report?.flaggedPairs || 0}
                                                             </div>
                                                             <div className="text-xs text-gray-500">Flagged Pairs</div>
                                                         </div>
-                                                        <div className="text-center p-3 rounded-lg" style={{ background: 'rgba(30, 35, 44, 0.8)' }}>
+                                                        <div className="text-center p-3 rounded-lg" style={{ background: 'var(--surface-color)' }}>
                                                             <div className="text-2xl font-bold" style={{ color: getSeverityColor(scanResult.report?.maxSimilarity || 0) }}>
                                                                 {scanResult.report?.maxSimilarity?.toFixed(1) || 0}%
                                                             </div>
@@ -305,7 +305,7 @@ const PlagiarismDashboard = () => {
                                                     {scanResult.matches?.length > 0 && (
                                                         <div className="space-y-2">
                                                             {scanResult.matches.map((match, idx) => (
-                                                                <div key={idx} className="flex items-center justify-between p-3 rounded-lg" style={{ background: 'rgba(30, 35, 44, 0.8)' }}>
+                                                                <div key={idx} className="flex items-center justify-between p-3 rounded-lg" style={{ background: 'var(--surface-color)' }}>
                                                                     <div className="flex items-center gap-3">
                                                                         <span className="text-sm font-medium text-gray-300">
                                                                             {match.userA.username}
@@ -349,7 +349,7 @@ const PlagiarismDashboard = () => {
                                             {reports.map(report => (
                                                 <div key={report.id} 
                                                      className="flex items-center justify-between p-4 rounded-lg cursor-pointer transition-all hover:scale-[1.01]"
-                                                     style={{ background: 'rgba(30, 35, 44, 0.6)' }}
+                                                     style={{ background: 'var(--overlay-light)' }}
                                                      onClick={() => navigate(`/professor/plagiarism/report/${report.id}`)}>
                                                     <div className="flex-1">
                                                         <div className="font-medium text-white">{report.exercise_title}</div>

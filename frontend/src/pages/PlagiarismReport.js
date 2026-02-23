@@ -161,7 +161,7 @@ const PlagiarismReport = () => {
                                                 style={{
                                                     background: selectedMatch?.id === match.id
                                                         ? 'linear-gradient(135deg, rgba(161, 96, 157, 0.3), rgba(184, 138, 181, 0.2))'
-                                                        : 'rgba(30, 35, 44, 0.5)',
+                                                        : 'var(--overlay-light)',
                                                     border: selectedMatch?.id === match.id ? '1px solid rgba(161, 96, 157, 0.5)' : '1px solid transparent'
                                                 }}
                                             >
@@ -251,7 +251,7 @@ const PlagiarismReport = () => {
                                                 </div>
                                             </div>
                                             <pre className="p-4 text-sm font-mono overflow-x-auto max-h-[500px] overflow-y-auto m-0"
-                                                 style={{ color: '#e2e8f0', background: 'rgba(15, 18, 25, 0.6)' }}>
+                                                 style={{ color: 'var(--text-color)', background: 'var(--code-bg-dark)' }}>
                                                 <code>{selectedMatch.code_a}</code>
                                             </pre>
                                         </div>
@@ -272,7 +272,7 @@ const PlagiarismReport = () => {
                                                 </div>
                                             </div>
                                             <pre className="p-4 text-sm font-mono overflow-x-auto max-h-[500px] overflow-y-auto m-0"
-                                                 style={{ color: '#e2e8f0', background: 'rgba(15, 18, 25, 0.6)' }}>
+                                                 style={{ color: 'var(--text-color)', background: 'var(--code-bg-dark)' }}>
                                                 <code>{selectedMatch.code_b}</code>
                                             </pre>
                                         </div>

@@ -178,7 +178,7 @@ const Notifications = () => {
                                         }`}
                                         style={!notification.is_read ? { 
                                             borderColor: getNotificationColor(notification.type) + '30',
-                                            background: `rgba(30, 35, 44, 0.95)`,
+                                            background: 'var(--surface-color)',
                                             ringColor: getNotificationColor(notification.type) + '30'
                                         } : {}}
                                     >
