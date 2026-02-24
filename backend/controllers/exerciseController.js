@@ -22,12 +22,22 @@ const getExerciseById = async (req, res) => {
 
         // Get user progress if authenticated
         let userProgress = null;
+        let timedSession = null;
         if (req.user) {
             const progressResult = await db.query(
                 'SELECT * FROM user_progress WHERE user_id = $1 AND exercise_id = $2',
                 [req.user.id, id]
             );
             userProgress = progressResult.rows[0] || null;
+
+            // Get timed session if exercise has a time limit
+            if (exerciseResult.rows[0].time_limit_minutes) {
+                const sessionResult = await db.query(
+                    'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
+                    [req.user.id, id]
+                );
+                timedSession = sessionResult.rows[0] || null;
+            }
         }
 
         res.json({
@@ -35,6 +45,7 @@ const getExerciseById = async (req, res) => {
             testCases: testCasesResult.rows.filter(tc => !tc.is_hidden),
             totalTestCases: testCasesResult.rows.length,
             userProgress,
+            timedSession,
         });
     } catch (error) {
         console.error('Get exercise error:', error);
@@ -44,13 +55,13 @@ const getExerciseById = async (req, res) => {
 
 const createExercise = async (req, res) => {
     try {
-        const { courseId, title, description, difficulty, starterCode, language, testCases, chapter_id, requires_efficiency } = req.body;
+        const { courseId, title, description, difficulty, starterCode, language, testCases, chapter_id, requires_efficiency, time_limit_minutes } = req.body;
 
         // Create exercise
         const exerciseResult = await db.query(
-            `INSERT INTO exercises (course_id, title, description, difficulty, starter_code, language, chapter_id, requires_efficiency) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-            [courseId, title, description, difficulty, starterCode, language, chapter_id || null, requires_efficiency || false]
+            `INSERT INTO exercises (course_id, title, description, difficulty, starter_code, language, chapter_id, requires_efficiency, time_limit_minutes) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+            [courseId, title, description, difficulty, starterCode, language, chapter_id || null, requires_efficiency || false, time_limit_minutes || null]
         );
 
         const exercise = exerciseResult.rows[0];
@@ -92,6 +103,28 @@ const submitSolution = async (req, res) => {
             return res.status(404).json({ error: 'Exercise not found' });
         }
 
+        const exercise = exerciseResult.rows[0];
+
+        // Check if this is a timed exercise and if the timer has expired
+        if (exercise.time_limit_minutes) {
+            const sessionResult = await db.query(
+                'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
+                [userId, id]
+            );
+            const session = sessionResult.rows[0];
+            if (!session) {
+                return res.status(400).json({ error: 'You must start the timer before submitting. Please refresh the page.' });
+            }
+            if (new Date() > new Date(session.expires_at)) {
+                // Mark session as expired
+                await db.query(
+                    'UPDATE timed_sessions SET time_expired = TRUE WHERE id = $1',
+                    [session.id]
+                );
+                return res.status(403).json({ error: 'Time has expired for this exercise. You can no longer submit solutions.', timeExpired: true });
+            }
+        }
+
         const testCasesResult = await db.query(
             'SELECT * FROM test_cases WHERE exercise_id = $1',
             [id]
@@ -106,7 +139,6 @@ const submitSolution = async (req, res) => {
         const testsPassed = results.filter(r => r.passed).length;
         const testsTotal = testCases.length;
         const allPassed = testsPassed === testsTotal;
-        const exercise = exerciseResult.rows[0];
         
         // Score logic:
         // - If requires_efficiency: all tests pass = 80%, optimal complexity = 100%
@@ -229,7 +261,7 @@ const getSubmissionDetail = async (req, res) => {
 const updateExercise = async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency } = req.body;
+        const { title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency, time_limit_minutes } = req.body;
         const userId = req.user.id;
 
         // Verify ownership through course
@@ -247,6 +279,9 @@ const updateExercise = async (req, res) => {
             return res.status(403).json({ error: 'Not authorized' });
         }
 
+        // For time_limit_minutes, allow explicit null to remove the limit
+        const timeLimitValue = time_limit_minutes === null ? null : (time_limit_minutes !== undefined ? time_limit_minutes : exercise.rows[0].time_limit_minutes);
+
         const result = await db.query(`
             UPDATE exercises 
             SET title = COALESCE($1, title),
@@ -257,10 +292,11 @@ const updateExercise = async (req, res) => {
                 chapter_id = COALESCE($6, chapter_id),
                 order_index = COALESCE($7, order_index),
                 requires_efficiency = COALESCE($8, requires_efficiency),
+                time_limit_minutes = $9,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = $9
+            WHERE id = $10
             RETURNING *
-        `, [title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency, id]);
+        `, [title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency, timeLimitValue, id]);
 
         res.json(result.rows[0]);
     } catch (error) {
@@ -645,6 +681,84 @@ const getComplexityAnalysis = async (req, res) => {
     }
 };
 
+// Start a timed session for an exercise
+const startTimedSession = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+
+        // Get exercise to check time limit
+        const exerciseResult = await db.query('SELECT * FROM exercises WHERE id = $1', [id]);
+        if (exerciseResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Exercise not found' });
+        }
+
+        const exercise = exerciseResult.rows[0];
+        if (!exercise.time_limit_minutes) {
+            return res.status(400).json({ error: 'This exercise does not have a time limit' });
+        }
+
+        // Check if session already exists
+        const existingSession = await db.query(
+            'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
+            [userId, id]
+        );
+
+        if (existingSession.rows.length > 0) {
+            // Return existing session
+            return res.json(existingSession.rows[0]);
+        }
+
+        // Create new session
+        const expiresAt = new Date(Date.now() + exercise.time_limit_minutes * 60 * 1000);
+        const result = await db.query(
+            `INSERT INTO timed_sessions (user_id, exercise_id, started_at, expires_at)
+             VALUES ($1, $2, CURRENT_TIMESTAMP, $3)
+             RETURNING *`,
+            [userId, id, expiresAt]
+        );
+
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        console.error('Start timed session error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Get timed session status
+const getTimedSession = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+
+        const result = await db.query(
+            'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
+            [userId, id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.json({ session: null });
+        }
+
+        const session = result.rows[0];
+        const now = new Date();
+        const expired = now > new Date(session.expires_at);
+
+        if (expired && !session.time_expired) {
+            await db.query(
+                'UPDATE timed_sessions SET time_expired = TRUE WHERE id = $1',
+                [session.id]
+            );
+            session.time_expired = true;
+        }
+
+        res.json({ session });
+    } catch (error) {
+        console.error('Get timed session error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 module.exports = {
     getExerciseById,
     createExercise,
@@ -660,4 +774,6 @@ module.exports = {
     getAIHints,
     generateAIHint,
     getComplexityAnalysis,
+    startTimedSession,
+    getTimedSession,
 };

@@ -733,14 +733,16 @@ const ExerciseModal = ({ chapters, onClose, onSubmit }) => {
         language: 'javascript',
         starterCode: '',
         chapter_id: '',
-        requires_efficiency: false
+        requires_efficiency: false,
+        time_limit_minutes: ''
     });
 
     const handleSubmit = (e) => {
         e.preventDefault();
         onSubmit({
             ...formData,
-            chapter_id: formData.chapter_id || null
+            chapter_id: formData.chapter_id || null,
+            time_limit_minutes: formData.time_limit_minutes || null
         });
     };
 
@@ -833,6 +835,24 @@ const ExerciseModal = ({ chapters, onClose, onSubmit }) => {
                         <div>
                             <label htmlFor="requires_efficiency" className="text-sm font-medium text-gray-300 cursor-pointer">Require Efficient Solution</label>
                             <p className="text-xs text-gray-500">Students must achieve optimal time complexity for full marks (80% for correct but inefficient)</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
+                        <div className="flex-1">
+                            <label className="text-sm font-medium text-gray-300 mb-1 block">⏱ Time Limit (Quiz Mode)</label>
+                            <p className="text-xs text-gray-500 mb-2">Set a countdown timer for exam-like conditions. Leave empty for no limit.</p>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="number"
+                                    value={formData.time_limit_minutes}
+                                    onChange={(e) => setFormData({ ...formData, time_limit_minutes: e.target.value === '' ? '' : parseInt(e.target.value) || '' })}
+                                    min="1"
+                                    max="300"
+                                    placeholder="e.g. 30"
+                                    className="w-24 text-center"
+                                />
+                                <span className="text-sm text-gray-400">minutes</span>
+                            </div>
                         </div>
                     </div>
                     <div className="flex justify-end gap-3">

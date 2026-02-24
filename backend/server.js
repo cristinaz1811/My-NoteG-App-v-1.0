@@ -9,6 +9,8 @@ require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const courseRoutes = require('./routes/courses');
 const exerciseRoutes = require('./routes/exercises');
+const notificationRoutes = require('./routes/notifications');
+const { registerClient, removeClient } = require('./utils/notificationService');
 const plagiarismRoutes = require('./routes/plagiarism');
 const notificationRoutes = require('./routes/notifications');
 const { registerClient, removeClient } = require('./utils/notificationService');

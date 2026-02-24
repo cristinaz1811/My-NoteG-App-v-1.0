@@ -293,6 +293,11 @@ const MyCourseDetail = () => {
                                                     <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded">
                                                         {exercise.language}
                                                     </span>
+                                                    {exercise.time_limit_minutes && (
+                                                        <span className="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded flex items-center gap-1">
+                                                            ⏱ {exercise.time_limit_minutes}m
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>

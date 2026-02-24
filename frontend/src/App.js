@@ -427,6 +427,8 @@ function App() {
                             </ProtectedRoute>
                         } 
                     />
+                        } 
+                    />
                 </Routes>
                 </NotificationProvider>
             </AuthProvider>

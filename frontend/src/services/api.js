@@ -79,6 +79,9 @@ export const exerciseService = {
     getAIHints: (id, mode) => api.get(`/exercises/${id}/ai-hints`, { params: { mode } }),
     generateAIHint: (id, data) => api.post(`/exercises/${id}/ai-hints/generate`, data),
     getComplexityAnalysis: (id, data) => api.post(`/exercises/${id}/ai-complexity`, data),
+    // Timed sessions
+    startTimedSession: (id) => api.post(`/exercises/${id}/timed-session/start`),
+    getTimedSession: (id) => api.get(`/exercises/${id}/timed-session`),
     createExercise: (exerciseData) => api.post('/exercises', exerciseData),
     // Professor endpoints
     createProfessorExercise: (exerciseData) => api.post('/exercises/professor/create', exerciseData),

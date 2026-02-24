@@ -40,6 +40,13 @@ const Exercise = () => {
     const [helpSending, setHelpSending] = useState(false);
     const [helpSent, setHelpSent] = useState(false);
 
+    // Timer / Quiz mode state
+    const [timedSession, setTimedSession] = useState(null);
+    const [timeRemaining, setTimeRemaining] = useState(null); // seconds
+    const [timerExpired, setTimerExpired] = useState(false);
+    const [showTimerStartModal, setShowTimerStartModal] = useState(false);
+    const timerIntervalRef = useRef(null);
+
     const handleRequestHelp = async () => {
         if (helpSending) return;
         setHelpSending(true);
@@ -58,6 +65,60 @@ const Exercise = () => {
         }
     };
 
+<<<<<<< feature/timed-exercises-quiz-mode
+    // Timer helper: format seconds as MM:SS
+    const formatTimer = (seconds) => {
+        if (seconds == null || seconds < 0) return '00:00';
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    };
+
+    // Start countdown interval from a session
+    const startCountdown = useCallback((session) => {
+        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+        const expiresAt = new Date(session.expires_at).getTime();
+
+        const tick = () => {
+            const now = Date.now();
+            const remaining = Math.max(0, Math.floor((expiresAt - now) / 1000));
+            setTimeRemaining(remaining);
+            if (remaining <= 0) {
+                setTimerExpired(true);
+                clearInterval(timerIntervalRef.current);
+                timerIntervalRef.current = null;
+            }
+        };
+        tick();
+        timerIntervalRef.current = setInterval(tick, 1000);
+    }, []);
+
+    // Handle starting a timed session
+    const handleStartTimer = async () => {
+        try {
+            const response = await exerciseService.startTimedSession(id);
+            setTimedSession(response.data);
+            setShowTimerStartModal(false);
+            if (response.data.time_expired) {
+                setTimerExpired(true);
+            } else {
+                startCountdown(response.data);
+            }
+        } catch (error) {
+            console.error('Error starting timed session:', error);
+            alert(error.response?.data?.error || 'Failed to start timer');
+        }
+    };
+
+    // Cleanup timer on unmount
+    useEffect(() => {
+        return () => {
+            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+        };
+    }, []);
+
+=======
+>>>>>>> main
     // Cleanup editor on unmount
     useEffect(() => {
         isMountedRef.current = true;
@@ -91,6 +152,22 @@ const Exercise = () => {
                 setHintMode('solved');
             } else if (status === 'inefficient') {
                 setHintMode('optimizing');
+            }
+
+            // Handle timed exercise session
+            if (response.data.time_limit_minutes) {
+                const sessionData = response.data.timedSession;
+                if (sessionData) {
+                    setTimedSession(sessionData);
+                    if (sessionData.time_expired || new Date() > new Date(sessionData.expires_at)) {
+                        setTimerExpired(true);
+                    } else {
+                        startCountdown(sessionData);
+                    }
+                } else {
+                    // No session yet — show start modal
+                    setShowTimerStartModal(true);
+                }
             }
         } catch (error) {
             console.error('Error loading exercise:', error);
@@ -154,6 +231,17 @@ const Exercise = () => {
     };
 
     const handleSubmit = async () => {
+        // Block submission if timer expired
+        if (timerExpired) {
+            alert('Time has expired for this exercise. You can no longer submit solutions.');
+            return;
+        }
+        // Block if timed exercise but timer not started
+        if (exercise?.time_limit_minutes && !timedSession) {
+            setShowTimerStartModal(true);
+            return;
+        }
+
         setSubmitting(true);
         setResults(null);
 
@@ -244,6 +332,15 @@ const Exercise = () => {
             }
         } catch (error) {
             console.error('Error submitting solution:', error);
+            // Handle timed expiry from backend
+            if (error.response?.data?.timeExpired) {
+                setTimerExpired(true);
+                setTimeRemaining(0);
+                if (timerIntervalRef.current) {
+                    clearInterval(timerIntervalRef.current);
+                    timerIntervalRef.current = null;
+                }
+            }
             setResults({
                 score: 0,
                 testsPassed: 0,
@@ -309,13 +406,18 @@ const Exercise = () => {
 
                 {/* Exercise Header */}
                 <div className="mb-6">
-                    <div className="flex items-center gap-3 mb-3">
+                    <div className="flex items-center gap-3 mb-3 flex-wrap">
                         <span className={`badge ${getDifficultyBadgeClass(exercise.difficulty)}`}>
                             {exercise.difficulty}
                         </span>
                         <span className="text-xs text-gray-500 bg-white/5 px-2 py-1 rounded">
                             {exercise.language}
                         </span>
+                        {exercise.time_limit_minutes && (
+                            <span className="text-xs text-blue-400 bg-blue-500/10 px-2 py-1 rounded flex items-center gap-1">
+                                ⏱ {exercise.time_limit_minutes} min
+                            </span>
+                        )}
                     </div>
                     <h1 className="text-2xl font-bold">{exercise.title}</h1>
                 </div>
@@ -413,8 +515,34 @@ const Exercise = () => {
                                 exercise.language
                             }
                         </span>
+                        {/* Timer Display */}
+                        {exercise.time_limit_minutes && timedSession && !timerExpired && timeRemaining != null && (
+                            <div className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-mono font-bold ${
+                                timeRemaining <= 60 ? 'bg-red-500/20 text-red-400 animate-pulse' :
+                                timeRemaining <= 300 ? 'bg-amber-500/20 text-amber-400' :
+                                'bg-blue-500/20 text-blue-300'
+                            }`}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <polyline points="12 6 12 12 16 14"/>
+                                </svg>
+                                {formatTimer(timeRemaining)}
+                            </div>
+                        )}
+                        {exercise.time_limit_minutes && timerExpired && (
+                            <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-bold bg-red-500/20 text-red-400">
+                                ⏰ Time's Up!
+                            </div>
+                        )}
                     </div>
                     <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setShowHelpModal(true)}
+                            className="px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 bg-white/5 text-gray-400 hover:text-orange-300 hover:bg-orange-500/10 border border-white/10"
+                            title="Request help from professor"
+                        >
+                            🆘 Help
+                        </button>
                         <button
                             onClick={() => { setShowHistoryPanel(!showHistoryPanel); if (!showHistoryPanel) setShowAIPanel(false); }}
                             className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
@@ -457,14 +585,16 @@ const Exercise = () => {
                         </button>
                         <button
                             onClick={handleSubmit}
-                            disabled={submitting}
+                            disabled={submitting || timerExpired}
                             className={`px-6 py-2 rounded-lg font-semibold text-sm transition-all ${
-                                submitting 
-                                    ? 'bg-gray-600 cursor-not-allowed' 
+                                submitting || timerExpired
+                                    ? 'bg-gray-600 cursor-not-allowed opacity-50' 
                                     : 'gradient-bg hover:opacity-90'
                             }`}
                         >
-                            {submitting ? (
+                            {timerExpired ? (
+                                '⏰ Time Expired'
+                            ) : submitting ? (
                                 <span className="flex items-center gap-2">
                                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                                     Running...
@@ -880,6 +1010,55 @@ const Exercise = () => {
                     </div>
                 </div>
             )}
+<<<<<<< feature/timed-exercises-quiz-mode
+
+            {/* Timer Start Modal — shown before timed exercise begins */}
+            {showTimerStartModal && exercise?.time_limit_minutes && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                    <div 
+                        className="surface-card rounded-2xl p-8 w-full max-w-md mx-4 shadow-2xl border border-white/10 text-center"
+                    >
+                        <div className="text-6xl mb-4">⏱</div>
+                        <h3 className="text-xl font-bold text-white mb-2">Timed Exercise</h3>
+                        <p className="text-gray-400 mb-2">
+                            This exercise has a time limit of <span className="text-white font-semibold">{exercise.time_limit_minutes} minute{exercise.time_limit_minutes !== 1 ? 's' : ''}</span>.
+                        </p>
+                        <p className="text-sm text-gray-500 mb-6">
+                            Once you start the timer, you cannot pause or restart it. The countdown begins immediately and you won't be able to submit after the time expires.
+                        </p>
+                        <div className="flex items-center justify-center gap-3">
+                            <button
+                                onClick={() => navigate(-1)}
+                                className="px-5 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white transition-colors border border-white/10 bg-transparent cursor-pointer"
+                            >
+                                Go Back
+                            </button>
+                            <button
+                                onClick={handleStartTimer}
+                                className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-all border-none cursor-pointer"
+                                style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}
+                            >
+                                ▶ Start Timer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Timer Expired Overlay */}
+            {timerExpired && exercise?.time_limit_minutes && (
+                <div className="fixed bottom-6 right-6 z-40 surface-card rounded-xl p-4 shadow-2xl border border-red-500/30 bg-red-500/10 max-w-xs">
+                    <div className="flex items-center gap-3">
+                        <span className="text-3xl">⏰</span>
+                        <div>
+                            <h4 className="font-semibold text-red-400 text-sm">Time Expired</h4>
+                            <p className="text-xs text-gray-400">Submissions are no longer accepted for this exercise.</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+=======
+>>>>>>> main
         </div>
     );
 };
