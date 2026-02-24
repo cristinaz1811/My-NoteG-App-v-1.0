@@ -151,17 +151,6 @@ services:
     networks:
       - noteg-network
 
-  # ─── Certbot (SSL certificate management) ─────────────────────────────────
-  certbot:
-    image: certbot/certbot
-    container_name: noteg-certbot
-    volumes:
-      - certbot_conf:/etc/letsencrypt
-      - certbot_www:/var/www/certbot
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
-    networks:
-      - noteg-network
-
   # ─── Frontend (Nginx + React SPA) ─────────────────────────────────────────
   frontend:
     build:
@@ -177,10 +166,6 @@ services:
       - api
     ports:
       - "80:80"
-      - "443:443"
-    volumes:
-      - certbot_conf:/etc/letsencrypt:ro
-      - certbot_www:/var/www/certbot:ro
     networks:
       - noteg-network
 
@@ -188,10 +173,6 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
-    driver: local
-  certbot_conf:
-    driver: local
-  certbot_www:
     driver: local
 
 networks:
