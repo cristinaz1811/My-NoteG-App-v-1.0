@@ -959,6 +959,198 @@ const deleteExerciseFile = async (req, res) => {
     }
 };
 
+// ─── Bulk Import Exercises ─────────────────────────────────────────────────────
+const bulkImportExercises = async (req, res) => {
+    const client = await db.connect();
+    try {
+        const { courseId, exercises } = req.body;
+        const userId = req.user.id;
+
+        if (!courseId || !exercises || !Array.isArray(exercises) || exercises.length === 0) {
+            return res.status(400).json({ error: 'courseId and a non-empty exercises array are required' });
+        }
+
+        // Verify course ownership
+        const courseCheck = await client.query(
+            'SELECT * FROM courses WHERE id = $1 AND created_by = $2',
+            [courseId, userId]
+        );
+        if (courseCheck.rows.length === 0 && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized to add exercises to this course' });
+        }
+
+        // Fetch chapters for this course to resolve chapter names
+        const chaptersResult = await client.query(
+            'SELECT id, title FROM chapters WHERE course_id = $1',
+            [courseId]
+        );
+        const chapterMap = {};
+        chaptersResult.rows.forEach(ch => {
+            chapterMap[ch.title.toLowerCase().trim()] = ch.id;
+        });
+
+        await client.query('BEGIN');
+
+        const created = [];
+        const errors = [];
+
+        for (let i = 0; i < exercises.length; i++) {
+            const ex = exercises[i];
+            try {
+                // Validate required fields
+                if (!ex.title || !ex.description) {
+                    errors.push({ index: i, title: ex.title || `Exercise ${i + 1}`, error: 'Title and description are required' });
+                    continue;
+                }
+
+                // Resolve chapter_id from chapter name or id
+                let chapterId = null;
+                if (ex.chapter_id) {
+                    chapterId = ex.chapter_id;
+                } else if (ex.chapter) {
+                    chapterId = chapterMap[ex.chapter.toLowerCase().trim()] || null;
+                }
+
+                const difficulty = ex.difficulty || 'easy';
+                const language = ex.language || 'javascript';
+                const starterCode = ex.is_multi_file ? null : (ex.starterCode || ex.starter_code || '');
+                const requiresEfficiency = ex.requires_efficiency || ex.requiresEfficiency || false;
+                const timeLimitMinutes = ex.time_limit_minutes || ex.timeLimitMinutes || null;
+                const isMultiFile = ex.is_multi_file || ex.isMultiFile || false;
+
+                const exerciseResult = await client.query(
+                    `INSERT INTO exercises (course_id, title, description, difficulty, starter_code, language, chapter_id, requires_efficiency, time_limit_minutes, is_multi_file)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+                    [courseId, ex.title, ex.description, difficulty, starterCode, language, chapterId, requiresEfficiency, timeLimitMinutes, isMultiFile]
+                );
+
+                const exercise = exerciseResult.rows[0];
+
+                // Create exercise files if multi-file
+                if (isMultiFile && ex.files && ex.files.length > 0) {
+                    for (let j = 0; j < ex.files.length; j++) {
+                        const file = ex.files[j];
+                        await client.query(
+                            'INSERT INTO exercise_files (exercise_id, filename, starter_code, is_entry_point, display_order) VALUES ($1, $2, $3, $4, $5)',
+                            [exercise.id, file.filename, file.starter_code || file.starterCode || '', file.is_entry_point || file.isEntryPoint || false, file.display_order ?? j]
+                        );
+                    }
+                }
+
+                // Create test cases
+                const testCases = ex.testCases || ex.test_cases || [];
+                for (const tc of testCases) {
+                    await client.query(
+                        'INSERT INTO test_cases (exercise_id, input, expected_output, is_hidden, weight) VALUES ($1, $2, $3, $4, $5)',
+                        [exercise.id, tc.input, tc.expectedOutput || tc.expected_output, tc.isHidden || tc.is_hidden || false, tc.weight || 1]
+                    );
+                }
+
+                created.push({ index: i, id: exercise.id, title: exercise.title });
+            } catch (err) {
+                errors.push({ index: i, title: ex.title || `Exercise ${i + 1}`, error: err.message });
+            }
+        }
+
+        await client.query('COMMIT');
+
+        res.status(201).json({
+            message: `Successfully imported ${created.length} exercise(s)${errors.length > 0 ? `, ${errors.length} failed` : ''}`,
+            created,
+            errors,
+            total: exercises.length,
+        });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Bulk import exercises error:', error);
+        res.status(500).json({ error: 'Internal server error', details: error.message });
+    } finally {
+        client.release();
+    }
+};
+
+// ─── Bulk Export Exercises ──────────────────────────────────────────────────────
+const bulkExportExercises = async (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const userId = req.user.id;
+
+        // Verify course ownership
+        const courseCheck = await db.query(
+            'SELECT * FROM courses WHERE id = $1 AND created_by = $2',
+            [courseId, userId]
+        );
+        if (courseCheck.rows.length === 0 && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        // Get all exercises for this course
+        const exercisesResult = await db.query(
+            'SELECT * FROM exercises WHERE course_id = $1 ORDER BY id',
+            [courseId]
+        );
+
+        // Get chapters
+        const chaptersResult = await db.query(
+            'SELECT id, title FROM chapters WHERE course_id = $1',
+            [courseId]
+        );
+        const chapterIdToName = {};
+        chaptersResult.rows.forEach(ch => {
+            chapterIdToName[ch.id] = ch.title;
+        });
+
+        const exercises = [];
+
+        for (const ex of exercisesResult.rows) {
+            // Get test cases
+            const testCasesResult = await db.query(
+                'SELECT input, expected_output, is_hidden, weight FROM test_cases WHERE exercise_id = $1 ORDER BY id',
+                [ex.id]
+            );
+
+            // Get exercise files if multi-file
+            let files = [];
+            if (ex.is_multi_file) {
+                const filesResult = await db.query(
+                    'SELECT filename, starter_code, is_entry_point, display_order FROM exercise_files WHERE exercise_id = $1 ORDER BY display_order, id',
+                    [ex.id]
+                );
+                files = filesResult.rows;
+            }
+
+            exercises.push({
+                title: ex.title,
+                description: ex.description,
+                difficulty: ex.difficulty,
+                language: ex.language,
+                starterCode: ex.starter_code || '',
+                chapter: ex.chapter_id ? (chapterIdToName[ex.chapter_id] || null) : null,
+                requires_efficiency: ex.requires_efficiency || false,
+                time_limit_minutes: ex.time_limit_minutes || null,
+                is_multi_file: ex.is_multi_file || false,
+                files: files.length > 0 ? files : undefined,
+                testCases: testCasesResult.rows.map(tc => ({
+                    input: tc.input,
+                    expectedOutput: tc.expected_output,
+                    isHidden: tc.is_hidden,
+                    weight: tc.weight,
+                })),
+            });
+        }
+
+        res.json({
+            courseId: parseInt(courseId),
+            courseTitle: courseCheck.rows[0]?.title || '',
+            exportedAt: new Date().toISOString(),
+            exercises,
+        });
+    } catch (error) {
+        console.error('Bulk export exercises error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 module.exports = {
     getExerciseById,
     createExercise,
@@ -981,4 +1173,7 @@ module.exports = {
     addExerciseFile,
     updateExerciseFile,
     deleteExerciseFile,
+    // Bulk import/export
+    bulkImportExercises,
+    bulkExportExercises,
 };

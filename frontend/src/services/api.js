@@ -97,6 +97,9 @@ export const exerciseService = {
     addExerciseFile: (exerciseId, fileData) => api.post(`/exercises/professor/${exerciseId}/files`, fileData),
     updateExerciseFile: (fileId, fileData) => api.put(`/exercises/professor/files/${fileId}`, fileData),
     deleteExerciseFile: (fileId) => api.delete(`/exercises/professor/files/${fileId}`),
+    // Bulk import/export
+    bulkImport: (courseId, exercises) => api.post('/exercises/professor/bulk-import', { courseId, exercises }),
+    bulkExport: (courseId) => api.get(`/exercises/professor/bulk-export/${courseId}`),
 };
 
 // Plagiarism services (professor only)

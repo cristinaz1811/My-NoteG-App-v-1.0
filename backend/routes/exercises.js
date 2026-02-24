@@ -21,6 +21,8 @@ const {
     addExerciseFile,
     updateExerciseFile,
     deleteExerciseFile,
+    bulkImportExercises,
+    bulkExportExercises,
 } = require('../controllers/exerciseController');
 const { authMiddleware, isAdmin, isProfessor } = require('../middleware/auth');
 
@@ -55,6 +57,10 @@ router.get('/professor/:exerciseId/files', authMiddleware, isProfessor, getExerc
 router.post('/professor/:exerciseId/files', authMiddleware, isProfessor, addExerciseFile);
 router.put('/professor/files/:fileId', authMiddleware, isProfessor, updateExerciseFile);
 router.delete('/professor/files/:fileId', authMiddleware, isProfessor, deleteExerciseFile);
+
+// Professor routes - Bulk import/export
+router.post('/professor/bulk-import', authMiddleware, isProfessor, bulkImportExercises);
+router.get('/professor/bulk-export/:courseId', authMiddleware, isProfessor, bulkExportExercises);
 
 // Legacy admin route
 router.post('/', authMiddleware, isAdmin, createExercise);

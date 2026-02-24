@@ -14,6 +14,7 @@ const EditCourse = () => {
     // Modal states
     const [showChapterModal, setShowChapterModal] = useState(false);
     const [showExerciseModal, setShowExerciseModal] = useState(false);
+    const [showBulkImportModal, setShowBulkImportModal] = useState(false);
     const [editingChapter, setEditingChapter] = useState(null);
     const [editingExercise, setEditingExercise] = useState(null);
     const [tagInput, setTagInput] = useState('');
@@ -96,6 +97,84 @@ const EditCourse = () => {
         } catch (error) {
             console.error('Error adding exercise:', error);
             alert(error.response?.data?.error || 'Failed to add exercise');
+        }
+    };
+
+    const handleBulkImport = async (exercises) => {
+        try {
+            const response = await exerciseService.bulkImport(id, exercises);
+            setShowBulkImportModal(false);
+            loadCourse();
+            const { created, errors: importErrors } = response.data;
+            let msg = `Successfully imported ${created.length} exercise(s).`;
+            if (importErrors && importErrors.length > 0) {
+                msg += `\n\n${importErrors.length} exercise(s) failed:\n` + importErrors.map(e => `• ${e.title}: ${e.error}`).join('\n');
+            }
+            alert(msg);
+        } catch (error) {
+            console.error('Error bulk importing:', error);
+            alert(error.response?.data?.error || 'Failed to import exercises');
+        }
+    };
+
+    const handleBulkExport = async (format) => {
+        try {
+            const response = await exerciseService.bulkExport(id);
+            const data = response.data;
+
+            let content, filename, mimeType;
+
+            if (format === 'json') {
+                content = JSON.stringify(data, null, 2);
+                filename = `${(data.courseTitle || 'exercises').replace(/[^a-z0-9]/gi, '_')}_exercises.json`;
+                mimeType = 'application/json';
+            } else {
+                // CSV export
+                const exercises = data.exercises || [];
+                if (exercises.length === 0) {
+                    alert('No exercises to export.');
+                    return;
+                }
+                const csvRows = [];
+                csvRows.push('title,description,difficulty,language,starterCode,chapter,requires_efficiency,time_limit_minutes,testCases');
+                for (const ex of exercises) {
+                    const escapeCsv = (val) => {
+                        if (val === null || val === undefined) return '';
+                        const str = String(val);
+                        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                            return '"' + str.replace(/"/g, '""') + '"';
+                        }
+                        return str;
+                    };
+                    csvRows.push([
+                        escapeCsv(ex.title),
+                        escapeCsv(ex.description),
+                        escapeCsv(ex.difficulty),
+                        escapeCsv(ex.language),
+                        escapeCsv(ex.starterCode),
+                        escapeCsv(ex.chapter),
+                        escapeCsv(ex.requires_efficiency),
+                        escapeCsv(ex.time_limit_minutes),
+                        escapeCsv(JSON.stringify(ex.testCases)),
+                    ].join(','));
+                }
+                content = csvRows.join('\n');
+                filename = `${(data.courseTitle || 'exercises').replace(/[^a-z0-9]/gi, '_')}_exercises.csv`;
+                mimeType = 'text/csv';
+            }
+
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error exporting:', error);
+            alert(error.response?.data?.error || 'Failed to export exercises');
         }
     };
 
@@ -589,13 +668,40 @@ const EditCourse = () => {
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <h2 className="text-xl font-semibold">Exercises</h2>
-                            <button
-                                onClick={() => setShowExerciseModal(true)}
-                                className="px-4 py-2 rounded-lg text-sm font-medium text-white"
-                                style={{ background: 'linear-gradient(135deg, #a1609d, #b870ad)' }}
-                            >
-                                + Add Exercise
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <div className="relative group">
+                                    <button
+                                        onClick={() => handleBulkExport('json')}
+                                        className="px-3 py-2 rounded-lg text-sm font-medium text-gray-300 border border-white/20 hover:bg-white/5 transition-colors"
+                                        title="Export exercises"
+                                    >
+                                        📤 Export
+                                    </button>
+                                    <div className="absolute right-0 top-full mt-1 hidden group-hover:block z-20">
+                                        <div className="surface-card rounded-lg shadow-xl border border-white/10 overflow-hidden min-w-[120px]">
+                                            <button onClick={() => handleBulkExport('json')} className="w-full px-4 py-2 text-sm text-left text-gray-300 hover:bg-white/10 transition-colors">
+                                                Export JSON
+                                            </button>
+                                            <button onClick={() => handleBulkExport('csv')} className="w-full px-4 py-2 text-sm text-left text-gray-300 hover:bg-white/10 transition-colors">
+                                                Export CSV
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowBulkImportModal(true)}
+                                    className="px-3 py-2 rounded-lg text-sm font-medium text-[#fef483] border border-[#fef483]/30 hover:bg-[#fef483]/10 transition-colors"
+                                >
+                                    📥 Bulk Import
+                                </button>
+                                <button
+                                    onClick={() => setShowExerciseModal(true)}
+                                    className="px-4 py-2 rounded-lg text-sm font-medium text-white"
+                                    style={{ background: 'linear-gradient(135deg, #a1609d, #b870ad)' }}
+                                >
+                                    + Add Exercise
+                                </button>
+                            </div>
                         </div>
 
                         {course.exercises?.length === 0 ? (
@@ -659,6 +765,14 @@ const EditCourse = () => {
                         chapters={course.chapters || []}
                         onClose={() => setShowExerciseModal(false)}
                         onSubmit={handleAddExercise}
+                    />
+                )}
+
+                {/* Bulk Import Modal */}
+                {showBulkImportModal && (
+                    <BulkImportModal
+                        onClose={() => setShowBulkImportModal(false)}
+                        onImport={handleBulkImport}
                     />
                 )}
             </div>
@@ -972,3 +1086,305 @@ const ExerciseModal = ({ chapters, onClose, onSubmit }) => {
 };
 
 export default EditCourse;
+
+// ─── Bulk Import Modal Component ────────────────────────────────────────────────
+const BulkImportModal = ({ onClose, onImport }) => {
+    const [file, setFile] = useState(null);
+    const [preview, setPreview] = useState(null);
+    const [error, setError] = useState('');
+    const [importing, setImporting] = useState(false);
+
+    const parseCSV = (text) => {
+        // Simple CSV parser supporting quoted fields
+        const lines = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < text.length; i++) {
+            const ch = text[i];
+            if (ch === '"') {
+                if (inQuotes && text[i + 1] === '"') {
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (ch === '\n' && !inQuotes) {
+                lines.push(current);
+                current = '';
+            } else {
+                current += ch;
+            }
+        }
+        if (current.trim()) lines.push(current);
+
+        if (lines.length < 2) return [];
+
+        const splitRow = (row) => {
+            const fields = [];
+            let field = '';
+            let insideQuotes = false;
+            for (let i = 0; i < row.length; i++) {
+                const c = row[i];
+                if (c === '"') {
+                    if (insideQuotes && row[i + 1] === '"') {
+                        field += '"';
+                        i++;
+                    } else {
+                        insideQuotes = !insideQuotes;
+                    }
+                } else if (c === ',' && !insideQuotes) {
+                    fields.push(field);
+                    field = '';
+                } else {
+                    field += c;
+                }
+            }
+            fields.push(field);
+            return fields;
+        };
+
+        const headers = splitRow(lines[0]).map(h => h.trim().replace(/^\uFEFF/, ''));
+        const results = [];
+
+        for (let i = 1; i < lines.length; i++) {
+            if (!lines[i].trim()) continue;
+            const values = splitRow(lines[i]);
+            const obj = {};
+            headers.forEach((header, idx) => {
+                obj[header] = values[idx] !== undefined ? values[idx].trim() : '';
+            });
+
+            // Map CSV fields to exercise structure
+            const exercise = {
+                title: obj.title || '',
+                description: obj.description || '',
+                difficulty: obj.difficulty || 'easy',
+                language: obj.language || 'javascript',
+                starterCode: obj.starterCode || obj.starter_code || '',
+                chapter: obj.chapter || null,
+                requires_efficiency: obj.requires_efficiency === 'true',
+                time_limit_minutes: obj.time_limit_minutes ? parseInt(obj.time_limit_minutes) : null,
+            };
+
+            // Parse testCases if present (should be JSON-encoded)
+            if (obj.testCases || obj.test_cases) {
+                try {
+                    exercise.testCases = JSON.parse(obj.testCases || obj.test_cases);
+                } catch {
+                    exercise.testCases = [];
+                }
+            }
+
+            results.push(exercise);
+        }
+
+        return results;
+    };
+
+    const handleFileChange = (e) => {
+        const selectedFile = e.target.files[0];
+        if (!selectedFile) return;
+
+        setFile(selectedFile);
+        setError('');
+        setPreview(null);
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const content = event.target.result;
+            try {
+                let exercises;
+                if (selectedFile.name.endsWith('.json')) {
+                    const parsed = JSON.parse(content);
+                    exercises = parsed.exercises || (Array.isArray(parsed) ? parsed : [parsed]);
+                } else if (selectedFile.name.endsWith('.csv')) {
+                    exercises = parseCSV(content);
+                } else {
+                    setError('Please upload a .json or .csv file');
+                    return;
+                }
+
+                if (!exercises || exercises.length === 0) {
+                    setError('No exercises found in file');
+                    return;
+                }
+
+                // Validate
+                const invalid = exercises.filter(ex => !ex.title || !ex.description);
+                if (invalid.length > 0) {
+                    setError(`${invalid.length} exercise(s) are missing title or description`);
+                }
+
+                setPreview(exercises);
+            } catch (err) {
+                setError(`Failed to parse file: ${err.message}`);
+            }
+        };
+        reader.readAsText(selectedFile);
+    };
+
+    const handleImport = async () => {
+        if (!preview || preview.length === 0) return;
+        setImporting(true);
+        try {
+            await onImport(preview);
+        } finally {
+            setImporting(false);
+        }
+    };
+
+    const sampleJSON = `[
+  {
+    "title": "Two Sum",
+    "description": "Return indices of two numbers that add up to target.",
+    "difficulty": "easy",
+    "language": "javascript",
+    "starterCode": "function twoSum(nums, target) {\\n  // code here\\n}",
+    "chapter": "Arrays",
+    "requires_efficiency": false,
+    "time_limit_minutes": null,
+    "testCases": [
+      { "input": "[[2,7,11,15], 9]", "expectedOutput": "[0,1]", "isHidden": false, "weight": 1 }
+    ]
+  }
+]`;
+
+    const sampleCSV = `title,description,difficulty,language,starterCode,chapter,requires_efficiency,time_limit_minutes,testCases
+"Two Sum","Return indices of two numbers that add up to target.","easy","javascript","function twoSum(nums, target) {\\n  // code here\\n}","Arrays",false,,"[{\\"input\\":\\"[[2,7,11,15], 9]\\",\\"expectedOutput\\":\\"[0,1]\\",\\"isHidden\\":false,\\"weight\\":1}]"`;
+
+    const [showSample, setShowSample] = useState('');
+
+    return (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
+            <div className="surface-card rounded-2xl p-6 w-full max-w-2xl my-8">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-semibold">📥 Bulk Import Exercises</h3>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">&times;</button>
+                </div>
+
+                <p className="text-sm text-gray-400 mb-4">
+                    Upload a JSON or CSV file containing exercises to import them all at once.
+                </p>
+
+                {/* Sample format toggle */}
+                <div className="flex gap-2 mb-4">
+                    <button
+                        onClick={() => setShowSample(showSample === 'json' ? '' : 'json')}
+                        className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                            showSample === 'json' ? 'border-[#a1609d] text-[#a1609d] bg-[#a1609d]/10' : 'border-white/20 text-gray-400 hover:text-white'
+                        }`}
+                    >
+                        View JSON format
+                    </button>
+                    <button
+                        onClick={() => setShowSample(showSample === 'csv' ? '' : 'csv')}
+                        className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                            showSample === 'csv' ? 'border-[#a1609d] text-[#a1609d] bg-[#a1609d]/10' : 'border-white/20 text-gray-400 hover:text-white'
+                        }`}
+                    >
+                        View CSV format
+                    </button>
+                </div>
+
+                {showSample && (
+                    <div className="mb-4 p-3 bg-black/30 rounded-lg border border-white/10 overflow-x-auto">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs text-gray-500 uppercase">{showSample} format example</span>
+                            <button
+                                onClick={() => {
+                                    navigator.clipboard.writeText(showSample === 'json' ? sampleJSON : sampleCSV);
+                                    alert('Sample copied to clipboard!');
+                                }}
+                                className="text-xs text-gray-400 hover:text-white"
+                            >
+                                📋 Copy
+                            </button>
+                        </div>
+                        <pre className="text-xs text-gray-300 font-mono whitespace-pre overflow-x-auto">
+                            {showSample === 'json' ? sampleJSON : sampleCSV}
+                        </pre>
+                    </div>
+                )}
+
+                {/* File upload area */}
+                <div className="mb-4">
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-white/20 rounded-xl cursor-pointer hover:border-[#a1609d]/50 hover:bg-[#a1609d]/5 transition-all">
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <span className="text-3xl mb-2">📄</span>
+                            <p className="text-sm text-gray-400">
+                                {file ? file.name : 'Click to upload JSON or CSV file'}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">Supports .json and .csv</p>
+                        </div>
+                        <input
+                            type="file"
+                            accept=".json,.csv"
+                            onChange={handleFileChange}
+                            className="hidden"
+                        />
+                    </label>
+                </div>
+
+                {/* Error message */}
+                {error && (
+                    <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+                        ⚠️ {error}
+                    </div>
+                )}
+
+                {/* Preview */}
+                {preview && preview.length > 0 && (
+                    <div className="mb-4">
+                        <h4 className="text-sm font-medium text-gray-300 mb-2">
+                            Preview — {preview.length} exercise(s) found
+                        </h4>
+                        <div className="max-h-64 overflow-y-auto space-y-2">
+                            {preview.map((ex, idx) => (
+                                <div key={idx} className="p-3 bg-black/20 rounded-lg border border-white/10">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-sm font-semibold text-white">{ex.title || '(untitled)'}</span>
+                                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                            ex.difficulty === 'hard' ? 'bg-red-500/20 text-red-400' :
+                                            ex.difficulty === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                                            'bg-green-500/20 text-green-400'
+                                        }`}>
+                                            {ex.difficulty || 'easy'}
+                                        </span>
+                                        <span className="text-xs text-gray-500">{ex.language || 'javascript'}</span>
+                                    </div>
+                                    <p className="text-xs text-gray-400 line-clamp-1">{ex.description || '(no description)'}</p>
+                                    <div className="flex gap-3 mt-1">
+                                        <span className="text-xs text-gray-500">
+                                            {(ex.testCases || []).length} test case(s)
+                                        </span>
+                                        {ex.chapter && <span className="text-xs text-gray-500">📂 {ex.chapter}</span>}
+                                        {ex.requires_efficiency && <span className="text-xs text-[#a1609d]">⚡ Efficiency</span>}
+                                        {ex.time_limit_minutes && <span className="text-xs text-[#fef483]">⏱ {ex.time_limit_minutes}min</span>}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex justify-end gap-3">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleImport}
+                        disabled={!preview || preview.length === 0 || importing}
+                        className="px-6 py-2 rounded-lg font-medium text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ background: 'linear-gradient(135deg, #a1609d, #b870ad)' }}
+                    >
+                        {importing ? 'Importing...' : `Import ${preview ? preview.length : 0} Exercise(s)`}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
