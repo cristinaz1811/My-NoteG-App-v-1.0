@@ -65,7 +65,6 @@ const Exercise = () => {
         }
     };
 
-<<<<<<< feature/timed-exercises-quiz-mode
     // Timer helper: format seconds as MM:SS
     const formatTimer = (seconds) => {
         if (seconds == null || seconds < 0) return '00:00';
@@ -117,8 +116,6 @@ const Exercise = () => {
         };
     }, []);
 
-=======
->>>>>>> main
     // Cleanup editor on unmount
     useEffect(() => {
         isMountedRef.current = true;
@@ -1010,7 +1007,6 @@ const Exercise = () => {
                     </div>
                 </div>
             )}
-<<<<<<< feature/timed-exercises-quiz-mode
 
             {/* Timer Start Modal — shown before timed exercise begins */}
             {showTimerStartModal && exercise?.time_limit_minutes && (
@@ -1057,8 +1053,6 @@ const Exercise = () => {
                     </div>
                 </div>
             )}
-=======
->>>>>>> main
         </div>
     );
 };

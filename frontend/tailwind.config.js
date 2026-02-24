@@ -7,12 +7,13 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        'bg': '#1a1f28',
-        'surface': '#232a36',
-        'primary': '#a1609d',
-        'secondary': '#fef483',
-        'text': '#e8e8ed',
-        'accent-muted': '#b88ab5',
+        'bg': 'var(--bg-color)',
+        'surface': 'var(--surface-color)',
+        'primary': 'var(--primary-color)',
+        'secondary': 'var(--secondary-color)',
+        'text': 'var(--text-color)',
+        'accent-muted': 'var(--accent-muted)',
+        'theme-border': 'var(--border-color)',
       },
       fontFamily: {
         'grotesk': ['Space Grotesk', 'sans-serif'],

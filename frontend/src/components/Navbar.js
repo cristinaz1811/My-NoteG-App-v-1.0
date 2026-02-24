@@ -2,6 +2,7 @@ import React, { useContext, useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import NotificationBell from './NotificationBell';
+import ThemeToggle from './ThemeToggle';
 
 const Navbar = () => {
     const { user, logout } = useContext(AuthContext);
@@ -39,7 +40,7 @@ const Navbar = () => {
     );
 
     return (
-        <nav className="fixed top-0 left-0 right-0 z-50 px-6 border-b border-white/5" style={{ background: 'linear-gradient(to bottom, rgba(18, 22, 28, 0.6) 0%, rgba(18, 22, 28, 0.3) 70%, transparent 100%)', backdropFilter: 'blur(12px)' }}>
+        <nav className="fixed top-0 left-0 right-0 z-50 px-6 border-b border-white/5" style={{ background: `linear-gradient(to bottom, var(--navbar-bg) 0%, var(--navbar-bg-end) 70%, transparent 100%)`, backdropFilter: 'blur(12px)' }}>
             {/* Decorative glow orbs */}
             <div className="absolute top-2 left-[20%] w-16 h-16 rounded-full opacity-20 animate-pulse" style={{ background: 'radial-gradient(circle, rgba(254, 244, 131, 0.4), transparent 70%)', animationDuration: '3s' }}></div>
             <div className="absolute top-4 left-[40%] w-8 h-8 rounded-full opacity-15 animate-pulse" style={{ background: 'radial-gradient(circle, rgba(161, 96, 157, 0.5), transparent 70%)', animationDuration: '4s' }}></div>
@@ -92,6 +93,8 @@ const Navbar = () => {
                                 Welcome, <span style={{ color: user.role === 'professor' ? '#a1609d' : '#fef483' }}>{user.username}</span>
                                 {user.role === 'professor' && <span className="ml-1 text-xs text-[#a1609d]">(Prof)</span>}
                             </span>
+                            {/* Theme Toggle */}
+                            <ThemeToggle />
                             {/* Notification Bell */}
                             <NotificationBell />
                             {/* Profile Dropdown */}
@@ -110,8 +113,8 @@ const Navbar = () => {
                                 </button>
                                 {profileOpen && (
                                     <div className="absolute right-0 top-full mt-2 w-48 rounded-xl overflow-hidden shadow-2xl border border-white/10 z-50"
-                                         style={{ background: 'rgba(30, 35, 44, 0.98)', backdropFilter: 'blur(20px)' }}>
-                                        <div className="px-4 py-3 border-b border-white/10">
+                                         style={{ background: 'var(--dropdown-bg)', backdropFilter: 'blur(20px)' }}>
+                                        <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--border-color)' }}>
                                             <p className="text-sm font-medium text-white truncate">{user.username}</p>
                                             <p className="text-xs text-gray-400 truncate">{user.email}</p>
                                         </div>
@@ -135,6 +138,7 @@ const Navbar = () => {
                         </>
                     ) : (
                         <>
+                            <ThemeToggle />
                             <Link to="/login" className="text-gray-300 hover:text-[#fef483] transition-colors no-underline">
                                 Sign In
                             </Link>
