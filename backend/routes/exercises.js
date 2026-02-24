@@ -15,6 +15,8 @@ const {
     getAIHints,
     generateAIHint,
     getComplexityAnalysis,
+    startTimedSession,
+    getTimedSession,
 } = require('../controllers/exerciseController');
 const { authMiddleware, isAdmin, isProfessor } = require('../middleware/auth');
 
@@ -23,6 +25,10 @@ router.get('/submissions/:submissionId/detail', authMiddleware, getSubmissionDet
 router.get('/:id', authMiddleware, getExerciseById);
 router.post('/:id/submit', authMiddleware, submitSolution);
 router.get('/:exerciseId/submissions', authMiddleware, getUserSubmissions);
+
+// Timed session routes
+router.post('/:id/timed-session/start', authMiddleware, startTimedSession);
+router.get('/:id/timed-session', authMiddleware, getTimedSession);
 
 // AI Hints routes
 router.get('/:id/ai-hints', authMiddleware, getAIHints);
