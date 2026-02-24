@@ -12,8 +12,7 @@ const exerciseRoutes = require('./routes/exercises');
 const notificationRoutes = require('./routes/notifications');
 const { registerClient, removeClient } = require('./utils/notificationService');
 const plagiarismRoutes = require('./routes/plagiarism');
-const notificationRoutes = require('./routes/notifications');
-const { registerClient, removeClient } = require('./utils/notificationService');
+const exportRoutes = require('./routes/export');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -71,6 +70,7 @@ app.use('/api/courses', courseRoutes);
 app.use('/api/exercises', exerciseRoutes);
 app.use('/api/plagiarism', plagiarismRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/export', exportRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
