@@ -350,6 +350,9 @@ const CourseDetail = () => {
                                                                 <span className={`badge text-xs ${getDifficultyBadgeClass(exercise.difficulty)}`}>
                                                                     {exercise.difficulty}
                                                                 </span>
+                                                                {exercise.is_multi_file && (
+                                                                    <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">📁 Multi-File</span>
+                                                                )}
                                                                 {exercise.time_limit_minutes && (
                                                                     <span className="text-xs text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">⏱ {exercise.time_limit_minutes}m</span>
                                                                 )}
@@ -372,6 +375,9 @@ const CourseDetail = () => {
                                                 <span className={`badge text-xs ${getDifficultyBadgeClass(exercise.difficulty)}`}>
                                                     {exercise.difficulty}
                                                 </span>
+                                                {exercise.is_multi_file && (
+                                                    <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">📁 Multi-File</span>
+                                                )}
                                                 {exercise.time_limit_minutes && (
                                                     <span className="text-xs text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">⏱ {exercise.time_limit_minutes}m</span>
                                                 )}

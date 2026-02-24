@@ -339,4 +339,306 @@ const compareOutputs = (actual, expected) => {
     }
 };
 
-module.exports = { executeCode };
+/**
+ * Execute multi-file code against test cases
+ * files: [{filename, code}]
+ * Writes all files to a temp dir and runs the entry point
+ */
+const executeMultiFileCode = async (files, testCases, language) => {
+    const results = [];
+
+    for (const testCase of testCases) {
+        try {
+            const result = await runMultiFileTestCase(files, testCase, language);
+            results.push(result);
+        } catch (error) {
+            results.push({
+                passed: false,
+                input: testCase.input,
+                expected: testCase.expected_output,
+                actual: null,
+                error: error.message,
+            });
+        }
+    }
+
+    return results;
+};
+
+const runMultiFileTestCase = async (files, testCase, language) => {
+    const startTime = Date.now();
+    
+    try {
+        let result;
+        
+        if (language === 'javascript') {
+            result = executeMultiFileJavaScript(files, testCase);
+        } else if (language === 'python') {
+            result = await executeMultiFilePython(files, testCase);
+        } else if (language === 'java') {
+            result = await executeMultiFileJava(files, testCase);
+        } else if (language === 'cpp' || language === 'c++') {
+            result = await executeMultiFileCpp(files, testCase);
+        } else {
+            throw new Error(`Multi-file execution not supported for: ${language}`);
+        }
+
+        const executionTime = Date.now() - startTime;
+        const passed = compareOutputs(result, testCase.expected_output);
+
+        return {
+            passed,
+            input: testCase.input,
+            expected: testCase.expected_output,
+            actual: result,
+            executionTime,
+            error: null,
+        };
+    } catch (error) {
+        return {
+            passed: false,
+            input: testCase.input,
+            expected: testCase.expected_output,
+            actual: null,
+            executionTime: Date.now() - startTime,
+            error: error.message,
+        };
+    }
+};
+
+const executeMultiFileJavaScript = (files, testCase) => {
+    const { VM } = require('vm2');
+    
+    // Find entry point file (or first file)
+    const entryFile = files.find(f => f.is_entry_point) || files[0];
+    
+    // Concatenate all non-entry files first, then entry file
+    const otherFiles = files.filter(f => f.filename !== entryFile.filename);
+    const allCode = [...otherFiles.map(f => f.code), entryFile.code].join('\n\n');
+    
+    const vm = new VM({
+        timeout: 5000,
+        sandbox: {},
+    });
+
+    const functionMatch = allCode.match(/function\s+(\w+)/);
+    if (!functionMatch) {
+        throw new Error('No function found in code');
+    }
+    const functionName = functionMatch[1];
+    
+    const fullCode = `
+        ${allCode}
+        
+        const inputs = ${testCase.input};
+        const result = ${functionName}(...inputs);
+        JSON.stringify(result);
+    `;
+
+    return vm.run(fullCode);
+};
+
+const executeMultiFilePython = async (files, testCase) => {
+    const { spawn } = require('child_process');
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'python-multi-'));
+    
+    try {
+        // Write all files to temp directory
+        for (const file of files) {
+            const filePath = path.join(tempDir, file.filename);
+            // Create subdirectories if filename includes path
+            const dir = path.dirname(filePath);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(filePath, file.code);
+        }
+        
+        // Find entry point
+        const entryFile = files.find(f => f.is_entry_point) || files[0];
+        
+        // Create a runner script
+        const moduleName = entryFile.filename.replace(/\.py$/, '');
+        const runnerCode = `
+import json
+import sys
+import importlib
+
+sys.path.insert(0, '${tempDir.replace(/'/g, "\\'")}')
+mod = importlib.import_module('${moduleName}')
+
+# Find the first callable function
+function_name = [name for name in dir(mod) if callable(getattr(mod, name)) and not name.startswith('_')][0]
+func = getattr(mod, function_name)
+
+inputs = json.loads('${testCase.input.replace(/'/g, "\\'")}')
+result = func(*inputs)
+print(json.dumps(result))
+`;
+        
+        const runnerPath = path.join(tempDir, '__runner__.py');
+        fs.writeFileSync(runnerPath, runnerCode);
+        
+        return new Promise((resolve, reject) => {
+            const python = spawn('python3', [runnerPath], { cwd: tempDir });
+            
+            let output = '';
+            let error = '';
+            
+            python.stdout.on('data', (data) => { output += data.toString(); });
+            python.stderr.on('data', (data) => { error += data.toString(); });
+            
+            python.on('close', (code) => {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+                if (code !== 0) {
+                    reject(new Error(error || 'Python execution failed'));
+                } else {
+                    resolve(output.trim());
+                }
+            });
+            
+            setTimeout(() => {
+                python.kill();
+                fs.rmSync(tempDir, { recursive: true, force: true });
+                reject(new Error('Execution timeout'));
+            }, 10000);
+        });
+    } catch (err) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        throw err;
+    }
+};
+
+const executeMultiFileJava = async (files, testCase) => {
+    const { spawn, execSync } = require('child_process');
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'java-multi-'));
+    
+    try {
+        // Write all files to temp directory
+        const javaFiles = [];
+        for (const file of files) {
+            const filePath = path.join(tempDir, file.filename);
+            const dir = path.dirname(filePath);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(filePath, file.code);
+            if (file.filename.endsWith('.java')) {
+                javaFiles.push(filePath);
+            }
+        }
+        
+        // Find entry point class name
+        const entryFile = files.find(f => f.is_entry_point) || files[0];
+        const classMatch = entryFile.code.match(/public\s+class\s+(\w+)/);
+        const className = classMatch ? classMatch[1] : 'Main';
+        
+        return new Promise((resolve, reject) => {
+            try {
+                // Compile all java files 
+                execSync(`javac ${javaFiles.join(' ')}`, { cwd: tempDir, timeout: 10000 });
+                
+                // Run the entry point class
+                const java = spawn('java', ['-cp', tempDir, className], { cwd: tempDir });
+                
+                let output = '';
+                let error = '';
+                
+                java.stdin.write(testCase.input);
+                java.stdin.end();
+                
+                java.stdout.on('data', (data) => { output += data.toString(); });
+                java.stderr.on('data', (data) => { error += data.toString(); });
+                
+                java.on('close', (code) => {
+                    fs.rmSync(tempDir, { recursive: true, force: true });
+                    if (code !== 0) {
+                        reject(new Error(error || 'Java execution failed'));
+                    } else {
+                        resolve(output.trim());
+                    }
+                });
+                
+                setTimeout(() => {
+                    java.kill();
+                    fs.rmSync(tempDir, { recursive: true, force: true });
+                    reject(new Error('Execution timeout'));
+                }, 10000);
+            } catch (err) {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+                reject(new Error(err.message));
+            }
+        });
+    } catch (err) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        throw err;
+    }
+};
+
+const executeMultiFileCpp = async (files, testCase) => {
+    const { spawn, execSync } = require('child_process');
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cpp-multi-'));
+    const executable = path.join(tempDir, 'solution');
+    
+    try {
+        // Write all files
+        const cppFiles = [];
+        for (const file of files) {
+            const filePath = path.join(tempDir, file.filename);
+            const dir = path.dirname(filePath);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(filePath, file.code);
+            if (file.filename.endsWith('.cpp') || file.filename.endsWith('.c')) {
+                cppFiles.push(filePath);
+            }
+        }
+        
+        return new Promise((resolve, reject) => {
+            try {
+                // Compile all cpp files together
+                execSync(`g++ -std=c++17 -o ${executable} ${cppFiles.join(' ')} -I${tempDir}`, { timeout: 10000 });
+                
+                const process = spawn(executable);
+                let output = '';
+                let error = '';
+                
+                process.stdin.write(testCase.input);
+                process.stdin.end();
+                
+                process.stdout.on('data', (data) => { output += data.toString(); });
+                process.stderr.on('data', (data) => { error += data.toString(); });
+                
+                process.on('close', (code) => {
+                    fs.rmSync(tempDir, { recursive: true, force: true });
+                    if (code !== 0) {
+                        reject(new Error(error || 'C++ execution failed'));
+                    } else {
+                        resolve(output.trim());
+                    }
+                });
+                
+                setTimeout(() => {
+                    process.kill();
+                    fs.rmSync(tempDir, { recursive: true, force: true });
+                    reject(new Error('Execution timeout'));
+                }, 10000);
+            } catch (err) {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+                reject(new Error(err.message));
+            }
+        });
+    } catch (err) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        throw err;
+    }
+};
+
+module.exports = { executeCode, executeMultiFileCode };

@@ -92,6 +92,11 @@ export const exerciseService = {
     addTestCase: (exerciseId, testCaseData) => api.post(`/exercises/professor/${exerciseId}/test-cases`, testCaseData),
     updateTestCase: (testCaseId, testCaseData) => api.put(`/exercises/professor/test-cases/${testCaseId}`, testCaseData),
     deleteTestCase: (testCaseId) => api.delete(`/exercises/professor/test-cases/${testCaseId}`),
+    // Multi-file exercise file management
+    getExerciseFiles: (exerciseId) => api.get(`/exercises/professor/${exerciseId}/files`),
+    addExerciseFile: (exerciseId, fileData) => api.post(`/exercises/professor/${exerciseId}/files`, fileData),
+    updateExerciseFile: (fileId, fileData) => api.put(`/exercises/professor/files/${fileId}`, fileData),
+    deleteExerciseFile: (fileId) => api.delete(`/exercises/professor/files/${fileId}`),
 };
 
 // Plagiarism services (professor only)
