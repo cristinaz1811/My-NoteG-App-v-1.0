@@ -142,8 +142,71 @@ CRITICAL RULES:
     return response.choices[0].message.content.trim();
 };
 
+/**
+ * Generate personalised growth feedback for a student based on their analytics data.
+ */
+const generateStudentFeedback = async (studentData) => {
+    const { overview, courses, difficultyBreakdown, languages, recentActivity } = studentData;
+
+    const prompt = `You are an encouraging but honest programming tutor. Analyse the following student analytics and give concise, actionable feedback.
+
+OVERVIEW:
+- Enrolled courses: ${overview.enrolled_courses}
+- Exercises completed: ${overview.exercises_completed}
+- Total submissions: ${overview.total_submissions}
+- Average score: ${Number(overview.average_score).toFixed(1)}%
+- Total study time: ${Math.round(Number(overview.total_time_spent) / 60)} minutes
+
+COURSE PERFORMANCE:
+${courses.map(c => `  • ${c.title} (${c.difficulty}): ${c.exercises_completed}/${c.exercises_total} exercises, avg ${Number(c.avg_score).toFixed(1)}%`).join('\n')}
+
+DIFFICULTY BREAKDOWN:
+${difficultyBreakdown.map(d => `  • ${d.difficulty}: ${d.completed}/${d.total} completed, avg score ${Number(d.avg_score).toFixed(1)}%, avg ${Number(d.avg_attempts).toFixed(1)} attempts`).join('\n')}
+
+LANGUAGES USED:
+${languages.map(l => `  • ${l.language}: ${l.submissions} submissions, ${l.passed} passed, avg ${Number(l.avg_score).toFixed(1)}%`).join('\n')}
+
+RECENT ACTIVITY (last 10 submissions):
+${recentActivity.map(r => `  • ${r.title} (${r.difficulty}) — ${r.status}, score ${r.score}%`).join('\n')}
+
+Provide your response in EXACTLY this JSON format (raw JSON, no markdown):
+{
+    "summary": "2-3 sentence overall assessment",
+    "strengths": ["strength 1", "strength 2", "strength 3"],
+    "weaknesses": ["area to improve 1", "area to improve 2"],
+    "recommendations": ["actionable tip 1", "actionable tip 2", "actionable tip 3"],
+    "nextSteps": "1-2 sentence suggestion on what to tackle next"
+}`;
+
+    const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+            { role: 'system', content: 'You are a supportive programming tutor who gives data-driven, personalised feedback. Be encouraging but honest. Respond with valid JSON only.' },
+            { role: 'user', content: prompt },
+        ],
+        max_tokens: 500,
+        temperature: 0.6,
+    });
+
+    try {
+        const content = response.choices[0].message.content.trim();
+        const cleaned = content.replace(/^```json?\n?/, '').replace(/\n?```$/, '');
+        return JSON.parse(cleaned);
+    } catch (e) {
+        console.error('Failed to parse AI feedback:', e);
+        return {
+            summary: 'Keep up the good work! Continue practising regularly to improve.',
+            strengths: ['Consistent effort'],
+            weaknesses: ['Could not generate detailed analysis at this time'],
+            recommendations: ['Keep practising daily', 'Try harder exercises gradually'],
+            nextSteps: 'Review your recent mistakes and retry those exercises.',
+        };
+    }
+};
+
 module.exports = {
     generateHints,
     generateOptimizationHints,
     analyzeComplexity,
+    generateStudentFeedback,
 };

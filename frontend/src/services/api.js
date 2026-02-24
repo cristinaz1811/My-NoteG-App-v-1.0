@@ -111,6 +111,18 @@ export const plagiarismService = {
     markRead: (notificationId) => api.put(`/plagiarism/notifications/${notificationId}/read`),
 };
 
+// Analytics services (student)
+export const analyticsService = {
+    getOverview: () => api.get('/analytics/overview'),
+    getProgressOverTime: () => api.get('/analytics/progress-over-time'),
+    getCoursePerformance: () => api.get('/analytics/course-performance'),
+    getDifficultyBreakdown: () => api.get('/analytics/difficulty-breakdown'),
+    getLanguageStats: () => api.get('/analytics/language-stats'),
+    getRecentSubmissions: () => api.get('/analytics/recent-submissions'),
+    getTimePerCourse: () => api.get('/analytics/time-per-course'),
+    getAIFeedback: () => api.post('/analytics/ai-feedback'),
+};
+
 // Notification services
 export const notificationService = {
     getNotifications: (params) => api.get('/notifications', { params }),

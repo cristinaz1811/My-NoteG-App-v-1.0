@@ -153,11 +153,11 @@ const submitSolution = async (req, res) => {
         );
 
         const testCases = testCasesResult.rows;
-        
+
         // Execute code against test cases
         const { executeCode, executeMultiFileCode } = require('../utils/codeExecutor');
         let results;
-        
+
         if (exercise.is_multi_file && files && files.length > 0) {
             // Multi-file execution
             results = await executeMultiFileCode(files, testCases, language);
@@ -169,7 +169,7 @@ const submitSolution = async (req, res) => {
         const testsPassed = results.filter(r => r.passed).length;
         const testsTotal = testCases.length;
         const allPassed = testsPassed === testsTotal;
-        
+
         // Score logic:
         // - If requires_efficiency: all tests pass = 80%, optimal complexity = 100%
         // - If not requires_efficiency: all tests pass = 100%
@@ -198,7 +198,7 @@ const submitSolution = async (req, res) => {
         );
 
         if (progressCheck.rows.length === 0) {
-            const completionStatus = allPassed 
+            const completionStatus = allPassed
                 ? (exercise.requires_efficiency ? 'inefficient' : 'completed')
                 : 'in_progress';
             await db.query(
@@ -304,7 +304,7 @@ const updateExercise = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE e.id = $1
         `, [id]);
-        
+
         if (exercise.rows.length === 0) {
             return res.status(404).json({ error: 'Exercise not found' });
         }
@@ -352,7 +352,7 @@ const deleteExercise = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE e.id = $1
         `, [id]);
-        
+
         if (exercise.rows.length === 0) {
             return res.status(404).json({ error: 'Exercise not found' });
         }
@@ -382,7 +382,7 @@ const addTestCase = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE e.id = $1
         `, [exerciseId]);
-        
+
         if (exercise.rows.length === 0) {
             return res.status(404).json({ error: 'Exercise not found' });
         }
@@ -417,7 +417,7 @@ const updateTestCase = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE tc.id = $1
         `, [testCaseId]);
-        
+
         if (testCase.rows.length === 0) {
             return res.status(404).json({ error: 'Test case not found' });
         }
@@ -456,7 +456,7 @@ const deleteTestCase = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE tc.id = $1
         `, [testCaseId]);
-        
+
         if (testCase.rows.length === 0) {
             return res.status(404).json({ error: 'Test case not found' });
         }
@@ -485,7 +485,7 @@ const getExerciseTestCases = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE e.id = $1
         `, [exerciseId]);
-        
+
         if (exercise.rows.length === 0) {
             return res.status(404).json({ error: 'Exercise not found' });
         }
@@ -808,7 +808,7 @@ const getExerciseFiles = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE e.id = $1
         `, [exerciseId]);
-        
+
         if (exercise.rows.length === 0) {
             return res.status(404).json({ error: 'Exercise not found' });
         }
@@ -846,7 +846,7 @@ const addExerciseFile = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE e.id = $1
         `, [exerciseId]);
-        
+
         if (exercise.rows.length === 0) {
             return res.status(404).json({ error: 'Exercise not found' });
         }
@@ -892,7 +892,7 @@ const updateExerciseFile = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE ef.id = $1
         `, [fileId]);
-        
+
         if (file.rows.length === 0) {
             return res.status(404).json({ error: 'File not found' });
         }
@@ -943,7 +943,7 @@ const deleteExerciseFile = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE ef.id = $1
         `, [fileId]);
-        
+
         if (file.rows.length === 0) {
             return res.status(404).json({ error: 'File not found' });
         }
