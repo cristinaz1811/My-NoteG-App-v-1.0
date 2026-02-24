@@ -160,6 +160,7 @@ services:
         REACT_APP_API_URL: /api
         REACT_APP_WS_URL: ""
         REACT_APP_DASHBOARD_URL: ${DASHBOARD_URL:-https://my-noteg.com:8501}
+        REACT_APP_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     container_name: noteg-frontend
     restart: unless-stopped
     depends_on:
