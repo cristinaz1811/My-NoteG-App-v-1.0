@@ -734,16 +734,39 @@ const ExerciseModal = ({ chapters, onClose, onSubmit }) => {
         starterCode: '',
         chapter_id: '',
         requires_efficiency: false,
-        time_limit_minutes: ''
+        time_limit_minutes: '',
+        is_multi_file: false,
     });
+
+    // Multi-file state
+    const [files, setFiles] = useState([]);
+    const [newFileName, setNewFileName] = useState('');
+
+    const handleAddFile = () => {
+        if (!newFileName.trim()) return;
+        if (files.find(f => f.filename === newFileName.trim())) {
+            alert('A file with this name already exists');
+            return;
+        }
+        setFiles([...files, { filename: newFileName.trim(), starter_code: '', is_entry_point: files.length === 0, display_order: files.length }]);
+        setNewFileName('');
+    };
+
+    const handleRemoveFile = (index) => {
+        setFiles(files.filter((_, i) => i !== index));
+    };
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        onSubmit({
+        const submitData = {
             ...formData,
             chapter_id: formData.chapter_id || null,
-            time_limit_minutes: formData.time_limit_minutes || null
-        });
+            time_limit_minutes: formData.time_limit_minutes || null,
+        };
+        if (formData.is_multi_file) {
+            submitData.files = files;
+        }
+        onSubmit(submitData);
     };
 
     return (
@@ -820,10 +843,81 @@ const ExerciseModal = ({ chapters, onClose, onSubmit }) => {
                             value={formData.starterCode}
                             onChange={(e) => setFormData({ ...formData, starterCode: e.target.value })}
                             rows={5}
-                            className="w-full font-mono text-sm"
+                            className={`w-full font-mono text-sm ${formData.is_multi_file ? 'opacity-50' : ''}`}
                             placeholder="// Starter code for students"
+                            disabled={formData.is_multi_file}
                         />
+                        {formData.is_multi_file && (
+                            <p className="text-xs text-gray-500 mt-1">Starter code is set per file in multi-file mode.</p>
+                        )}
                     </div>
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
+                        <input
+                            type="checkbox"
+                            id="is_multi_file_create"
+                            checked={formData.is_multi_file}
+                            onChange={(e) => setFormData({ ...formData, is_multi_file: e.target.checked })}
+                            className="w-4 h-4 rounded border-gray-600 accent-cyan-500"
+                        />
+                        <div>
+                            <label htmlFor="is_multi_file_create" className="text-sm font-medium text-gray-300 cursor-pointer flex items-center gap-2">
+                                📁 Multi-File Exercise
+                            </label>
+                            <p className="text-xs text-gray-500">Students work with multiple files (e.g., class + test file)</p>
+                        </div>
+                    </div>
+                    {formData.is_multi_file && (
+                        <div className="p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/20 space-y-3">
+                            <h4 className="text-sm font-medium text-cyan-300 flex items-center gap-2">📁 Exercise Files</h4>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={newFileName}
+                                    onChange={(e) => setNewFileName(e.target.value)}
+                                    placeholder={`e.g., Calculator.${formData.language === 'python' ? 'py' : formData.language === 'java' ? 'java' : 'js'}`}
+                                    className="flex-1 font-mono text-sm"
+                                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddFile())}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleAddFile}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-white"
+                                    style={{ background: 'linear-gradient(135deg, #06b6d4, #0891b2)' }}
+                                >
+                                    + Add
+                                </button>
+                            </div>
+                            {files.length > 0 && (
+                                <div className="space-y-2">
+                                    {files.map((file, idx) => (
+                                        <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.03] border border-white/10">
+                                            <span className="font-mono text-xs text-gray-300 flex-1">{file.filename}</span>
+                                            {file.is_entry_point && (
+                                                <span className="text-[9px] text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded">▶ Entry</span>
+                                            )}
+                                            {!file.is_entry_point && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFiles(files.map((f, i) => ({ ...f, is_entry_point: i === idx })))}
+                                                    className="text-[9px] text-gray-500 hover:text-green-400"
+                                                >
+                                                    Set Entry
+                                                </button>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveFile(idx)}
+                                                className="text-xs text-red-400 hover:text-red-300"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            <p className="text-[10px] text-gray-500">You can edit starter code for each file after creating the exercise (Edit Exercise → Files tab).</p>
+                        </div>
+                    )}
                     <div className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
                         <input
                             type="checkbox"

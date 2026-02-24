@@ -17,6 +17,10 @@ const {
     getComplexityAnalysis,
     startTimedSession,
     getTimedSession,
+    getExerciseFiles,
+    addExerciseFile,
+    updateExerciseFile,
+    deleteExerciseFile,
 } = require('../controllers/exerciseController');
 const { authMiddleware, isAdmin, isProfessor } = require('../middleware/auth');
 
@@ -45,6 +49,12 @@ router.get('/professor/:exerciseId/test-cases', authMiddleware, isProfessor, get
 router.post('/professor/:exerciseId/test-cases', authMiddleware, isProfessor, addTestCase);
 router.put('/professor/test-cases/:testCaseId', authMiddleware, isProfessor, updateTestCase);
 router.delete('/professor/test-cases/:testCaseId', authMiddleware, isProfessor, deleteTestCase);
+
+// Professor routes - Multi-file exercise file management
+router.get('/professor/:exerciseId/files', authMiddleware, isProfessor, getExerciseFiles);
+router.post('/professor/:exerciseId/files', authMiddleware, isProfessor, addExerciseFile);
+router.put('/professor/files/:fileId', authMiddleware, isProfessor, updateExerciseFile);
+router.delete('/professor/files/:fileId', authMiddleware, isProfessor, deleteExerciseFile);
 
 // Legacy admin route
 router.post('/', authMiddleware, isAdmin, createExercise);

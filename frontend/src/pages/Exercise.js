@@ -15,6 +15,10 @@ const Exercise = () => {
     const editorRef = useRef(null);
     const isMountedRef = useRef(true);
 
+    // Multi-file state
+    const [fileContents, setFileContents] = useState({}); // { filename: code }
+    const [activeFile, setActiveFile] = useState(null);   // current tab filename
+
     // Panel state
     const [showAIPanel, setShowAIPanel] = useState(false);
     const [showHistoryPanel, setShowHistoryPanel] = useState(false);
@@ -140,8 +144,24 @@ const Exercise = () => {
         try {
             const response = await exerciseService.getExerciseById(id);
             setExercise(response.data);
-            const starterCode = response.data.starter_code || '';
-            setCode(starterCode.replace(/\\n/g, '\n'));
+            
+            // Initialize code state
+            if (response.data.is_multi_file && response.data.exerciseFiles?.length > 0) {
+                // Multi-file: initialize file contents from exercise files
+                const contents = {};
+                response.data.exerciseFiles.forEach(f => {
+                    contents[f.filename] = (f.starter_code || '').replace(/\\n/g, '\n');
+                });
+                setFileContents(contents);
+                // Set active file to entry point or first file
+                const entryFile = response.data.exerciseFiles.find(f => f.is_entry_point) || response.data.exerciseFiles[0];
+                setActiveFile(entryFile.filename);
+                setCode((entryFile.starter_code || '').replace(/\\n/g, '\n'));
+            } else {
+                // Single-file
+                const starterCode = response.data.starter_code || '';
+                setCode(starterCode.replace(/\\n/g, '\n'));
+            }
             
             // Set initial hint mode based on completion status
             const status = response.data.userProgress?.completion_status;
@@ -243,10 +263,24 @@ const Exercise = () => {
         setResults(null);
 
         try {
-            const response = await exerciseService.submitSolution(id, {
-                code,
+            // Build submission data
+            const submitData = {
                 language: exercise.language,
-            });
+            };
+            
+            if (exercise.is_multi_file && exercise.exerciseFiles?.length > 0) {
+                // Multi-file: send all files with their current code
+                submitData.files = exercise.exerciseFiles.map(f => ({
+                    filename: f.filename,
+                    code: fileContents[f.filename] || '',
+                    is_entry_point: f.is_entry_point,
+                }));
+                submitData.code = submitData.files.map(f => f.code).join('\n');
+            } else {
+                submitData.code = code;
+            }
+            
+            const response = await exerciseService.submitSolution(id, submitData);
             setResults(response.data);
             
             const { score, testsPassed, testsTotal } = response.data;
@@ -502,6 +536,12 @@ const Exercise = () => {
                             <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
                             <div className="w-3 h-3 rounded-full bg-green-500"></div>
                         </div>
+                        {/* Show active filename or default */}
+                        {exercise.is_multi_file && exercise.exerciseFiles?.length > 0 ? (
+                            <span className="text-sm text-gray-400 font-mono">
+                                {activeFile || exercise.exerciseFiles[0]?.filename}
+                            </span>
+                        ) : (
                         <span className="text-sm text-gray-400 font-mono">
                             solution.{
                                 exercise.language === 'python' ? 'py' : 
@@ -512,6 +552,12 @@ const Exercise = () => {
                                 exercise.language
                             }
                         </span>
+                        )}
+                        {exercise.is_multi_file && (
+                            <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded">
+                                Multi-File
+                            </span>
+                        )}
                         {/* Timer Display */}
                         {exercise.time_limit_minutes && timedSession && !timerExpired && timeRemaining != null && (
                             <div className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-mono font-bold ${
@@ -603,13 +649,50 @@ const Exercise = () => {
                     </div>
                 </div>
 
+                {/* Multi-file Tabs */}
+                {exercise.is_multi_file && exercise.exerciseFiles?.length > 0 && (
+                    <div className="flex items-center border-b border-white/5 bg-[#1a1f2b] overflow-x-auto">
+                        {exercise.exerciseFiles.map((file) => (
+                            <button
+                                key={file.filename}
+                                onClick={() => {
+                                    // Save current file's code before switching
+                                    if (activeFile) {
+                                        setFileContents(prev => ({ ...prev, [activeFile]: code }));
+                                    }
+                                    setActiveFile(file.filename);
+                                    setCode(fileContents[file.filename] || '');
+                                }}
+                                className={`px-4 py-2 text-xs font-mono whitespace-nowrap transition-all border-b-2 flex items-center gap-1.5 ${
+                                    activeFile === file.filename
+                                        ? 'border-[#a1609d] text-white bg-[#1e242e]'
+                                        : 'border-transparent text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                                }`}
+                            >
+                                {file.is_entry_point && (
+                                    <span className="text-[9px] text-green-400" title="Entry point">▶</span>
+                                )}
+                                {file.filename}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
                 {/* Monaco Editor */}
                 <div style={{ flex: results ? '0 0 40%' : '1 1 auto', minHeight: '200px', overflow: 'hidden' }}>
                     <Editor
                         height="100%"
                         language={exercise.language}
                         value={code}
-                        onChange={(value) => { if (isMountedRef.current) setCode(value || ''); }}
+                        onChange={(value) => { 
+                            if (isMountedRef.current) {
+                                setCode(value || '');
+                                // Keep fileContents in sync for multi-file
+                                if (exercise.is_multi_file && activeFile) {
+                                    setFileContents(prev => ({ ...prev, [activeFile]: value || '' }));
+                                }
+                            }
+                        }}
                         onMount={(editor) => { 
                             if (isMountedRef.current) {
                                 editorRef.current = editor;
@@ -742,7 +825,27 @@ const Exercise = () => {
                         exerciseId={id}
                         exerciseService={exerciseService}
                         starterCode={(exercise?.starter_code || '').replace(/\\n/g, '\n')}
-                        onLoadCode={(loadedCode) => setCode(loadedCode)}
+                        onLoadCode={(loadedCode) => {
+                            // Handle multi-file submissions (stored as JSON)
+                            if (exercise?.is_multi_file) {
+                                try {
+                                    const parsedFiles = JSON.parse(loadedCode);
+                                    if (Array.isArray(parsedFiles)) {
+                                        const contents = {};
+                                        parsedFiles.forEach(f => { contents[f.filename] = f.code || ''; });
+                                        setFileContents(contents);
+                                        // Load the active file's code into the editor
+                                        const active = activeFile || Object.keys(contents)[0];
+                                        setActiveFile(active);
+                                        setCode(contents[active] || '');
+                                        return;
+                                    }
+                                } catch (e) {
+                                    // Not JSON, fall through to single-file load
+                                }
+                            }
+                            setCode(loadedCode);
+                        }}
                     />
                 </div>
             )}

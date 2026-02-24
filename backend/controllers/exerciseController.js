@@ -20,6 +20,16 @@ const getExerciseById = async (req, res) => {
             [id]
         );
 
+        // Get exercise files if multi-file exercise
+        let exerciseFiles = [];
+        if (exerciseResult.rows[0].is_multi_file) {
+            const filesResult = await db.query(
+                'SELECT id, filename, starter_code, is_entry_point, display_order FROM exercise_files WHERE exercise_id = $1 ORDER BY display_order, id',
+                [id]
+            );
+            exerciseFiles = filesResult.rows;
+        }
+
         // Get user progress if authenticated
         let userProgress = null;
         let timedSession = null;
@@ -46,6 +56,7 @@ const getExerciseById = async (req, res) => {
             totalTestCases: testCasesResult.rows.length,
             userProgress,
             timedSession,
+            exerciseFiles,
         });
     } catch (error) {
         console.error('Get exercise error:', error);
@@ -55,16 +66,27 @@ const getExerciseById = async (req, res) => {
 
 const createExercise = async (req, res) => {
     try {
-        const { courseId, title, description, difficulty, starterCode, language, testCases, chapter_id, requires_efficiency, time_limit_minutes } = req.body;
+        const { courseId, title, description, difficulty, starterCode, language, testCases, chapter_id, requires_efficiency, time_limit_minutes, is_multi_file, files } = req.body;
 
         // Create exercise
         const exerciseResult = await db.query(
-            `INSERT INTO exercises (course_id, title, description, difficulty, starter_code, language, chapter_id, requires_efficiency, time_limit_minutes) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-            [courseId, title, description, difficulty, starterCode, language, chapter_id || null, requires_efficiency || false, time_limit_minutes || null]
+            `INSERT INTO exercises (course_id, title, description, difficulty, starter_code, language, chapter_id, requires_efficiency, time_limit_minutes, is_multi_file) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+            [courseId, title, description, difficulty, is_multi_file ? null : starterCode, language, chapter_id || null, requires_efficiency || false, time_limit_minutes || null, is_multi_file || false]
         );
 
         const exercise = exerciseResult.rows[0];
+
+        // Create exercise files if multi-file
+        if (is_multi_file && files && files.length > 0) {
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                await db.query(
+                    'INSERT INTO exercise_files (exercise_id, filename, starter_code, is_entry_point, display_order) VALUES ($1, $2, $3, $4, $5)',
+                    [exercise.id, file.filename, file.starter_code || '', file.is_entry_point || false, file.display_order ?? i]
+                );
+            }
+        }
 
         // Create test cases if provided
         if (testCases && testCases.length > 0) {
@@ -94,7 +116,7 @@ const createExercise = async (req, res) => {
 const submitSolution = async (req, res) => {
     try {
         const { id } = req.params;
-        const { code, language } = req.body;
+        const { code, language, files } = req.body;
         const userId = req.user.id;
 
         // Get exercise and test cases
@@ -133,8 +155,16 @@ const submitSolution = async (req, res) => {
         const testCases = testCasesResult.rows;
         
         // Execute code against test cases
-        const { executeCode } = require('../utils/codeExecutor');
-        const results = await executeCode(code, testCases, language);
+        const { executeCode, executeMultiFileCode } = require('../utils/codeExecutor');
+        let results;
+        
+        if (exercise.is_multi_file && files && files.length > 0) {
+            // Multi-file execution
+            results = await executeMultiFileCode(files, testCases, language);
+        } else {
+            // Single-file execution
+            results = await executeCode(code, testCases, language);
+        }
 
         const testsPassed = results.filter(r => r.passed).length;
         const testsTotal = testCases.length;
@@ -151,11 +181,14 @@ const submitSolution = async (req, res) => {
         }
         const status = allPassed ? 'passed' : 'failed';
 
+        // For multi-file exercises, store all files as JSON in code column
+        const codeToStore = exercise.is_multi_file && files ? JSON.stringify(files) : code;
+
         // Save submission
         const submissionResult = await db.query(
             `INSERT INTO submissions (user_id, exercise_id, code, language, status, score, tests_passed, tests_total)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-            [userId, id, code, language, status, score, testsPassed, testsTotal]
+            [userId, id, codeToStore, language, status, score, testsPassed, testsTotal]
         );
 
         // Update user progress
@@ -261,7 +294,7 @@ const getSubmissionDetail = async (req, res) => {
 const updateExercise = async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency, time_limit_minutes } = req.body;
+        const { title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency, time_limit_minutes, is_multi_file } = req.body;
         const userId = req.user.id;
 
         // Verify ownership through course
@@ -293,10 +326,11 @@ const updateExercise = async (req, res) => {
                 order_index = COALESCE($7, order_index),
                 requires_efficiency = COALESCE($8, requires_efficiency),
                 time_limit_minutes = $9,
+                is_multi_file = COALESCE($11, is_multi_file),
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = $10
             RETURNING *
-        `, [title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency, timeLimitValue, id]);
+        `, [title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency, timeLimitValue, id, is_multi_file]);
 
         res.json(result.rows[0]);
     } catch (error) {
@@ -759,6 +793,172 @@ const getTimedSession = async (req, res) => {
     }
 };
 
+// ============= Multi-file Exercise File Management =============
+
+// Professor: Get all files for an exercise
+const getExerciseFiles = async (req, res) => {
+    try {
+        const { exerciseId } = req.params;
+        const userId = req.user.id;
+
+        // Verify ownership
+        const exercise = await db.query(`
+            SELECT e.*, c.created_by 
+            FROM exercises e 
+            JOIN courses c ON e.course_id = c.id 
+            WHERE e.id = $1
+        `, [exerciseId]);
+        
+        if (exercise.rows.length === 0) {
+            return res.status(404).json({ error: 'Exercise not found' });
+        }
+        if (exercise.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        const result = await db.query(
+            'SELECT * FROM exercise_files WHERE exercise_id = $1 ORDER BY display_order, id',
+            [exerciseId]
+        );
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Get exercise files error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Professor: Add a file to a multi-file exercise
+const addExerciseFile = async (req, res) => {
+    try {
+        const { exerciseId } = req.params;
+        const { filename, starter_code, is_entry_point, display_order } = req.body;
+        const userId = req.user.id;
+
+        if (!filename) {
+            return res.status(400).json({ error: 'Filename is required' });
+        }
+
+        // Verify ownership
+        const exercise = await db.query(`
+            SELECT e.*, c.created_by 
+            FROM exercises e 
+            JOIN courses c ON e.course_id = c.id 
+            WHERE e.id = $1
+        `, [exerciseId]);
+        
+        if (exercise.rows.length === 0) {
+            return res.status(404).json({ error: 'Exercise not found' });
+        }
+        if (exercise.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        // If marking as entry point, unset others
+        if (is_entry_point) {
+            await db.query(
+                'UPDATE exercise_files SET is_entry_point = FALSE WHERE exercise_id = $1',
+                [exerciseId]
+            );
+        }
+
+        const result = await db.query(
+            'INSERT INTO exercise_files (exercise_id, filename, starter_code, is_entry_point, display_order) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [exerciseId, filename, starter_code || '', is_entry_point || false, display_order ?? 0]
+        );
+
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        if (error.code === '23505') {
+            return res.status(400).json({ error: 'A file with this name already exists in the exercise' });
+        }
+        console.error('Add exercise file error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Professor: Update an exercise file
+const updateExerciseFile = async (req, res) => {
+    try {
+        const { fileId } = req.params;
+        const { filename, starter_code, is_entry_point, display_order } = req.body;
+        const userId = req.user.id;
+
+        // Verify ownership
+        const file = await db.query(`
+            SELECT ef.*, c.created_by 
+            FROM exercise_files ef 
+            JOIN exercises e ON ef.exercise_id = e.id
+            JOIN courses c ON e.course_id = c.id 
+            WHERE ef.id = $1
+        `, [fileId]);
+        
+        if (file.rows.length === 0) {
+            return res.status(404).json({ error: 'File not found' });
+        }
+        if (file.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        // If marking as entry point, unset others
+        if (is_entry_point) {
+            await db.query(
+                'UPDATE exercise_files SET is_entry_point = FALSE WHERE exercise_id = $1',
+                [file.rows[0].exercise_id]
+            );
+        }
+
+        const result = await db.query(`
+            UPDATE exercise_files 
+            SET filename = COALESCE($1, filename),
+                starter_code = COALESCE($2, starter_code),
+                is_entry_point = COALESCE($3, is_entry_point),
+                display_order = COALESCE($4, display_order),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $5
+            RETURNING *
+        `, [filename, starter_code, is_entry_point, display_order, fileId]);
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        if (error.code === '23505') {
+            return res.status(400).json({ error: 'A file with this name already exists in the exercise' });
+        }
+        console.error('Update exercise file error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Professor: Delete an exercise file
+const deleteExerciseFile = async (req, res) => {
+    try {
+        const { fileId } = req.params;
+        const userId = req.user.id;
+
+        // Verify ownership
+        const file = await db.query(`
+            SELECT ef.*, c.created_by 
+            FROM exercise_files ef 
+            JOIN exercises e ON ef.exercise_id = e.id
+            JOIN courses c ON e.course_id = c.id 
+            WHERE ef.id = $1
+        `, [fileId]);
+        
+        if (file.rows.length === 0) {
+            return res.status(404).json({ error: 'File not found' });
+        }
+        if (file.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        await db.query('DELETE FROM exercise_files WHERE id = $1', [fileId]);
+        res.json({ message: 'File deleted successfully' });
+    } catch (error) {
+        console.error('Delete exercise file error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 module.exports = {
     getExerciseById,
     createExercise,
@@ -776,4 +976,9 @@ module.exports = {
     getComplexityAnalysis,
     startTimedSession,
     getTimedSession,
+    // Multi-file exercise management
+    getExerciseFiles,
+    addExerciseFile,
+    updateExerciseFile,
+    deleteExerciseFile,
 };

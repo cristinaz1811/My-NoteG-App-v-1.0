@@ -7,6 +7,7 @@ const EditExercise = () => {
     const { id } = useParams();
     const [exercise, setExercise] = useState(null);
     const [testCases, setTestCases] = useState([]);
+    const [exerciseFiles, setExerciseFiles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('details');
     const [saving, setSaving] = useState(false);
@@ -19,7 +20,8 @@ const EditExercise = () => {
         language: 'javascript',
         starter_code: '',
         requires_efficiency: false,
-        time_limit_minutes: ''
+        time_limit_minutes: '',
+        is_multi_file: false
     });
 
     // New test case
@@ -28,6 +30,13 @@ const EditExercise = () => {
         expected_output: '',
         is_hidden: false,
         weight: 1
+    });
+
+    // New exercise file
+    const [newFile, setNewFile] = useState({
+        filename: '',
+        starter_code: '',
+        is_entry_point: false,
     });
 
     useEffect(() => {
@@ -45,12 +54,23 @@ const EditExercise = () => {
                 language: exerciseRes.data.language,
                 starter_code: exerciseRes.data.starter_code || '',
                 requires_efficiency: exerciseRes.data.requires_efficiency || false,
-                time_limit_minutes: exerciseRes.data.time_limit_minutes || ''
+                time_limit_minutes: exerciseRes.data.time_limit_minutes || '',
+                is_multi_file: exerciseRes.data.is_multi_file || false
             });
 
             // Load test cases
             const testCasesRes = await exerciseService.getTestCases(id);
             setTestCases(testCasesRes.data);
+
+            // Load exercise files if multi-file
+            if (exerciseRes.data.is_multi_file) {
+                try {
+                    const filesRes = await exerciseService.getExerciseFiles(id);
+                    setExerciseFiles(filesRes.data);
+                } catch (err) {
+                    console.error('Error loading exercise files:', err);
+                }
+            }
         } catch (error) {
             console.error('Error loading exercise:', error);
         } finally {
@@ -66,6 +86,8 @@ const EditExercise = () => {
                 time_limit_minutes: formData.time_limit_minutes === '' ? null : formData.time_limit_minutes
             };
             await exerciseService.updateExercise(id, dataToSend);
+            // Reload to refresh files tab visibility
+            loadExercise();
             alert('Exercise updated successfully!');
         } catch (error) {
             console.error('Error updating exercise:', error);
@@ -108,6 +130,43 @@ const EditExercise = () => {
         } catch (error) {
             console.error('Error deleting test case:', error);
             alert(error.response?.data?.error || 'Failed to delete test case');
+        }
+    };
+
+    // Multi-file exercise file management
+    const handleAddFile = async () => {
+        if (!newFile.filename) {
+            alert('Filename is required');
+            return;
+        }
+        try {
+            await exerciseService.addExerciseFile(id, newFile);
+            setNewFile({ filename: '', starter_code: '', is_entry_point: false });
+            loadExercise();
+        } catch (error) {
+            console.error('Error adding file:', error);
+            alert(error.response?.data?.error || 'Failed to add file');
+        }
+    };
+
+    const handleUpdateFile = async (fileId, data) => {
+        try {
+            await exerciseService.updateExerciseFile(fileId, data);
+            loadExercise();
+        } catch (error) {
+            console.error('Error updating file:', error);
+            alert(error.response?.data?.error || 'Failed to update file');
+        }
+    };
+
+    const handleDeleteFile = async (fileId) => {
+        if (!window.confirm('Are you sure you want to delete this file?')) return;
+        try {
+            await exerciseService.deleteExerciseFile(fileId);
+            loadExercise();
+        } catch (error) {
+            console.error('Error deleting file:', error);
+            alert(error.response?.data?.error || 'Failed to delete file');
         }
     };
 
@@ -168,7 +227,7 @@ const EditExercise = () => {
 
                 {/* Tabs */}
                 <div className="flex gap-4 mb-6 border-b border-white/10">
-                    {['details', 'code', 'test-cases'].map((tab) => (
+                    {['details', 'code', 'test-cases', ...(formData.is_multi_file ? ['files'] : [])].map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -230,6 +289,21 @@ const EditExercise = () => {
                                     <option value="cpp">C++</option>
                                     <option value="csharp">C#</option>
                                 </select>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
+                            <input
+                                type="checkbox"
+                                id="edit_is_multi_file"
+                                checked={formData.is_multi_file}
+                                onChange={(e) => setFormData({ ...formData, is_multi_file: e.target.checked })}
+                                className="w-4 h-4 rounded border-gray-600 accent-cyan-500"
+                            />
+                            <div>
+                                <label htmlFor="edit_is_multi_file" className="text-sm font-medium text-gray-300 cursor-pointer flex items-center gap-2">
+                                    📁 Multi-File Exercise
+                                </label>
+                                <p className="text-xs text-gray-500">Students work with multiple files (e.g., class + test file). Manage files in the "Files" tab.</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
@@ -397,6 +471,95 @@ const EditExercise = () => {
                         </div>
                     </div>
                 )}
+
+                {/* Files Tab (Multi-file exercises) */}
+                {activeTab === 'files' && formData.is_multi_file && (
+                    <div className="space-y-6">
+                        {/* Add File */}
+                        <div className="surface-card rounded-2xl p-6">
+                            <h3 className="font-semibold mb-4 flex items-center gap-2">
+                                📁 Add File
+                            </h3>
+                            <div className="space-y-4 mb-4">
+                                <div className="grid sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-300 mb-2">Filename *</label>
+                                        <input
+                                            type="text"
+                                            value={newFile.filename}
+                                            onChange={(e) => setNewFile({ ...newFile, filename: e.target.value })}
+                                            className="w-full font-mono text-sm"
+                                            placeholder={`e.g., Calculator.${formData.language === 'python' ? 'py' : formData.language === 'java' ? 'java' : formData.language === 'cpp' ? 'cpp' : 'js'}`}
+                                        />
+                                    </div>
+                                    <div className="flex items-end">
+                                        <label className="flex items-center gap-2 cursor-pointer pb-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={newFile.is_entry_point}
+                                                onChange={(e) => setNewFile({ ...newFile, is_entry_point: e.target.checked })}
+                                                className="w-4 h-4 accent-green-500"
+                                            />
+                                            <span className="text-sm text-gray-300">Entry point (main file to run)</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">Starter Code</label>
+                                    <div className="rounded-lg overflow-hidden border border-white/10">
+                                        <Editor
+                                            height="200px"
+                                            language={formData.language}
+                                            value={newFile.starter_code}
+                                            onChange={(value) => setNewFile({ ...newFile, starter_code: value || '' })}
+                                            theme="vs-dark"
+                                            options={{
+                                                minimap: { enabled: false },
+                                                fontSize: 13,
+                                                lineNumbers: 'on',
+                                                scrollBeyondLastLine: false,
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleAddFile}
+                                className="px-4 py-2 rounded-lg font-medium text-white"
+                                style={{ background: 'linear-gradient(135deg, #06b6d4, #0891b2)' }}
+                            >
+                                Add File
+                            </button>
+                        </div>
+
+                        {/* Existing Files */}
+                        <div>
+                            <h3 className="font-semibold mb-4">
+                                Exercise Files ({exerciseFiles.length})
+                            </h3>
+                            {exerciseFiles.length === 0 ? (
+                                <div className="surface-card rounded-2xl p-8 text-center">
+                                    <div className="text-4xl mb-3">📂</div>
+                                    <p className="text-gray-400">No files yet. Add your first file above!</p>
+                                    <p className="text-xs text-gray-500 mt-1">Students will see each file as a separate tab in the editor.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {exerciseFiles.map((file, index) => (
+                                        <ExerciseFileCard
+                                            key={file.id}
+                                            file={file}
+                                            index={index}
+                                            language={formData.language}
+                                            onUpdate={(data) => handleUpdateFile(file.id, data)}
+                                            onDelete={() => handleDeleteFile(file.id)}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -507,6 +670,121 @@ const TestCaseCard = ({ testCase, index, onUpdate, onDelete }) => {
                             {testCase.expected_output}
                         </code>
                     </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// Exercise File Card Component (for multi-file exercises)
+const ExerciseFileCard = ({ file, index, language, onUpdate, onDelete }) => {
+    const [editing, setEditing] = useState(false);
+    const [formData, setFormData] = useState({
+        filename: file.filename,
+        starter_code: file.starter_code,
+        is_entry_point: file.is_entry_point,
+        display_order: file.display_order
+    });
+
+    const handleSave = () => {
+        onUpdate(formData);
+        setEditing(false);
+    };
+
+    return (
+        <div className="surface-card rounded-xl p-4">
+            <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono font-medium text-gray-300">{file.filename}</span>
+                    {file.is_entry_point && (
+                        <span className="px-2 py-0.5 rounded text-xs bg-green-400/20 text-green-400">▶ Entry Point</span>
+                    )}
+                    <span className="text-xs text-gray-500">Order: {file.display_order}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setEditing(!editing)}
+                        className="text-sm text-[#fef483] hover:text-[#fff9c4]"
+                    >
+                        {editing ? 'Cancel' : 'Edit'}
+                    </button>
+                    <button
+                        onClick={onDelete}
+                        className="text-sm text-red-400 hover:text-red-300"
+                    >
+                        Delete
+                    </button>
+                </div>
+            </div>
+
+            {editing ? (
+                <div className="space-y-3">
+                    <div className="grid sm:grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs text-gray-400 mb-1">Filename</label>
+                            <input
+                                type="text"
+                                value={formData.filename}
+                                onChange={(e) => setFormData({ ...formData, filename: e.target.value })}
+                                className="w-full font-mono text-sm"
+                            />
+                        </div>
+                        <div className="flex items-center gap-4 pt-4">
+                            <label className="flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    checked={formData.is_entry_point}
+                                    onChange={(e) => setFormData({ ...formData, is_entry_point: e.target.checked })}
+                                    className="w-4 h-4 accent-green-500"
+                                />
+                                <span className="text-sm">Entry Point</span>
+                            </label>
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm">Order:</span>
+                                <input
+                                    type="number"
+                                    value={formData.display_order}
+                                    onChange={(e) => setFormData({ ...formData, display_order: parseInt(e.target.value) || 0 })}
+                                    min="0"
+                                    className="w-16 text-center text-sm"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs text-gray-400 mb-1">Starter Code</label>
+                        <div className="rounded-lg overflow-hidden border border-white/10">
+                            <Editor
+                                height="200px"
+                                language={language}
+                                value={formData.starter_code}
+                                onChange={(value) => setFormData({ ...formData, starter_code: value || '' })}
+                                theme="vs-dark"
+                                options={{
+                                    minimap: { enabled: false },
+                                    fontSize: 13,
+                                    lineNumbers: 'on',
+                                    scrollBeyondLastLine: false,
+                                }}
+                            />
+                        </div>
+                    </div>
+                    <div className="flex justify-end">
+                        <button
+                            onClick={handleSave}
+                            className="px-4 py-1.5 rounded-lg text-sm font-medium text-white"
+                            style={{ background: 'linear-gradient(135deg, #06b6d4, #0891b2)' }}
+                        >
+                            Save File
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <div>
+                    <span className="block text-xs text-gray-400 mb-1">Starter Code Preview</span>
+                    <code className="block text-xs bg-black/30 p-3 rounded font-mono whitespace-pre-wrap max-h-32 overflow-y-auto text-gray-400">
+                        {file.starter_code || '(empty)'}
+                    </code>
                 </div>
             )}
         </div>
