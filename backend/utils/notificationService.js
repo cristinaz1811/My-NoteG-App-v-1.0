@@ -1,4 +1,7 @@
 const db = require('../config/database');
+const { getRedisClient, getSubscriber, DISTRIBUTED_MODE } = require('./redisClient');
+
+const NOTIFICATION_CHANNEL = 'notifications';
 
 // In-memory store for WebSocket connections: userId -> Set of ws connections
 const connectedClients = new Map();
@@ -29,9 +32,27 @@ const removeClient = (userId, ws) => {
 };
 
 /**
- * Send a real-time message to a specific user via WebSocket
+ * Send a real-time message to a specific user via WebSocket.
+ * In distributed mode, publishes to Redis so all API instances can deliver.
  */
 const sendToUser = (userId, data) => {
+    if (DISTRIBUTED_MODE) {
+        // Publish to Redis — all instances subscribed will receive and deliver locally
+        const redis = getRedisClient();
+        if (redis) {
+            redis.publish(NOTIFICATION_CHANNEL, JSON.stringify({ userId, data }));
+            return;
+        }
+    }
+
+    // Fallback: deliver directly (single-instance mode)
+    deliverLocally(userId, data);
+};
+
+/**
+ * Deliver a message to locally-connected WebSocket clients
+ */
+const deliverLocally = (userId, data) => {
     const clients = connectedClients.get(userId);
     if (clients) {
         const message = JSON.stringify(data);
@@ -41,6 +62,36 @@ const sendToUser = (userId, data) => {
             }
         });
     }
+};
+
+/**
+ * Initialize Redis Pub/Sub subscriber for notifications.
+ * Call once when the server starts (only in distributed mode).
+ */
+const initRedisSubscriber = () => {
+    if (!DISTRIBUTED_MODE) return;
+
+    const sub = getSubscriber();
+    if (!sub) return;
+
+    sub.subscribe(NOTIFICATION_CHANNEL, (err) => {
+        if (err) {
+            console.error('[Redis Sub] Failed to subscribe to notifications channel:', err.message);
+        } else {
+            console.log('[Redis Sub] Subscribed to notifications channel');
+        }
+    });
+
+    sub.on('message', (channel, message) => {
+        if (channel === NOTIFICATION_CHANNEL) {
+            try {
+                const { userId, data } = JSON.parse(message);
+                deliverLocally(userId, data);
+            } catch (err) {
+                console.error('[Redis Sub] Failed to parse notification message:', err.message);
+            }
+        }
+    });
 };
 
 /**
@@ -254,4 +305,5 @@ module.exports = {
     notifyCourseCompleted,
     notifyStudentNeedsHelp,
     notifyNewEnrollment,
+    initRedisSubscriber,
 };

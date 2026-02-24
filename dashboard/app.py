@@ -334,8 +334,8 @@ try:
                 st.stop()
         
         # Back button to React app
-        st.markdown("""
-            <a href="http://localhost:3000/professor" target="_self" style="
+        st.markdown(f"""
+            <a href="{os.getenv('FRONTEND_URL', 'https://my-noteg.com')}/professor" target="_self" style="
                 display: inline-flex;
                 align-items: center;
                 gap: 8px;

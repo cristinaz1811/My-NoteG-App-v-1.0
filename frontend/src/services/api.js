@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+const API_URL = process.env.REACT_APP_API_URL || '/api';
 
 const api = axios.create({
     baseURL: API_URL,
@@ -97,6 +97,9 @@ export const exerciseService = {
     addExerciseFile: (exerciseId, fileData) => api.post(`/exercises/professor/${exerciseId}/files`, fileData),
     updateExerciseFile: (fileId, fileData) => api.put(`/exercises/professor/files/${fileId}`, fileData),
     deleteExerciseFile: (fileId) => api.delete(`/exercises/professor/files/${fileId}`),
+    // Bulk import/export
+    bulkImport: (courseId, exercises) => api.post('/exercises/professor/bulk-import', { courseId, exercises }),
+    bulkExport: (courseId) => api.get(`/exercises/professor/bulk-export/${courseId}`),
 };
 
 // Plagiarism services (professor only)
@@ -109,6 +112,18 @@ export const plagiarismService = {
     getNotifications: () => api.get('/plagiarism/notifications'),
     getUnreadCount: () => api.get('/plagiarism/notifications/unread-count'),
     markRead: (notificationId) => api.put(`/plagiarism/notifications/${notificationId}/read`),
+};
+
+// Analytics services (student)
+export const analyticsService = {
+    getOverview: () => api.get('/analytics/overview'),
+    getProgressOverTime: () => api.get('/analytics/progress-over-time'),
+    getCoursePerformance: () => api.get('/analytics/course-performance'),
+    getDifficultyBreakdown: () => api.get('/analytics/difficulty-breakdown'),
+    getLanguageStats: () => api.get('/analytics/language-stats'),
+    getRecentSubmissions: () => api.get('/analytics/recent-submissions'),
+    getTimePerCourse: () => api.get('/analytics/time-per-course'),
+    getAIFeedback: () => api.post('/analytics/ai-feedback'),
 };
 
 // Notification services

@@ -94,7 +94,7 @@ export const NotificationProvider = ({ children }) => {
         }
 
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsHost = process.env.REACT_APP_WS_URL || `${wsProtocol}//localhost:5001`;
+        const wsHost = process.env.REACT_APP_WS_URL || `${wsProtocol}//${window.location.host}`;
         const wsUrl = `${wsHost}/ws`;
 
         try {

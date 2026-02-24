@@ -26,6 +26,7 @@ import Profile from './pages/Profile';
 import PlagiarismDashboard from './pages/PlagiarismDashboard';
 import PlagiarismReport from './pages/PlagiarismReport';
 import Notifications from './pages/Notifications';
+import StudentAnalytics from './pages/StudentAnalytics';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -417,6 +418,16 @@ function App() {
                             <ProfessorRoute>
                                 <Navbar /><div className="pt-16"><PlagiarismReport /></div>
                             </ProfessorRoute>
+                        } 
+                    />
+                    
+                    {/* Student Analytics Route */}
+                    <Route 
+                        path="/my-analytics" 
+                        element={
+                            <ProtectedRoute>
+                                <Navbar /><div className="pt-16"><StudentAnalytics /></div>
+                            </ProtectedRoute>
                         } 
                     />
                     

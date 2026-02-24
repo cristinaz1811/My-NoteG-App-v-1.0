@@ -1,33 +1,53 @@
 const db = require('../config/database');
 const { generateHints, generateOptimizationHints, analyzeComplexity } = require('../utils/openaiService');
 const { notifyNewExercise, notifyCourseCompleted } = require('../utils/notificationService');
+const { DISTRIBUTED_MODE } = require('../utils/redisClient');
+const { cacheGet, cacheSet, cacheDel } = require('../utils/redisClient');
 
 const getExerciseById = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const exerciseResult = await db.query(
-            'SELECT * FROM exercises WHERE id = $1',
-            [id]
-        );
+        // Try cache first (exercise data without user-specific fields)
+        const cacheKey = `exercise:${id}`;
+        const cached = await cacheGet(cacheKey);
 
-        if (exerciseResult.rows.length === 0) {
-            return res.status(404).json({ error: 'Exercise not found' });
-        }
+        let exercise, testCasesRows, exerciseFiles;
 
-        const testCasesResult = await db.query(
-            'SELECT id, input, expected_output, is_hidden FROM test_cases WHERE exercise_id = $1',
-            [id]
-        );
-
-        // Get exercise files if multi-file exercise
-        let exerciseFiles = [];
-        if (exerciseResult.rows[0].is_multi_file) {
-            const filesResult = await db.query(
-                'SELECT id, filename, starter_code, is_entry_point, display_order FROM exercise_files WHERE exercise_id = $1 ORDER BY display_order, id',
+        if (cached) {
+            exercise = cached.exercise;
+            testCasesRows = cached.testCases;
+            exerciseFiles = cached.exerciseFiles;
+        } else {
+            const exerciseResult = await db.query(
+                'SELECT * FROM exercises WHERE id = $1',
                 [id]
             );
-            exerciseFiles = filesResult.rows;
+
+            if (exerciseResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Exercise not found' });
+            }
+
+            exercise = exerciseResult.rows[0];
+
+            const testCasesResult = await db.query(
+                'SELECT id, input, expected_output, is_hidden FROM test_cases WHERE exercise_id = $1',
+                [id]
+            );
+            testCasesRows = testCasesResult.rows;
+
+            // Get exercise files if multi-file exercise
+            exerciseFiles = [];
+            if (exercise.is_multi_file) {
+                const filesResult = await db.query(
+                    'SELECT id, filename, starter_code, is_entry_point, display_order FROM exercise_files WHERE exercise_id = $1 ORDER BY display_order, id',
+                    [id]
+                );
+                exerciseFiles = filesResult.rows;
+            }
+
+            // Cache for 5 minutes
+            await cacheSet(cacheKey, { exercise, testCases: testCasesRows, exerciseFiles }, 300);
         }
 
         // Get user progress if authenticated
@@ -41,7 +61,7 @@ const getExerciseById = async (req, res) => {
             userProgress = progressResult.rows[0] || null;
 
             // Get timed session if exercise has a time limit
-            if (exerciseResult.rows[0].time_limit_minutes) {
+            if (exercise.time_limit_minutes) {
                 const sessionResult = await db.query(
                     'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
                     [req.user.id, id]
@@ -51,9 +71,9 @@ const getExerciseById = async (req, res) => {
         }
 
         res.json({
-            ...exerciseResult.rows[0],
-            testCases: testCasesResult.rows.filter(tc => !tc.is_hidden),
-            totalTestCases: testCasesResult.rows.length,
+            ...exercise,
+            testCases: testCasesRows.filter(tc => !tc.is_hidden),
+            totalTestCases: testCasesRows.length,
             userProgress,
             timedSession,
             exerciseFiles,
@@ -153,23 +173,41 @@ const submitSolution = async (req, res) => {
         );
 
         const testCases = testCasesResult.rows;
-        
+
         // Execute code against test cases
-        const { executeCode, executeMultiFileCode } = require('../utils/codeExecutor');
         let results;
-        
-        if (exercise.is_multi_file && files && files.length > 0) {
-            // Multi-file execution
-            results = await executeMultiFileCode(files, testCases, language);
+
+        if (DISTRIBUTED_MODE) {
+            // Distributed mode: send job to the worker queue
+            const { enqueueExecution, waitForResult } = require('../utils/queueService');
+
+            const job = await enqueueExecution({
+                code,
+                language,
+                testCases,
+                isMultiFile: exercise.is_multi_file,
+                files: exercise.is_multi_file ? files : undefined,
+                exerciseId: parseInt(id),
+                userId,
+            });
+
+            const jobResult = await waitForResult(job.id, 30000);
+            results = jobResult.results;
         } else {
-            // Single-file execution
-            results = await executeCode(code, testCases, language);
+            // Local mode: execute directly in-process
+            const { executeCode, executeMultiFileCode } = require('../utils/codeExecutor');
+
+            if (exercise.is_multi_file && files && files.length > 0) {
+                results = await executeMultiFileCode(files, testCases, language);
+            } else {
+                results = await executeCode(code, testCases, language);
+            }
         }
 
         const testsPassed = results.filter(r => r.passed).length;
         const testsTotal = testCases.length;
         const allPassed = testsPassed === testsTotal;
-        
+
         // Score logic:
         // - If requires_efficiency: all tests pass = 80%, optimal complexity = 100%
         // - If not requires_efficiency: all tests pass = 100%
@@ -198,7 +236,7 @@ const submitSolution = async (req, res) => {
         );
 
         if (progressCheck.rows.length === 0) {
-            const completionStatus = allPassed 
+            const completionStatus = allPassed
                 ? (exercise.requires_efficiency ? 'inefficient' : 'completed')
                 : 'in_progress';
             await db.query(
@@ -304,7 +342,7 @@ const updateExercise = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE e.id = $1
         `, [id]);
-        
+
         if (exercise.rows.length === 0) {
             return res.status(404).json({ error: 'Exercise not found' });
         }
@@ -352,7 +390,7 @@ const deleteExercise = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE e.id = $1
         `, [id]);
-        
+
         if (exercise.rows.length === 0) {
             return res.status(404).json({ error: 'Exercise not found' });
         }
@@ -382,7 +420,7 @@ const addTestCase = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE e.id = $1
         `, [exerciseId]);
-        
+
         if (exercise.rows.length === 0) {
             return res.status(404).json({ error: 'Exercise not found' });
         }
@@ -417,7 +455,7 @@ const updateTestCase = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE tc.id = $1
         `, [testCaseId]);
-        
+
         if (testCase.rows.length === 0) {
             return res.status(404).json({ error: 'Test case not found' });
         }
@@ -456,7 +494,7 @@ const deleteTestCase = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE tc.id = $1
         `, [testCaseId]);
-        
+
         if (testCase.rows.length === 0) {
             return res.status(404).json({ error: 'Test case not found' });
         }
@@ -485,7 +523,7 @@ const getExerciseTestCases = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE e.id = $1
         `, [exerciseId]);
-        
+
         if (exercise.rows.length === 0) {
             return res.status(404).json({ error: 'Exercise not found' });
         }
@@ -808,7 +846,7 @@ const getExerciseFiles = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE e.id = $1
         `, [exerciseId]);
-        
+
         if (exercise.rows.length === 0) {
             return res.status(404).json({ error: 'Exercise not found' });
         }
@@ -846,7 +884,7 @@ const addExerciseFile = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE e.id = $1
         `, [exerciseId]);
-        
+
         if (exercise.rows.length === 0) {
             return res.status(404).json({ error: 'Exercise not found' });
         }
@@ -892,7 +930,7 @@ const updateExerciseFile = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE ef.id = $1
         `, [fileId]);
-        
+
         if (file.rows.length === 0) {
             return res.status(404).json({ error: 'File not found' });
         }
@@ -943,7 +981,7 @@ const deleteExerciseFile = async (req, res) => {
             JOIN courses c ON e.course_id = c.id 
             WHERE ef.id = $1
         `, [fileId]);
-        
+
         if (file.rows.length === 0) {
             return res.status(404).json({ error: 'File not found' });
         }
@@ -955,6 +993,198 @@ const deleteExerciseFile = async (req, res) => {
         res.json({ message: 'File deleted successfully' });
     } catch (error) {
         console.error('Delete exercise file error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// ─── Bulk Import Exercises ─────────────────────────────────────────────────────
+const bulkImportExercises = async (req, res) => {
+    const client = await db.connect();
+    try {
+        const { courseId, exercises } = req.body;
+        const userId = req.user.id;
+
+        if (!courseId || !exercises || !Array.isArray(exercises) || exercises.length === 0) {
+            return res.status(400).json({ error: 'courseId and a non-empty exercises array are required' });
+        }
+
+        // Verify course ownership
+        const courseCheck = await client.query(
+            'SELECT * FROM courses WHERE id = $1 AND created_by = $2',
+            [courseId, userId]
+        );
+        if (courseCheck.rows.length === 0 && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized to add exercises to this course' });
+        }
+
+        // Fetch chapters for this course to resolve chapter names
+        const chaptersResult = await client.query(
+            'SELECT id, title FROM chapters WHERE course_id = $1',
+            [courseId]
+        );
+        const chapterMap = {};
+        chaptersResult.rows.forEach(ch => {
+            chapterMap[ch.title.toLowerCase().trim()] = ch.id;
+        });
+
+        await client.query('BEGIN');
+
+        const created = [];
+        const errors = [];
+
+        for (let i = 0; i < exercises.length; i++) {
+            const ex = exercises[i];
+            try {
+                // Validate required fields
+                if (!ex.title || !ex.description) {
+                    errors.push({ index: i, title: ex.title || `Exercise ${i + 1}`, error: 'Title and description are required' });
+                    continue;
+                }
+
+                // Resolve chapter_id from chapter name or id
+                let chapterId = null;
+                if (ex.chapter_id) {
+                    chapterId = ex.chapter_id;
+                } else if (ex.chapter) {
+                    chapterId = chapterMap[ex.chapter.toLowerCase().trim()] || null;
+                }
+
+                const difficulty = ex.difficulty || 'easy';
+                const language = ex.language || 'javascript';
+                const starterCode = ex.is_multi_file ? null : (ex.starterCode || ex.starter_code || '');
+                const requiresEfficiency = ex.requires_efficiency || ex.requiresEfficiency || false;
+                const timeLimitMinutes = ex.time_limit_minutes || ex.timeLimitMinutes || null;
+                const isMultiFile = ex.is_multi_file || ex.isMultiFile || false;
+
+                const exerciseResult = await client.query(
+                    `INSERT INTO exercises (course_id, title, description, difficulty, starter_code, language, chapter_id, requires_efficiency, time_limit_minutes, is_multi_file)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+                    [courseId, ex.title, ex.description, difficulty, starterCode, language, chapterId, requiresEfficiency, timeLimitMinutes, isMultiFile]
+                );
+
+                const exercise = exerciseResult.rows[0];
+
+                // Create exercise files if multi-file
+                if (isMultiFile && ex.files && ex.files.length > 0) {
+                    for (let j = 0; j < ex.files.length; j++) {
+                        const file = ex.files[j];
+                        await client.query(
+                            'INSERT INTO exercise_files (exercise_id, filename, starter_code, is_entry_point, display_order) VALUES ($1, $2, $3, $4, $5)',
+                            [exercise.id, file.filename, file.starter_code || file.starterCode || '', file.is_entry_point || file.isEntryPoint || false, file.display_order ?? j]
+                        );
+                    }
+                }
+
+                // Create test cases
+                const testCases = ex.testCases || ex.test_cases || [];
+                for (const tc of testCases) {
+                    await client.query(
+                        'INSERT INTO test_cases (exercise_id, input, expected_output, is_hidden, weight) VALUES ($1, $2, $3, $4, $5)',
+                        [exercise.id, tc.input, tc.expectedOutput || tc.expected_output, tc.isHidden || tc.is_hidden || false, tc.weight || 1]
+                    );
+                }
+
+                created.push({ index: i, id: exercise.id, title: exercise.title });
+            } catch (err) {
+                errors.push({ index: i, title: ex.title || `Exercise ${i + 1}`, error: err.message });
+            }
+        }
+
+        await client.query('COMMIT');
+
+        res.status(201).json({
+            message: `Successfully imported ${created.length} exercise(s)${errors.length > 0 ? `, ${errors.length} failed` : ''}`,
+            created,
+            errors,
+            total: exercises.length,
+        });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Bulk import exercises error:', error);
+        res.status(500).json({ error: 'Internal server error', details: error.message });
+    } finally {
+        client.release();
+    }
+};
+
+// ─── Bulk Export Exercises ──────────────────────────────────────────────────────
+const bulkExportExercises = async (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const userId = req.user.id;
+
+        // Verify course ownership
+        const courseCheck = await db.query(
+            'SELECT * FROM courses WHERE id = $1 AND created_by = $2',
+            [courseId, userId]
+        );
+        if (courseCheck.rows.length === 0 && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        // Get all exercises for this course
+        const exercisesResult = await db.query(
+            'SELECT * FROM exercises WHERE course_id = $1 ORDER BY id',
+            [courseId]
+        );
+
+        // Get chapters
+        const chaptersResult = await db.query(
+            'SELECT id, title FROM chapters WHERE course_id = $1',
+            [courseId]
+        );
+        const chapterIdToName = {};
+        chaptersResult.rows.forEach(ch => {
+            chapterIdToName[ch.id] = ch.title;
+        });
+
+        const exercises = [];
+
+        for (const ex of exercisesResult.rows) {
+            // Get test cases
+            const testCasesResult = await db.query(
+                'SELECT input, expected_output, is_hidden, weight FROM test_cases WHERE exercise_id = $1 ORDER BY id',
+                [ex.id]
+            );
+
+            // Get exercise files if multi-file
+            let files = [];
+            if (ex.is_multi_file) {
+                const filesResult = await db.query(
+                    'SELECT filename, starter_code, is_entry_point, display_order FROM exercise_files WHERE exercise_id = $1 ORDER BY display_order, id',
+                    [ex.id]
+                );
+                files = filesResult.rows;
+            }
+
+            exercises.push({
+                title: ex.title,
+                description: ex.description,
+                difficulty: ex.difficulty,
+                language: ex.language,
+                starterCode: ex.starter_code || '',
+                chapter: ex.chapter_id ? (chapterIdToName[ex.chapter_id] || null) : null,
+                requires_efficiency: ex.requires_efficiency || false,
+                time_limit_minutes: ex.time_limit_minutes || null,
+                is_multi_file: ex.is_multi_file || false,
+                files: files.length > 0 ? files : undefined,
+                testCases: testCasesResult.rows.map(tc => ({
+                    input: tc.input,
+                    expectedOutput: tc.expected_output,
+                    isHidden: tc.is_hidden,
+                    weight: tc.weight,
+                })),
+            });
+        }
+
+        res.json({
+            courseId: parseInt(courseId),
+            courseTitle: courseCheck.rows[0]?.title || '',
+            exportedAt: new Date().toISOString(),
+            exercises,
+        });
+    } catch (error) {
+        console.error('Bulk export exercises error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };
@@ -981,4 +1211,7 @@ module.exports = {
     addExerciseFile,
     updateExerciseFile,
     deleteExerciseFile,
+    // Bulk import/export
+    bulkImportExercises,
+    bulkExportExercises,
 };

@@ -10,9 +10,11 @@ const authRoutes = require('./routes/auth');
 const courseRoutes = require('./routes/courses');
 const exerciseRoutes = require('./routes/exercises');
 const notificationRoutes = require('./routes/notifications');
-const { registerClient, removeClient } = require('./utils/notificationService');
+const { registerClient, removeClient, initRedisSubscriber } = require('./utils/notificationService');
 const plagiarismRoutes = require('./routes/plagiarism');
 const exportRoutes = require('./routes/export');
+const analyticsRoutes = require('./routes/analytics');
+const { DISTRIBUTED_MODE, closeRedis } = require('./utils/redisClient');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -60,9 +62,24 @@ wss.on('connection', (ws, req) => {
 });
 
 // Middleware
-app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+const allowedOrigins = [
+    process.env.FRONTEND_URL || 'https://my-noteg.com',
+    'https://my-noteg.com',
+    'https://www.my-noteg.com',
+];
+app.use(cors({
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, etc.)
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+}));
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -71,6 +88,7 @@ app.use('/api/exercises', exerciseRoutes);
 app.use('/api/plagiarism', plagiarismRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/export', exportRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -87,6 +105,26 @@ app.use((err, req, res, next) => {
 server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
     console.log(`WebSocket server available at ws://localhost:${PORT}/ws`);
+    console.log(`Distributed mode: ${DISTRIBUTED_MODE ? 'ON' : 'OFF'}`);
+
+    // In distributed mode, subscribe to Redis for cross-instance notifications
+    if (DISTRIBUTED_MODE) {
+        initRedisSubscriber();
+    }
 });
+
+// Graceful shutdown
+const gracefulShutdown = async (signal) => {
+    console.log(`Received ${signal}, shutting down gracefully...`);
+    server.close(async () => {
+        await closeRedis();
+        process.exit(0);
+    });
+    // Force exit after 10 seconds
+    setTimeout(() => process.exit(1), 10000);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 module.exports = { app, server };
