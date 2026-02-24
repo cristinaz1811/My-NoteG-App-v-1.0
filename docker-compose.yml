@@ -1,0 +1,199 @@
+###############################################################################
+# NoteG — Distributed System Docker Compose
+#
+# Services:
+#   1. postgres   — PostgreSQL database
+#   2. redis      — Redis (caching + message broker + pub/sub)
+#   3. api        — Express.js REST API + WebSocket (can scale horizontally)
+#   4. worker     — Code execution worker (consumes from BullMQ queue)
+#   5. dashboard  — Streamlit analytics dashboard
+#   6. frontend   — Nginx serving React SPA + reverse proxy to API
+#
+# Usage:
+#   cp .env.example .env          # fill in your secrets
+#   docker compose up --build     # start all services
+#   docker compose up -d          # start detached
+#   docker compose logs -f api    # tail API logs
+#   docker compose down -v        # stop and remove volumes
+###############################################################################
+
+services:
+  # ─── PostgreSQL ───────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: noteg-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-code_learning}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "${DB_PORT_EXTERNAL:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/docker-init.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/docker-migrations.sql:/docker-entrypoint-initdb.d/02-migrations.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-code_learning}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - noteg-network
+
+  # ─── Redis ────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: noteg-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy noeviction
+    ports:
+      - "${REDIS_PORT_EXTERNAL:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - noteg-network
+
+  # ─── API Service (Express.js + WebSocket) ─────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: noteg-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: 5001
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-code_learning}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      EMAIL_SERVICE: ${EMAIL_SERVICE:-gmail}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_SECURE: ${EMAIL_SECURE:-false}
+      EMAIL_USER: ${EMAIL_USER:-}
+      EMAIL_PASS: ${EMAIL_PASS:-}
+      FRONTEND_URL: ${FRONTEND_URL:-https://my-noteg.com}
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DISTRIBUTED_MODE: "true"
+    ports:
+      - "5001:5001"
+    networks:
+      - noteg-network
+
+  # ─── Code Execution Worker ────────────────────────────────────────────────
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    container_name: noteg-worker
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-code_learning}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DISTRIBUTED_MODE: "true"
+      WORKER_PORT: 5002
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-3}
+    # Resource limits — constrain code execution
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    networks:
+      - noteg-network
+
+  # ─── Streamlit Dashboard ──────────────────────────────────────────────────
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: noteg-dashboard
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-code_learning}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "${DASHBOARD_PORT:-8501}:8501"
+    networks:
+      - noteg-network
+
+  # ─── Certbot (SSL certificate management) ─────────────────────────────────
+  certbot:
+    image: certbot/certbot
+    container_name: noteg-certbot
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - noteg-network
+
+  # ─── Frontend (Nginx + React SPA) ─────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: /api
+        REACT_APP_WS_URL: ""
+        REACT_APP_DASHBOARD_URL: ${DASHBOARD_URL:-https://my-noteg.com:8501}
+    container_name: noteg-frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot_conf:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    networks:
+      - noteg-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  certbot_conf:
+    driver: local
+  certbot_www:
+    driver: local
+
+networks:
+  noteg-network:
+    driver: bridge
