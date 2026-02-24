@@ -1,6 +1,7 @@
 import React, { useContext, useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import NotificationBell from './NotificationBell';
 
 const Navbar = () => {
     const { user, logout } = useContext(AuthContext);
@@ -91,6 +92,8 @@ const Navbar = () => {
                                 Welcome, <span style={{ color: user.role === 'professor' ? '#a1609d' : '#fef483' }}>{user.username}</span>
                                 {user.role === 'professor' && <span className="ml-1 text-xs text-[#a1609d]">(Prof)</span>}
                             </span>
+                            {/* Notification Bell */}
+                            <NotificationBell />
                             {/* Profile Dropdown */}
                             <div className="relative" ref={profileRef}>
                                 <button 

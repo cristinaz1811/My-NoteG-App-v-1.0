@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const { generateHints, generateOptimizationHints, analyzeComplexity } = require('../utils/openaiService');
+const { notifyNewExercise, notifyCourseCompleted } = require('../utils/notificationService');
 
 const getExerciseById = async (req, res) => {
     try {
@@ -63,6 +64,14 @@ const createExercise = async (req, res) => {
                 );
             }
         }
+
+        // Notify enrolled students about the new exercise
+        notifyNewExercise({
+            courseId: exercise.course_id,
+            exerciseTitle: exercise.title,
+            exerciseId: exercise.id,
+            professorId: req.user.id,
+        });
 
         res.status(201).json(exercise);
     } catch (error) {
@@ -146,6 +155,11 @@ const submitSolution = async (req, res) => {
                  WHERE user_id = $1 AND exercise_id = $2`,
                 [userId, id, allPassed || progressCheck.rows[0].completed, newBestScore, newStatus]
             );
+        }
+
+        // Check if student just completed the course (all exercises passed)
+        if (allPassed) {
+            notifyCourseCompleted({ studentId: userId, courseId: exercise.course_id });
         }
 
         res.json({
