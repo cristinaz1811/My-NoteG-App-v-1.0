@@ -77,6 +77,9 @@ const Navbar = () => {
                                     <Link to="/courses" className="text-gray-300 hover:text-[#a1609d] transition-colors no-underline">
                                         All Courses
                                     </Link>
+                                    <Link to="/calendar" className="text-gray-300 hover:text-[#a1609d] transition-colors no-underline">
+                                        📅 Calendar
+                                    </Link>
                                 </>
                             ) : (
                                 // Student Navigation
@@ -89,6 +92,9 @@ const Navbar = () => {
                                     </Link>
                                     <Link to="/my-analytics" className="text-gray-300 hover:text-[#fef483] transition-colors no-underline">
                                         📊 Analytics
+                                    </Link>
+                                    <Link to="/calendar" className="text-gray-300 hover:text-[#fef483] transition-colors no-underline">
+                                        📅 Calendar
                                     </Link>
                                 </>
                             )}

@@ -14,6 +14,7 @@ const { registerClient, removeClient, initRedisSubscriber } = require('./utils/n
 const plagiarismRoutes = require('./routes/plagiarism');
 const exportRoutes = require('./routes/export');
 const analyticsRoutes = require('./routes/analytics');
+const calendarRoutes = require('./routes/calendar');
 const { DISTRIBUTED_MODE, closeRedis } = require('./utils/redisClient');
 
 const app = express();
@@ -89,6 +90,7 @@ app.use('/api/plagiarism', plagiarismRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/calendar', calendarRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

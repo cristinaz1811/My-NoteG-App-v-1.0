@@ -126,6 +126,20 @@ export const analyticsService = {
     getAIFeedback: () => api.post('/analytics/ai-feedback'),
 };
 
+// Calendar services
+export const calendarService = {
+    getEvents: (params) => api.get('/calendar', { params }),
+    getUpcoming: (days) => api.get('/calendar/upcoming', { params: { days } }),
+    getEventById: (id) => api.get(`/calendar/${id}`),
+    createEvent: (data) => api.post('/calendar', data),
+    createCourseEvent: (data) => api.post('/calendar/course-event', data),
+    updateEvent: (id, data) => api.put(`/calendar/${id}`, data),
+    deleteEvent: (id) => api.delete(`/calendar/${id}`),
+    exportICS: (params) => api.get('/calendar/export/ics', { params, responseType: 'blob' }),
+    getGoogleCalendarUrl: (id) => api.get(`/calendar/${id}/google-url`),
+    getOutlookCalendarUrl: (id) => api.get(`/calendar/${id}/outlook-url`),
+};
+
 // Notification services
 export const notificationService = {
     getNotifications: (params) => api.get('/notifications', { params }),

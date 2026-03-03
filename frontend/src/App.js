@@ -27,6 +27,7 @@ import PlagiarismDashboard from './pages/PlagiarismDashboard';
 import PlagiarismReport from './pages/PlagiarismReport';
 import Notifications from './pages/Notifications';
 import StudentAnalytics from './pages/StudentAnalytics';
+import Calendar from './pages/Calendar';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -427,6 +428,16 @@ function App() {
                         element={
                             <ProtectedRoute>
                                 <Navbar /><div className="pt-16"><StudentAnalytics /></div>
+                            </ProtectedRoute>
+                        } 
+                    />
+                    
+                    {/* Calendar Route */}
+                    <Route 
+                        path="/calendar" 
+                        element={
+                            <ProtectedRoute>
+                                <Navbar /><div className="pt-16"><Calendar /></div>
                             </ProtectedRoute>
                         } 
                     />
