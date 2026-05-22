@@ -9,6 +9,7 @@ const {
     getRecentSubmissions,
     getTimePerCourse,
     getAIFeedback,
+    getRecommendedNext,
 } = require('../controllers/analyticsController');
 const { authMiddleware } = require('../middleware/auth');
 
@@ -22,6 +23,7 @@ router.get('/difficulty-breakdown', getDifficultyBreakdown);
 router.get('/language-stats', getLanguageStats);
 router.get('/recent-submissions', getRecentSubmissions);
 router.get('/time-per-course', getTimePerCourse);
+router.get('/recommended-next', getRecommendedNext);
 router.post('/ai-feedback', getAIFeedback);
 
 module.exports = router;

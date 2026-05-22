@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { courseService } from '../services/api';
+import { courseService, analyticsService } from '../services/api';
 
 const IconCheck = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -8,14 +8,20 @@ const IconCheck = () => (
     </svg>
 );
 
+const DIFFICULTY_COLORS = { easy: '#4ade80', medium: '#fbbf24', hard: '#f87171' };
+
 const MyCourses = () => {
     const [courses, setCourses] = useState([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
+    const [recommended, setRecommended] = useState([]);
     const navigate = useNavigate();
 
     useEffect(() => {
         loadMyCourses();
+        analyticsService.getRecommendedNext()
+            .then(res => setRecommended(res.data))
+            .catch(err => console.error('Error loading recommendations:', err));
     }, []);
 
     const loadMyCourses = async () => {
@@ -131,6 +137,42 @@ const MyCourses = () => {
                     </h1>
                     <p className="text-gray-400">Track your progress and continue learning</p>
                 </div>
+
+                {/* Recommended next exercises */}
+                {recommended.length > 0 && (
+                    <div className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.03s' }}>
+                        <h2 className="text-lg font-semibold mb-4">Pick up where you left off</h2>
+                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {recommended.map(rec => (
+                                <button
+                                    key={rec.exercise_id}
+                                    onClick={() => navigate(`/exercises/${rec.exercise_id}`)}
+                                    className="surface-card card-hover text-left p-5 cursor-pointer"
+                                >
+                                    <p className="text-xs text-gray-500 mb-1.5 truncate">
+                                        {rec.course_title}
+                                        {rec.chapter_title ? ` · ${rec.chapter_title}` : ''}
+                                    </p>
+                                    <h3 className="font-semibold mb-3 leading-snug line-clamp-2">
+                                        {rec.exercise_title}
+                                    </h3>
+                                    <div className="flex items-center justify-between">
+                                        <span
+                                            className="text-xs font-medium px-2 py-0.5 rounded-full capitalize"
+                                            style={{
+                                                background: (DIFFICULTY_COLORS[rec.difficulty] || '#9ca3af') + '22',
+                                                color: DIFFICULTY_COLORS[rec.difficulty] || '#9ca3af',
+                                            }}
+                                        >
+                                            {rec.difficulty || 'exercise'}
+                                        </span>
+                                        <span className="text-sm text-[#fef483]">Start →</span>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Stats */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>

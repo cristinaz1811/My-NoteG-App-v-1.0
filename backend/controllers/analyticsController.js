@@ -296,6 +296,48 @@ const getAIFeedback = async (req, res) => {
     }
 };
 
+/**
+ * GET /api/analytics/recommended-next
+ * Suggests the next exercise to work on per enrolled course: the earliest
+ * incomplete exercise (by chapter then exercise order), with courses the
+ * student has progressed furthest in surfaced first.
+ */
+const getRecommendedNext = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        const result = await db.query(`
+            SELECT * FROM (
+                SELECT DISTINCT ON (c.id)
+                    ex.id AS exercise_id,
+                    ex.title AS exercise_title,
+                    ex.difficulty,
+                    ex.language,
+                    c.id AS course_id,
+                    c.title AS course_title,
+                    ch.title AS chapter_title,
+                    e.progress AS course_progress
+                FROM enrollments e
+                JOIN courses c ON e.course_id = c.id
+                JOIN exercises ex ON ex.course_id = c.id
+                LEFT JOIN chapters ch ON ex.chapter_id = ch.id
+                LEFT JOIN user_progress up
+                    ON up.exercise_id = ex.id AND up.user_id = $1
+                WHERE e.user_id = $1
+                  AND COALESCE(up.completed, false) = false
+                ORDER BY c.id, ch.order_index NULLS LAST, ex.order_index NULLS LAST, ex.id
+            ) per_course
+            ORDER BY course_progress DESC, course_title
+            LIMIT 3
+        `, [userId]);
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Recommended next error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 module.exports = {
     getOverview,
     getProgressOverTime,
@@ -305,4 +347,5 @@ module.exports = {
     getRecentSubmissions,
     getTimePerCourse,
     getAIFeedback,
+    getRecommendedNext,
 };

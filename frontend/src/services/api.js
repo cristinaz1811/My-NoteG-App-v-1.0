@@ -123,6 +123,7 @@ export const analyticsService = {
     getLanguageStats: () => api.get('/analytics/language-stats'),
     getRecentSubmissions: () => api.get('/analytics/recent-submissions'),
     getTimePerCourse: () => api.get('/analytics/time-per-course'),
+    getRecommendedNext: () => api.get('/analytics/recommended-next'),
     getAIFeedback: () => api.post('/analytics/ai-feedback'),
 };
 
