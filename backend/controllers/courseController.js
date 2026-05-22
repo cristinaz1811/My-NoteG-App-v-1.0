@@ -1046,6 +1046,46 @@ const enrollByCode = async (req, res) => {
     }
 };
 
+// Professor: per-exercise class-wide stats (which exercises students struggle with)
+const getCourseExerciseStats = async (req, res) => {
+    try {
+        const { courseId } = req.params;
+        const userId = req.user.id;
+
+        // Verify ownership
+        const course = await db.query('SELECT created_by FROM courses WHERE id = $1', [courseId]);
+        if (course.rows.length === 0) {
+            return res.status(404).json({ error: 'Course not found' });
+        }
+        if (course.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        const result = await db.query(`
+            SELECT
+                ex.id AS exercise_id,
+                ex.title AS exercise_title,
+                ex.difficulty,
+                ch.title AS chapter_title,
+                COUNT(up.id) FILTER (WHERE up.attempts > 0) AS students_attempted,
+                COUNT(up.id) FILTER (WHERE up.completed = true) AS students_completed,
+                ROUND((AVG(up.best_score) FILTER (WHERE up.attempts > 0))::numeric, 1) AS avg_score,
+                ROUND((AVG(up.attempts) FILTER (WHERE up.attempts > 0))::numeric, 1) AS avg_attempts
+            FROM exercises ex
+            LEFT JOIN chapters ch ON ex.chapter_id = ch.id
+            LEFT JOIN user_progress up ON up.exercise_id = ex.id
+            WHERE ex.course_id = $1
+            GROUP BY ex.id, ex.title, ex.difficulty, ch.title, ch.order_index, ex.order_index
+            ORDER BY ch.order_index NULLS LAST, ex.order_index NULLS LAST, ex.id
+        `, [courseId]);
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Get course exercise stats error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 module.exports = {
     getAllCourses,
     getCourseById,
@@ -1065,6 +1105,7 @@ module.exports = {
     updateTimeSession,
     getCourseEnrolledStudents,
     getStudentCourseDetails,
+    getCourseExerciseStats,
     regenerateEnrollmentCode,
     verifyEnrollmentCode,
     enrollByCode,

@@ -21,12 +21,12 @@ const NotificationBell = () => {
 
     const getNotificationIcon = (type) => {
         switch (type) {
-            case 'new_exercise': return '📝';
-            case 'new_chapter': return '📚';
-            case 'course_completed': return '🎉';
-            case 'student_needs_help': return '🆘';
-            case 'course_enrollment': return '👋';
-            default: return '🔔';
+            case 'new_exercise': return 'Exercise';
+            case 'new_chapter': return 'Chapter';
+            case 'course_completed': return 'Completed';
+            case 'student_needs_help': return 'Help';
+            case 'course_enrollment': return 'Enroll';
+            default: return 'Alert';
         }
     };
 
@@ -63,9 +63,11 @@ const NotificationBell = () => {
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className="relative w-9 h-9 rounded-full flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer border-none bg-transparent"
-                style={{ fontSize: '1.2rem' }}
             >
-                🔔
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5" />
+                    <path d="M9 17a3 3 0 0 0 6 0" />
+                </svg>
                 {unreadCount > 0 && (
                     <span 
                         className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full flex items-center justify-center text-[10px] font-bold text-white px-1"
@@ -107,7 +109,7 @@ const NotificationBell = () => {
                     <div className="overflow-y-auto" style={{ maxHeight: '400px' }}>
                         {recentNotifications.length === 0 ? (
                             <div className="px-4 py-8 text-center text-gray-500 text-sm">
-                                <div className="text-3xl mb-2">🔕</div>
+                                <div className="text-sm font-semibold mb-2">No alerts</div>
                                 No notifications yet
                             </div>
                         ) : (

@@ -20,12 +20,10 @@ const formatTime = (seconds) => {
     return `${h}h ${m}m`;
 };
 
-const StatCard = ({ icon, label, value, sub, color = '#fef483' }) => (
+const StatCard = ({ label, value, sub, color = '#fef483' }) => (
     <div className="surface-card rounded-2xl p-5 flex flex-col gap-1">
-        <div className="flex items-center gap-2 text-sm text-gray-400">
-            <span>{icon}</span> {label}
-        </div>
-        <p className="text-2xl font-bold" style={{ color }}>{value}</p>
+        <div className="text-xs text-gray-500 uppercase tracking-wide">{label}</div>
+        <p className="text-2xl font-bold mt-1" style={{ color }}>{value}</p>
         {sub && <p className="text-xs text-gray-500">{sub}</p>}
     </div>
 );
@@ -118,7 +116,7 @@ const StudentAnalytics = () => {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">
-                    <div className="w-16 h-16 border-4 border-[#fef483] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                    <div className="w-10 h-10 border-2 border-[#a1609d]/30 border-t-[#a1609d] rounded-full animate-spin mx-auto mb-4" />
                     <p className="text-gray-400">Loading your analytics...</p>
                 </div>
             </div>
@@ -130,7 +128,9 @@ const StudentAnalytics = () => {
         return (
             <div className="min-h-screen flex items-center justify-center px-6">
                 <div className="text-center max-w-md">
-                    <div className="text-6xl mb-6">📊</div>
+                    <div className="w-16 h-16 rounded-2xl gradient-bg flex items-center justify-center mx-auto mb-6 opacity-50">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                    </div>
                     <h1 className="text-2xl font-bold text-white mb-3">No Analytics Yet</h1>
                     <p className="text-gray-400 mb-6">Start solving exercises in your enrolled courses to see your progress and analytics here.</p>
                     <Link to="/courses" className="inline-block px-6 py-3 rounded-xl font-semibold gradient-bg text-white no-underline hover:opacity-90">Browse Courses</Link>
@@ -160,10 +160,10 @@ const StudentAnalytics = () => {
     }));
 
     const tabs = [
-        { key: 'overview', label: '📊 Overview' },
-        { key: 'courses', label: '📚 Courses' },
-        { key: 'activity', label: '📈 Activity' },
-        { key: 'ai', label: '🤖 AI Coach' },
+        { key: 'overview', label: 'Overview' },
+        { key: 'courses',  label: 'Courses' },
+        { key: 'activity', label: 'Activity' },
+        { key: 'ai',       label: 'AI Coach' },
     ];
 
     return (
@@ -201,16 +201,16 @@ const StudentAnalytics = () => {
                 <div className="space-y-8 animate-slideUp">
                     {/* Stat cards */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <StatCard icon="📚" label="Courses Enrolled" value={overview.enrolled_courses} />
-                        <StatCard icon="✅" label="Exercises Completed" value={overview.exercises_completed} color="#7ed957" />
-                        <StatCard icon="📝" label="Total Submissions" value={overview.total_submissions} color="#6dd5ed" />
-                        <StatCard icon="⭐" label="Average Score" value={`${Number(overview.average_score).toFixed(1)}%`} color="#f6a623" />
+                        <StatCard label="Courses Enrolled"    value={overview.enrolled_courses} />
+                        <StatCard label="Exercises Completed" value={overview.exercises_completed} color="#7ed957" />
+                        <StatCard label="Total Submissions"   value={overview.total_submissions} color="#6dd5ed" />
+                        <StatCard label="Average Score"       value={`${Number(overview.average_score).toFixed(1)}%`} color="#f6a623" />
                     </div>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <StatCard icon="⏱️" label="Total Study Time" value={formatTime(overview.total_time_spent)} color="#b88ab5" />
-                        <StatCard icon="🏆" label="Exercises Passed" value={overview.exercises_passed} color="#7ed957" />
-                        <StatCard icon="🎯" label="Pass Rate" value={Number(overview.total_submissions) > 0 ? `${((Number(overview.exercises_passed) / Number(overview.total_submissions)) * 100).toFixed(0)}%` : '—'} color="#fef483" />
-                        <StatCard icon="💪" label="Difficulty Levels" value={diffBreakdown.length} sub="attempted" color="#a1609d" />
+                        <StatCard label="Total Study Time"   value={formatTime(overview.total_time_spent)} color="#b88ab5" />
+                        <StatCard label="Exercises Passed"   value={overview.exercises_passed} color="#7ed957" />
+                        <StatCard label="Pass Rate"          value={Number(overview.total_submissions) > 0 ? `${((Number(overview.exercises_passed) / Number(overview.total_submissions)) * 100).toFixed(0)}%` : '—'} color="#fef483" />
+                        <StatCard label="Difficulty Levels"  value={diffBreakdown.length} sub="attempted" color="#a1609d" />
                     </div>
 
                     {/* Difficulty pie + language pie side by side */}
@@ -267,9 +267,9 @@ const StudentAnalytics = () => {
                                         let assessment = '—';
                                         let aColor = '#6b7280';
                                         if (d.completed > 0) {
-                                            if (score >= 80 && attempts <= 2) { assessment = '💪 Strong'; aColor = '#7ed957'; }
-                                            else if (score >= 60) { assessment = '👍 Good'; aColor = '#fef483'; }
-                                            else { assessment = '📖 Needs Practice'; aColor = '#f6a623'; }
+                                            if (score >= 80 && attempts <= 2) { assessment = 'Strong'; aColor = '#7ed957'; }
+                                            else if (score >= 60) { assessment = 'Good'; aColor = '#fef483'; }
+                                            else { assessment = 'Needs Practice'; aColor = '#f6a623'; }
                                         }
                                         return (
                                             <tr key={i} className="border-b border-white/5">

@@ -43,7 +43,7 @@ function tokenize(code, language = 'javascript') {
         { type: TOKEN_TYPES.NUMBER,      re: /^(0[xXbBoO][\da-fA-F_]+|\d[\d_]*\.?\d*(?:[eE][+-]?\d+)?)/ },
         { type: TOKEN_TYPES.IDENTIFIER,  re: /^([a-zA-Z_$][\w$]*)/ },
         { type: TOKEN_TYPES.OPERATOR,    re: /^([+\-*/%=<>!&|^~?:]+|\.{3})/ },
-        { type: TOKEN_TYPES.PUNCTUATION, re: /^([{}()\[\];,.])/  },
+        { type: TOKEN_TYPES.PUNCTUATION, re: /^([{}()[\];,.])/  },
         { type: TOKEN_TYPES.NEWLINE,     re: /^(\n)/ },
     ];
 

@@ -129,8 +129,8 @@ const MyCourseDetail = () => {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">
-                    <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-gray-400">Loading course...</p>
+                    <div className="w-10 h-10 border-2 border-[#a1609d]/30 border-t-[#a1609d] rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-sm text-gray-500">Loading course…</p>
                 </div>
             </div>
         );
@@ -140,7 +140,7 @@ const MyCourseDetail = () => {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">
-                    <div className="text-6xl mb-4">😕</div>
+                    <div className="text-4xl font-semibold text-gray-500 mb-4">Course unavailable</div>
                     <h2 className="text-2xl font-bold mb-2">Course not found</h2>
                     <button onClick={() => navigate('/my-courses')} className="btn-primary mt-4">
                         Back to My Courses
@@ -153,7 +153,7 @@ const MyCourseDetail = () => {
     const { course, stats, exercises, submissions, timeBreakdown } = data;
 
     return (
-        <div className="min-h-screen py-6 px-6">
+        <div className="min-h-screen py-6 px-6 page-fade-in">
             <div className="max-w-7xl mx-auto">
                 {/* Back Button */}
                 <button 
@@ -189,9 +189,9 @@ const MyCourseDetail = () => {
                 {/* Tabs */}
                 <div className="flex gap-1 mb-6 bg-white/5 p-1 rounded-xl w-fit">
                     {[
-                        { id: 'content', label: '📖 Content', tracking: true },
-                        { id: 'exercises', label: '💻 Exercises', tracking: true },
-                        { id: 'dashboard', label: '📊 Dashboard', tracking: false },
+                        { id: 'content', label: 'Content', tracking: true },
+                        { id: 'exercises', label: 'Exercises', tracking: true },
+                        { id: 'dashboard', label: 'Dashboard', tracking: false },
                     ].map((tab) => (
                         <button
                             key={tab.id}
@@ -213,29 +213,25 @@ const MyCourseDetail = () => {
                     {activeTab === 'content' && (
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="surface-card rounded-2xl p-6">
-                                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                                    <span>📚</span> Learning Objectives
-                                </h3>
+                                <h3 className="text-lg font-semibold mb-4">Learning Objectives</h3>
                                 <ul className="space-y-3">
                                     <li className="flex items-start gap-3 text-gray-300">
-                                        <span className="text-[#fef483] mt-1">✓</span>
+                                        <span className="text-[#fef483] mt-1">•</span>
                                         Master {course.title} fundamentals
                                     </li>
                                     <li className="flex items-start gap-3 text-gray-300">
-                                        <span className="text-[#fef483] mt-1">✓</span>
+                                        <span className="text-[#fef483] mt-1">•</span>
                                         Complete {stats.totalExercises} hands-on exercises
                                     </li>
                                     <li className="flex items-start gap-3 text-gray-300">
-                                        <span className="text-[#fef483] mt-1">✓</span>
+                                        <span className="text-[#fef483] mt-1">•</span>
                                         Build practical programming skills
                                     </li>
                                 </ul>
                             </div>
 
                             <div className="surface-card rounded-2xl p-6">
-                                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                                    <span>⏱️</span> Time Progress
-                                </h3>
+                                <h3 className="text-lg font-semibold mb-4">Time Progress</h3>
                                 <div className="text-center">
                                     <div className="text-4xl font-bold gradient-text mb-2">
                                         {formatTime(liveTime, true)}
@@ -275,12 +271,16 @@ const MyCourseDetail = () => {
                                 >
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-4">
-                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                                                exercise.completed 
-                                                    ? 'bg-green-500/20 text-green-400' 
-                                                    : 'bg-white/5 text-gray-400'
+                                            <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                                exercise.completed
+                                                    ? 'bg-green-500/15 text-green-400'
+                                                    : 'bg-white/5 text-gray-500'
                                             }`}>
-                                                {exercise.completed ? '✓' : '○'}
+                                                {exercise.completed ? (
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                                ) : (
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/></svg>
+                                                )}
                                             </div>
                                             <div>
                                                 <h4 className="font-medium group-hover:text-[#fef483] transition-colors">
@@ -294,11 +294,11 @@ const MyCourseDetail = () => {
                                                         {exercise.language}
                                                     </span>
                                                     {exercise.is_multi_file && (
-                                                        <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded">📁 Multi-File</span>
+                                                        <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded">Multi-file</span>
                                                     )}
                                                     {exercise.time_limit_minutes && (
                                                         <span className="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded flex items-center gap-1">
-                                                            ⏱ {exercise.time_limit_minutes}m
+                                                            {exercise.time_limit_minutes}m
                                                         </span>
                                                     )}
                                                 </div>
@@ -323,32 +323,23 @@ const MyCourseDetail = () => {
                         <div className="space-y-6">
                             {/* Notice */}
                             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
-                                <span className="text-amber-400">⏸️</span>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400 flex-shrink-0"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
                                 <span className="text-sm text-amber-400">Time tracking is paused while viewing statistics</span>
                             </div>
 
                             {/* Stats Grid */}
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                <div className="surface-card rounded-xl p-5 text-center">
-                                    <div className="text-3xl mb-1">📝</div>
-                                    <div className="text-2xl font-bold gradient-text">{stats.totalAttempts}</div>
-                                    <div className="text-sm text-gray-400">Total Attempts</div>
-                                </div>
-                                <div className="surface-card rounded-xl p-5 text-center">
-                                    <div className="text-3xl mb-1">📊</div>
-                                    <div className="text-2xl font-bold gradient-text">{stats.averageScore}%</div>
-                                    <div className="text-sm text-gray-400">Average Score</div>
-                                </div>
-                                <div className="surface-card rounded-xl p-5 text-center">
-                                    <div className="text-3xl mb-1">⏱️</div>
-                                    <div className="text-2xl font-bold gradient-text">{formatTime(stats.totalTimeSpent)}</div>
-                                    <div className="text-sm text-gray-400">Time Spent</div>
-                                </div>
-                                <div className="surface-card rounded-xl p-5 text-center">
-                                    <div className="text-3xl mb-1">✅</div>
-                                    <div className="text-2xl font-bold gradient-text">{stats.progressPercentage}%</div>
-                                    <div className="text-sm text-gray-400">Completed</div>
-                                </div>
+                                {[
+                                    { label: 'Total Attempts',  value: stats.totalAttempts },
+                                    { label: 'Average Score',   value: `${stats.averageScore}%` },
+                                    { label: 'Time Spent',      value: formatTime(stats.totalTimeSpent) },
+                                    { label: 'Completed',       value: `${stats.progressPercentage}%` },
+                                ].map(({ label, value }) => (
+                                    <div key={label} className="surface-card rounded-xl p-5 text-center">
+                                        <div className="text-2xl font-bold gradient-text">{value}</div>
+                                        <div className="text-sm text-gray-400 mt-1">{label}</div>
+                                    </div>
+                                ))}
                             </div>
 
                             {/* Progress Bar */}
@@ -367,9 +358,7 @@ const MyCourseDetail = () => {
 
                             {/* Submission History */}
                             <div className="surface-card rounded-2xl p-6">
-                                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                                    <span>📊</span> Submission History
-                                </h3>
+                                <h3 className="text-lg font-semibold mb-4">Submission History</h3>
                                 {submissions.length === 0 ? (
                                     <p className="text-gray-400">No submissions yet. Start solving exercises!</p>
                                 ) : (
@@ -440,9 +429,7 @@ const MyCourseDetail = () => {
 
                             {/* Time Breakdown */}
                             <div className="surface-card rounded-2xl p-6">
-                                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                                    <span>⏱️</span> Time Spent by Day
-                                </h3>
+                                <h3 className="text-lg font-semibold mb-4">Time Spent by Day</h3>
                                 {timeBreakdown.length === 0 ? (
                                     <p className="text-gray-400">No time tracking data yet.</p>
                                 ) : (
@@ -471,6 +458,29 @@ const MyCourseDetail = () => {
                                     </p>
                                 </div>
                             </div>
+
+                            {data.materials?.length > 0 && (
+                                <div className="surface-card rounded-2xl p-6">
+                                    <h3 className="text-lg font-semibold mb-4">Course Materials</h3>
+                                    <div className="space-y-3">
+                                        {data.materials.map((material) => (
+                                            <a
+                                                key={material.id}
+                                                href={material.resource_url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="block rounded-xl border border-white/10 p-4 hover:bg-white/5 transition-colors no-underline"
+                                            >
+                                                <div className="text-xs uppercase tracking-wide text-gray-500">
+                                                    {material.chapter_title || 'Course level'} · {material.resource_type}
+                                                </div>
+                                                <div className="font-medium text-white mt-1">{material.title}</div>
+                                                {material.description && <p className="text-sm text-gray-400 mt-1">{material.description}</p>}
+                                            </a>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

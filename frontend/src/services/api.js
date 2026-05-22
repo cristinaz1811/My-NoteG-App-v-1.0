@@ -62,6 +62,7 @@ export const courseService = {
     // Student management (professor)
     getCourseStudents: (courseId) => api.get(`/courses/professor/${courseId}/students`),
     getStudentDetails: (courseId, studentId) => api.get(`/courses/professor/${courseId}/students/${studentId}`),
+    getCourseExerciseStats: (courseId) => api.get(`/courses/professor/${courseId}/exercise-stats`),
     // Enrollment code
     regenerateEnrollmentCode: (courseId) => api.post(`/courses/professor/${courseId}/regenerate-code`),
     verifyEnrollmentCode: (courseId, code) => api.post(`/courses/${courseId}/verify-code`, { code }),
@@ -123,7 +124,22 @@ export const analyticsService = {
     getLanguageStats: () => api.get('/analytics/language-stats'),
     getRecentSubmissions: () => api.get('/analytics/recent-submissions'),
     getTimePerCourse: () => api.get('/analytics/time-per-course'),
+    getRecommendedNext: () => api.get('/analytics/recommended-next'),
     getAIFeedback: () => api.post('/analytics/ai-feedback'),
+};
+
+// Calendar services
+export const calendarService = {
+    getEvents: (params) => api.get('/calendar', { params }),
+    getUpcoming: (days) => api.get('/calendar/upcoming', { params: { days } }),
+    getEventById: (id) => api.get(`/calendar/${id}`),
+    createEvent: (data) => api.post('/calendar', data),
+    createCourseEvent: (data) => api.post('/calendar/course-event', data),
+    updateEvent: (id, data) => api.put(`/calendar/${id}`, data),
+    deleteEvent: (id) => api.delete(`/calendar/${id}`),
+    exportICS: (params) => api.get('/calendar/export/ics', { params, responseType: 'blob' }),
+    getGoogleCalendarUrl: (id) => api.get(`/calendar/${id}/google-url`),
+    getOutlookCalendarUrl: (id) => api.get(`/calendar/${id}/outlook-url`),
 };
 
 // Notification services
