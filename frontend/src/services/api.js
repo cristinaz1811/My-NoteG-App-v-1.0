@@ -62,6 +62,7 @@ export const courseService = {
     // Student management (professor)
     getCourseStudents: (courseId) => api.get(`/courses/professor/${courseId}/students`),
     getStudentDetails: (courseId, studentId) => api.get(`/courses/professor/${courseId}/students/${studentId}`),
+    getCourseExerciseStats: (courseId) => api.get(`/courses/professor/${courseId}/exercise-stats`),
     // Enrollment code
     regenerateEnrollmentCode: (courseId) => api.post(`/courses/professor/${courseId}/regenerate-code`),
     verifyEnrollmentCode: (courseId, code) => api.post(`/courses/${courseId}/verify-code`, { code }),
