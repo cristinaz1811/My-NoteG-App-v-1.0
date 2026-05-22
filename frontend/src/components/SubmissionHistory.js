@@ -180,10 +180,10 @@ const SubmissionHistory = ({ exerciseId, exerciseService, starterCode, onLoadCod
     };
 
     const getStatusInfo = (sub) => {
-        if (sub.status === 'passed') return { icon: '✓', color: 'text-green-400', bg: 'bg-green-500' };
-        if (sub.status === 'failed') return { icon: '✗', color: 'text-red-400', bg: 'bg-red-500' };
-        if (sub.status === 'error') return { icon: '!', color: 'text-amber-400', bg: 'bg-amber-500' };
-        return { icon: '?', color: 'text-gray-400', bg: 'bg-gray-500' };
+        if (sub.status === 'passed') return { icon: 'Passed', color: 'text-green-400', bg: 'bg-green-500' };
+        if (sub.status === 'failed') return { icon: 'Failed', color: 'text-red-400', bg: 'bg-red-500' };
+        if (sub.status === 'error') return { icon: 'Error', color: 'text-amber-400', bg: 'bg-amber-500' };
+        return { icon: 'Unknown', color: 'text-gray-400', bg: 'bg-gray-500' };
     };
 
     // ── Loading / Empty  ─────────────────────────────────────────────────────
@@ -199,7 +199,7 @@ const SubmissionHistory = ({ exerciseId, exerciseService, starterCode, onLoadCod
     if (submissions.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center py-12 text-gray-500">
-                <div className="text-3xl mb-3 opacity-40">📝</div>
+                <div className="text-sm font-semibold mb-3 opacity-40">History</div>
                 <p className="text-sm">No submissions yet</p>
                 <p className="text-xs text-gray-600 mt-1">Submit your solution to start tracking history</p>
             </div>
@@ -212,9 +212,9 @@ const SubmissionHistory = ({ exerciseId, exerciseService, starterCode, onLoadCod
             {/* Tab bar */}
             <div className="flex items-center gap-1 px-3 pt-3 pb-2 border-b border-white/5">
                 {[
-                    { key: 'timeline', label: 'Timeline', icon: '📋' },
-                    { key: 'diff', label: 'Diff', icon: '🔀' },
-                    { key: 'playback', label: 'Playback', icon: '▶' },
+                    { key: 'timeline', label: 'Timeline', icon: 'List' },
+                    { key: 'diff', label: 'Diff', icon: 'Compare' },
+                    { key: 'playback', label: 'Playback', icon: 'Play' },
                 ].map(tab => (
                     <button
                         key={tab.key}

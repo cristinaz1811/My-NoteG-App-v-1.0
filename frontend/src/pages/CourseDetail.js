@@ -108,7 +108,7 @@ const CourseDetail = () => {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">
-                    <div className="text-6xl mb-4">😕</div>
+                    <div className="text-4xl font-semibold text-gray-500 mb-4">Course unavailable</div>
                     <h2 className="text-2xl font-bold mb-2">Course not found</h2>
                     <button onClick={() => navigate('/courses')} className="btn-primary mt-4">
                         Browse Courses
@@ -123,7 +123,7 @@ const CourseDetail = () => {
 
     // Course detail view (same for enrolled and non-enrolled, different action buttons)
     return (
-        <div className="min-h-screen py-8 px-6">
+        <div className="min-h-screen py-8 px-6 page-fade-in">
             <div className="max-w-7xl mx-auto">
                 {/* Hero Section */}
                 <div className="surface-card rounded-3xl p-8 lg:p-12 mb-8 glow-sm">
@@ -149,7 +149,7 @@ const CourseDetail = () => {
                             <div className="flex flex-wrap gap-6">
                                 <div className="flex items-center gap-3">
                                     <div className="w-12 h-12 rounded-xl gradient-bg opacity-20 flex items-center justify-center">
-                                        <span className="text-2xl">📖</span>
+                                        <span className="text-sm font-semibold">Ch.</span>
                                     </div>
                                     <div>
                                         <div className="text-2xl font-bold">{chapterCount}</div>
@@ -158,7 +158,7 @@ const CourseDetail = () => {
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <div className="w-12 h-12 rounded-xl gradient-bg opacity-20 flex items-center justify-center">
-                                        <span className="text-2xl">💻</span>
+                                        <span className="text-sm font-semibold">Ex.</span>
                                     </div>
                                     <div>
                                         <div className="text-2xl font-bold">{exerciseCount}</div>
@@ -167,7 +167,7 @@ const CourseDetail = () => {
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <div className="w-12 h-12 rounded-xl gradient-bg opacity-20 flex items-center justify-center">
-                                        <span className="text-2xl">⏱️</span>
+                                        <span className="text-sm font-semibold">Hrs</span>
                                     </div>
                                     <div>
                                         <div className="text-2xl font-bold">~{course.estimated_hours || 1}h</div>
@@ -183,7 +183,7 @@ const CourseDetail = () => {
                                 {isEnrolled ? (
                                     <>
                                         <div className="flex items-center gap-2 mb-4">
-                                            <span className="text-green-400 text-xl">✓</span>
+                                            <span className="text-green-400 text-sm uppercase tracking-wide">Active</span>
                                             <h3 className="text-xl font-semibold">You're Enrolled!</h3>
                                         </div>
                                         <button 
@@ -206,7 +206,7 @@ const CourseDetail = () => {
                                         {/* Private course badge */}
                                         {course.is_private && (
                                             <div className="flex items-center gap-2 mb-4 p-2 bg-[#a1609d]/10 rounded-lg border border-[#a1609d]/20">
-                                                <span>🔒</span>
+                                                <span className="text-xs uppercase tracking-wide text-[#b870ad]">Private</span>
                                                 <span className="text-sm text-[#b870ad]">Private Course — Enrollment code required</span>
                                             </div>
                                         )}
@@ -267,9 +267,7 @@ const CourseDetail = () => {
                         {/* About Section */}
                         {course.long_description && (
                             <div className="surface-card rounded-2xl p-6">
-                                <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                                    <span>📋</span> About This Course
-                                </h2>
+                                <h2 className="text-xl font-semibold mb-4">About This Course</h2>
                                 <p className="text-gray-400 leading-relaxed">{course.long_description}</p>
                             </div>
                         )}
@@ -277,13 +275,11 @@ const CourseDetail = () => {
                         {/* Learning Objectives */}
                         {course.learning_objectives?.length > 0 && (
                             <div className="surface-card rounded-2xl p-6">
-                                <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                                    <span>🎯</span> What You'll Learn
-                                </h2>
+                                <h2 className="text-xl font-semibold mb-4">What You'll Learn</h2>
                                 <div className="grid sm:grid-cols-2 gap-3">
                                     {course.learning_objectives.map((obj, i) => (
                                         <div key={i} className="flex items-start gap-3">
-                                            <span className="text-[#fef483] mt-1">✓</span>
+                                            <span className="text-[#fef483] mt-1">•</span>
                                             <span className="text-gray-300">{obj}</span>
                                         </div>
                                     ))}
@@ -294,9 +290,7 @@ const CourseDetail = () => {
                         {/* Prerequisites */}
                         {course.prerequisites?.length > 0 && (
                             <div className="surface-card rounded-2xl p-6">
-                                <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                                    <span>📝</span> Prerequisites
-                                </h2>
+                                <h2 className="text-xl font-semibold mb-4">Prerequisites</h2>
                                 <ul className="space-y-2">
                                     {course.prerequisites.map((prereq, i) => (
                                         <li key={i} className="flex items-start gap-3 text-gray-400">
@@ -310,9 +304,7 @@ const CourseDetail = () => {
 
                         {/* Table of Contents */}
                         <div className="surface-card rounded-2xl p-6">
-                            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-                                <span>📚</span> Course Content
-                            </h2>
+                            <h2 className="text-xl font-semibold mb-6">Course Content</h2>
 
                             {course.chapters?.length > 0 ? (
                                 <div className="space-y-3">
@@ -351,13 +343,13 @@ const CourseDetail = () => {
                                                                     {exercise.difficulty}
                                                                 </span>
                                                                 {exercise.is_multi_file && (
-                                                                    <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">📁 Multi-File</span>
+                                                                    <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">Multi-file</span>
                                                                 )}
                                                                 {exercise.time_limit_minutes && (
-                                                                    <span className="text-xs text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">⏱ {exercise.time_limit_minutes}m</span>
+                                                                    <span className="text-xs text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">{exercise.time_limit_minutes}m</span>
                                                                 )}
                                                             </div>
-                                                            <span className="text-gray-500">🔒</span>
+                                                            <span className="text-gray-500">Locked</span>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -376,13 +368,13 @@ const CourseDetail = () => {
                                                     {exercise.difficulty}
                                                 </span>
                                                 {exercise.is_multi_file && (
-                                                    <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">📁 Multi-File</span>
+                                                    <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">Multi-file</span>
                                                 )}
                                                 {exercise.time_limit_minutes && (
-                                                    <span className="text-xs text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">⏱ {exercise.time_limit_minutes}m</span>
+                                                    <span className="text-xs text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">{exercise.time_limit_minutes}m</span>
                                                 )}
                                             </div>
-                                            <span className="text-gray-500">🔒</span>
+                                            <span className="text-gray-500">Locked</span>
                                         </div>
                                     ))}
                                 </div>
@@ -390,6 +382,34 @@ const CourseDetail = () => {
                                 <p className="text-gray-500">No content available yet.</p>
                             )}
                         </div>
+
+                        {course.materials?.length > 0 && (
+                            <div className="surface-card rounded-2xl p-6">
+                                <h2 className="text-xl font-semibold mb-4">Course Materials</h2>
+                                <div className="space-y-3">
+                                    {course.materials.map((material) => (
+                                        <a
+                                            key={material.id}
+                                            href={material.resource_url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="block rounded-xl border border-white/10 p-4 hover:bg-white/5 transition-colors no-underline"
+                                        >
+                                            <div className="flex items-start justify-between gap-4">
+                                                <div>
+                                                    <div className="text-xs uppercase tracking-wide text-gray-500">
+                                                        {material.chapter_title || 'Course level'} · {material.resource_type}
+                                                    </div>
+                                                    <div className="font-medium text-white mt-1">{material.title}</div>
+                                                    {material.description && <p className="text-sm text-gray-400 mt-1">{material.description}</p>}
+                                                </div>
+                                                <span className="text-sm text-[#fef483]">Open</span>
+                                            </div>
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Sidebar */}

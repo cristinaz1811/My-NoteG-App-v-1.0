@@ -23,6 +23,8 @@ module.exports = {
         'float': 'float 4s ease-in-out infinite',
         'blink': 'blink 1s infinite',
         'slideUp': 'slideUp 0.6s ease-out forwards',
+        'fadeIn': 'fadeIn 0.35s ease-out forwards',
+        'softRise': 'softRise 0.45s ease-out forwards',
       },
       keyframes: {
         float: {
@@ -36,6 +38,14 @@ module.exports = {
         slideUp: {
           from: { opacity: '0', transform: 'translateY(30px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        fadeIn: {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        softRise: {
+          from: { opacity: '0', transform: 'translateY(12px) scale(0.99)' },
+          to: { opacity: '1', transform: 'translateY(0) scale(1)' },
         },
       },
     },

@@ -402,8 +402,8 @@ const Exercise = () => {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">
-                    <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-gray-400">Loading exercise...</p>
+                    <div className="w-10 h-10 border-2 border-[#a1609d]/30 border-t-[#a1609d] rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-sm text-gray-500">Loading exercise…</p>
                 </div>
             </div>
         );
@@ -412,10 +412,13 @@ const Exercise = () => {
     if (!exercise) {
         return (
             <div className="min-h-screen flex items-center justify-center">
-                <div className="text-center">
-                    <div className="text-6xl mb-4">😕</div>
+                <div className="text-center animate-fade-in-up">
+                    <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mx-auto mb-4 text-gray-500">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    </div>
                     <h2 className="text-2xl font-bold mb-2">Exercise not found</h2>
-                    <button onClick={() => navigate(-1)} className="btn-primary mt-4">
+                    <p className="text-gray-400 mb-6 text-sm">This exercise may have been removed or you don't have access.</p>
+                    <button onClick={() => navigate(-1)} className="btn-primary mt-2">
                         Go Back
                     </button>
                 </div>
@@ -424,7 +427,7 @@ const Exercise = () => {
     }
 
     return (
-        <div className="flex flex-col lg:flex-row" style={{ height: 'calc(100vh - 4rem)', overflow: 'hidden' }}>
+        <div className="flex flex-col lg:flex-row page-fade-in" style={{ height: 'calc(100vh - 4rem)', overflow: 'hidden' }}>
             {/* Left Panel - Description */}
             <div className={`${(showAIPanel || showHistoryPanel) ? 'lg:w-[30%]' : 'lg:w-1/2 xl:w-2/5'} p-6 overflow-y-auto bg-[#0a0a0f] border-r border-white/5 transition-all duration-300`}>
                 {/* Back Button */}
@@ -445,8 +448,9 @@ const Exercise = () => {
                             {exercise.language}
                         </span>
                         {exercise.time_limit_minutes && (
-                            <span className="text-xs text-blue-400 bg-blue-500/10 px-2 py-1 rounded flex items-center gap-1">
-                                ⏱ {exercise.time_limit_minutes} min
+                            <span className="text-xs text-blue-400 bg-blue-500/10 px-2 py-1 rounded flex items-center gap-1.5">
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                {exercise.time_limit_minutes} min
                             </span>
                         )}
                     </div>
@@ -499,19 +503,19 @@ const Exercise = () => {
                                 const star = exercise.userProgress?.efficiency_star;
                                 if (status === 'completed') return (
                                     <>
-                                        <div className="text-2xl text-green-400">✓{star ? ' ⭐' : ''}</div>
-                                        <div className="text-xs text-green-400">Completed{star ? ' (Optimal)' : ''}</div>
+                                        <div className="text-sm text-green-400">Completed{star ? ' · Optimal' : ''}</div>
+                                        <div className="text-xs text-green-400">Solved</div>
                                     </>
                                 );
                                 if (status === 'inefficient') return (
                                     <>
-                                        <div className="text-2xl text-amber-400">⚠</div>
+                                        <div className="text-sm text-amber-400">Needs optimization</div>
                                         <div className="text-xs text-amber-400">Needs Optimization</div>
                                     </>
                                 );
                                 return (
                                     <>
-                                        <div className="text-2xl text-gray-500">○</div>
+                                        <div className="text-sm text-gray-500">In progress</div>
                                         <div className="text-xs text-gray-500">In Progress</div>
                                     </>
                                 );
@@ -520,7 +524,7 @@ const Exercise = () => {
                     </div>
                     {exercise.requires_efficiency && (
                         <div className="mt-3 pt-3 border-t border-white/5 text-center">
-                            <span className="text-[10px] text-amber-400/70 bg-amber-500/10 px-2 py-1 rounded-full">⚡ Efficiency Required</span>
+                            <span className="text-[10px] text-amber-400/70 bg-amber-500/10 px-2 py-1 rounded-full">Efficiency Required</span>
                         </div>
                     )}
                 </div>
@@ -554,9 +558,7 @@ const Exercise = () => {
                         </span>
                         )}
                         {exercise.is_multi_file && (
-                            <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded">
-                                Multi-File
-                            </span>
+                            <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded">Multi-file</span>
                         )}
                         {/* Timer Display */}
                         {exercise.time_limit_minutes && timedSession && !timerExpired && timeRemaining != null && (
@@ -574,7 +576,8 @@ const Exercise = () => {
                         )}
                         {exercise.time_limit_minutes && timerExpired && (
                             <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-bold bg-red-500/20 text-red-400">
-                                ⏰ Time's Up!
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                Time's Up
                             </div>
                         )}
                     </div>
@@ -584,7 +587,7 @@ const Exercise = () => {
                             className="px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 bg-white/5 text-gray-400 hover:text-orange-300 hover:bg-orange-500/10 border border-white/10"
                             title="Request help from professor"
                         >
-                            🆘 Help
+                            Help
                         </button>
                         <button
                             onClick={() => { setShowHistoryPanel(!showHistoryPanel); if (!showHistoryPanel) setShowAIPanel(false); }}
@@ -606,7 +609,7 @@ const Exercise = () => {
                             className="px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 bg-white/5 text-gray-400 hover:text-orange-300 hover:bg-orange-500/10 border border-white/10"
                             title="Request help from professor"
                         >
-                            🆘 Help
+                            Help
                         </button>
                         <button
                             onClick={() => { setShowAIPanel(!showAIPanel); if (!showAIPanel) setShowHistoryPanel(false); }}
@@ -636,7 +639,7 @@ const Exercise = () => {
                             }`}
                         >
                             {timerExpired ? (
-                                '⏰ Time Expired'
+                                'Time Expired'
                             ) : submitting ? (
                                 <span className="flex items-center gap-2">
                                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
@@ -733,12 +736,12 @@ const Exercise = () => {
                                 <h3 className="font-semibold flex items-center gap-2">
                                     {(results.score || 0) === 100 ? (
                                         <>
-                                            <span className="text-green-400">✓</span>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-green-400"><polyline points="20 6 9 17 4 12"/></svg>
                                             <span className="text-green-400">All Tests Passed!</span>
                                         </>
                                     ) : (
                                         <>
-                                            <span className="text-amber-400">⚠</span>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                                             <span className="text-amber-400">{results.testsPassed || 0}/{results.testsTotal || 0} Tests Passed</span>
                                         </>
                                     )}
@@ -809,7 +812,7 @@ const Exercise = () => {
                     <div className="px-4 py-3 border-b border-white/5 bg-gradient-to-r from-blue-500/10 to-cyan-500/10">
                         <div className="flex items-center justify-between">
                             <h3 className="font-semibold text-sm flex items-center gap-2">
-                                <span className="text-blue-400">⏱</span>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                                 Submission History
                             </h3>
                             <button
@@ -875,7 +878,9 @@ const Exercise = () => {
                             {hintMode === 'solved' ? (
                                 /* Completed state — no hints needed */
                                 <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-5 text-center">
-                                    <div className="text-4xl mb-3">{exercise.userProgress?.efficiency_star || exercise.requires_efficiency ? '⭐' : '🎉'}</div>
+                                    <div className="w-12 h-12 rounded-full bg-green-500/15 flex items-center justify-center mx-auto mb-3 text-green-400">
+                                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                    </div>
                                     <h4 className="font-semibold text-green-300 mb-1">Exercise Completed!</h4>
                                     <p className="text-xs text-gray-400">
                                         {exercise.requires_efficiency 
@@ -889,7 +894,12 @@ const Exercise = () => {
                                 /* Active hints */
                                 <>
                                     <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center gap-2">
-                                        <span>{hintMode === 'optimizing' ? '⚡' : '💡'}</span> {hintMode === 'optimizing' ? 'Optimization Hints' : 'Progressive Hints'}
+                                        {hintMode === 'optimizing' ? (
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                        ) : (
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                                        )}
+                                        {hintMode === 'optimizing' ? 'Optimization Hints' : 'Progressive Hints'}
                                     </h4>
                                     {hintMode === 'optimizing' && (
                                         <div className="mb-3 rounded-lg bg-amber-500/10 border border-amber-500/20 p-2">
@@ -1070,14 +1080,17 @@ const Exercise = () => {
                     >
                         {helpSent ? (
                             <div className="text-center py-4">
-                                <div className="text-5xl mb-3">✅</div>
+                                <div className="w-14 h-14 rounded-full bg-green-500/15 flex items-center justify-center mx-auto mb-3 text-green-400">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                                </div>
                                 <h3 className="text-lg font-semibold text-white mb-1">Help request sent!</h3>
                                 <p className="text-sm text-gray-400">Your professor will be notified.</p>
                             </div>
                         ) : (
                             <>
                                 <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
-                                    🆘 Request Help
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                    Request Help
                                 </h3>
                                 <p className="text-sm text-gray-400 mb-4">
                                     Send a help request to your professor for this exercise.
@@ -1117,7 +1130,9 @@ const Exercise = () => {
                     <div 
                         className="surface-card rounded-2xl p-8 w-full max-w-md mx-4 shadow-2xl border border-white/10 text-center"
                     >
-                        <div className="text-6xl mb-4">⏱</div>
+                        <div className="w-14 h-14 rounded-2xl bg-blue-500/15 flex items-center justify-center mx-auto mb-4 text-blue-400">
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        </div>
                         <h3 className="text-xl font-bold text-white mb-2">Timed Exercise</h3>
                         <p className="text-gray-400 mb-2">
                             This exercise has a time limit of <span className="text-white font-semibold">{exercise.time_limit_minutes} minute{exercise.time_limit_minutes !== 1 ? 's' : ''}</span>.
@@ -1148,7 +1163,9 @@ const Exercise = () => {
             {timerExpired && exercise?.time_limit_minutes && (
                 <div className="fixed bottom-6 right-6 z-40 surface-card rounded-xl p-4 shadow-2xl border border-red-500/30 bg-red-500/10 max-w-xs">
                     <div className="flex items-center gap-3">
-                        <span className="text-3xl">⏰</span>
+                        <div className="w-9 h-9 rounded-full bg-red-500/15 flex items-center justify-center text-red-400 flex-shrink-0">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        </div>
                         <div>
                             <h4 className="font-semibold text-red-400 text-sm">Time Expired</h4>
                             <p className="text-xs text-gray-400">Submissions are no longer accepted for this exercise.</p>

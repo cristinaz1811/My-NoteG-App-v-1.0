@@ -74,6 +74,22 @@ ALTER TABLE exercises ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_chapters_course ON chapters(course_id);
 CREATE INDEX IF NOT EXISTS idx_exercises_chapter ON exercises(chapter_id);
 
+CREATE TABLE IF NOT EXISTS course_materials (
+    id SERIAL PRIMARY KEY,
+    course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
+    chapter_id INTEGER REFERENCES chapters(id) ON DELETE SET NULL,
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    resource_type VARCHAR(30) NOT NULL CHECK (resource_type IN ('article', 'video', 'reading', 'cheatsheet', 'reference', 'project')),
+    resource_url VARCHAR(500),
+    order_index INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_course_materials_course ON course_materials(course_id);
+CREATE INDEX IF NOT EXISTS idx_course_materials_chapter ON course_materials(chapter_id);
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 003: Course language
 -- ═══════════════════════════════════════════════════════════════════════════

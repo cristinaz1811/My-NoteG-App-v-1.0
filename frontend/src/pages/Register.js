@@ -119,8 +119,7 @@ const Register = () => {
                                     ? 'bg-[#a1609d]/20 text-[#a1609d]' 
                                     : 'bg-[#fef483]/20 text-[#fef483]'
                             }`}>
-                                <span>{isProfessor ? '👨‍🏫' : '🎓'}</span>
-                                <span>{isProfessor ? 'Professor Account' : 'Student Account'}</span>
+                                    <span className="uppercase tracking-wide">{isProfessor ? 'Professor' : 'Student'}</span>
                             </span>
                         </div>
                     </div>
@@ -204,30 +203,30 @@ const Register = () => {
                         {isProfessor ? (
                             <>
                                 <div className="flex items-center gap-3 text-sm text-gray-400">
-                                    <span className="text-green-400">✓</span>
+                                        <span className="text-green-400">Included</span>
                                     <span>Create unlimited courses</span>
                                 </div>
                                 <div className="flex items-center gap-3 text-sm text-gray-400">
-                                    <span className="text-green-400">✓</span>
+                                        <span className="text-green-400">Included</span>
                                     <span>Design exercises with custom test cases</span>
                                 </div>
                                 <div className="flex items-center gap-3 text-sm text-gray-400">
-                                    <span className="text-green-400">✓</span>
+                                        <span className="text-green-400">Included</span>
                                     <span>Track student progress in real-time</span>
                                 </div>
                             </>
                         ) : (
                             <>
                                 <div className="flex items-center gap-3 text-sm text-gray-400">
-                                    <span className="text-green-400">✓</span>
+                                        <span className="text-green-400">Included</span>
                                     <span>Free access to all beginner courses</span>
                                 </div>
                                 <div className="flex items-center gap-3 text-sm text-gray-400">
-                                    <span className="text-green-400">✓</span>
+                                        <span className="text-green-400">Included</span>
                                     <span>Track your progress and earn certificates</span>
                                 </div>
                                 <div className="flex items-center gap-3 text-sm text-gray-400">
-                                    <span className="text-green-400">✓</span>
+                                        <span className="text-green-400">Included</span>
                                     <span>Join our community of developers</span>
                                 </div>
                             </>
