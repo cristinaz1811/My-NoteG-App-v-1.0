@@ -87,6 +87,8 @@ const Courses = () => {
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
     const [filter, setFilter] = useState('all');
+    const [search, setSearch] = useState('');
+    const [langFilter, setLangFilter] = useState('all');
     const [showCodeModal, setShowCodeModal] = useState(false);
     const [enrollCode, setEnrollCode] = useState('');
     const [codeError, setCodeError] = useState('');
@@ -139,9 +141,21 @@ const Courses = () => {
         }
     };
 
-    const filteredCourses = filter === 'all'
-        ? courses
-        : courses.filter(c => c.difficulty === filter);
+    const availableLanguages = [...new Set(
+        courses.map(c => (c.language || '').toLowerCase()).filter(Boolean)
+    )].sort();
+
+    const filteredCourses = courses.filter(course => {
+        const matchesDifficulty = filter === 'all' || course.difficulty === filter;
+        const matchesLanguage =
+            langFilter === 'all' || (course.language || '').toLowerCase() === langFilter;
+        const query = search.trim().toLowerCase();
+        const matchesSearch =
+            !query ||
+            (course.title || '').toLowerCase().includes(query) ||
+            (course.description || '').toLowerCase().includes(query);
+        return matchesDifficulty && matchesLanguage && matchesSearch;
+    });
 
     const getDifficultyBadgeClass = (difficulty) => {
         switch (difficulty) {
@@ -271,24 +285,58 @@ const Courses = () => {
                     </div>
                 )}
 
+                {/* Search */}
+                <div
+                    className="max-w-md mx-auto mb-6 animate-fade-in-up"
+                    style={{ animationDelay: '0.06s' }}
+                >
+                    <input
+                        type="text"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        placeholder="Search courses by name or description…"
+                        aria-label="Search courses"
+                        className="w-full px-4 py-2.5"
+                    />
+                </div>
+
                 {/* Filters */}
                 <div
-                    className="flex flex-wrap justify-center gap-3 mb-10 animate-fade-in-up"
+                    className="mb-10 space-y-3 animate-fade-in-up"
                     style={{ animationDelay: '0.07s' }}
                 >
-                    {['all', 'beginner', 'intermediate', 'advanced'].map(filterOption => (
-                        <button
-                            key={filterOption}
-                            onClick={() => setFilter(filterOption)}
-                            className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-                                filter === filterOption
-                                    ? 'gradient-bg text-white shadow-md'
-                                    : 'bg-white/5 text-gray-300 hover:bg-white/10 border border-white/10'
-                            }`}
-                        >
-                            {filterOption === 'all' ? 'All Courses' : filterOption.charAt(0).toUpperCase() + filterOption.slice(1)}
-                        </button>
-                    ))}
+                    <div className="flex flex-wrap justify-center gap-3">
+                        {['all', 'beginner', 'intermediate', 'advanced'].map(filterOption => (
+                            <button
+                                key={filterOption}
+                                onClick={() => setFilter(filterOption)}
+                                className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                                    filter === filterOption
+                                        ? 'gradient-bg text-white shadow-md'
+                                        : 'bg-white/5 text-gray-300 hover:bg-white/10 border border-white/10'
+                                }`}
+                            >
+                                {filterOption === 'all' ? 'All Courses' : filterOption.charAt(0).toUpperCase() + filterOption.slice(1)}
+                            </button>
+                        ))}
+                    </div>
+                    {availableLanguages.length > 1 && (
+                        <div className="flex flex-wrap justify-center gap-2">
+                            {['all', ...availableLanguages].map(lang => (
+                                <button
+                                    key={lang}
+                                    onClick={() => setLangFilter(lang)}
+                                    className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+                                        langFilter === lang
+                                            ? 'bg-[#fef483]/20 text-[#fef483] border border-[#fef483]/40'
+                                            : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-white/10'
+                                    }`}
+                                >
+                                    {lang === 'all' ? 'All Languages' : lang.charAt(0).toUpperCase() + lang.slice(1)}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Course Grid */}
