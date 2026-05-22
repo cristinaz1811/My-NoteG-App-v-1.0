@@ -11,6 +11,7 @@ const CourseStudents = () => {
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [studentDetails, setStudentDetails] = useState(null);
     const [loadingDetails, setLoadingDetails] = useState(false);
+    const [showExercisePerformance, setShowExercisePerformance] = useState(false);
 
     useEffect(() => {
         loadCourseAndStudents();
@@ -148,58 +149,74 @@ const CourseStudents = () => {
                     </div>
                 </div>
 
-                {/* Exercise Performance — where the class is struggling */}
+                {/* Exercise Performance — collapsible */}
                 {exerciseStats.length > 0 && (
                     <div className="surface-card rounded-2xl p-6 mb-8">
-                        <h2 className="text-xl font-semibold mb-1">Exercise Performance</h2>
-                        <p className="text-sm text-gray-400 mb-4">
-                            Class-wide pass rates — lower rates show where students struggle most.
-                        </p>
-                        <div className="space-y-2">
-                            {exerciseStats.map((ex) => {
-                                const attempted = parseInt(ex.students_attempted) || 0;
-                                const completed = parseInt(ex.students_completed) || 0;
-                                const passRate = attempted > 0
-                                    ? Math.round((completed / attempted) * 100)
-                                    : null;
-                                const rateColor = passRate === null ? '#6b7280'
-                                    : passRate >= 70 ? '#4ade80'
-                                    : passRate >= 40 ? '#fbbf24'
-                                    : '#f87171';
-                                return (
-                                    <div
-                                        key={ex.exercise_id}
-                                        className="flex items-center gap-4 py-2.5 px-3 bg-black/20 rounded-lg"
-                                    >
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium truncate">{ex.exercise_title}</p>
-                                            <p className="text-xs text-gray-500 truncate">
-                                                {ex.chapter_title || 'No chapter'}
-                                                {ex.difficulty ? ` · ${ex.difficulty}` : ''}
-                                            </p>
-                                        </div>
-                                        <div className="text-xs text-gray-400 text-right hidden sm:block">
-                                            <div>{attempted} attempted</div>
-                                            <div>{ex.avg_attempts || 0} avg tries</div>
-                                        </div>
-                                        <div className="w-28 flex-shrink-0">
-                                            <div className="flex justify-between text-xs mb-1">
-                                                <span className="text-gray-400">Pass rate</span>
-                                                <span style={{ color: rateColor }}>
-                                                    {passRate === null ? '—' : `${passRate}%`}
-                                                </span>
+                        <button
+                            type="button"
+                            onClick={() => setShowExercisePerformance(prev => !prev)}
+                            className="w-full flex items-center justify-between text-left"
+                        >
+                            <div>
+                                <h2 className="text-xl font-semibold mb-1">Exercise Performance</h2>
+                                <p className="text-sm text-gray-400">
+                                    Class-wide pass rates — lower rates show where students struggle most.
+                                </p>
+                            </div>
+                            <span className={`text-gray-500 text-sm transition-transform duration-200 ${
+                                showExercisePerformance ? 'rotate-180' : ''
+                            }`}>
+                                ▼
+                            </span>
+                        </button>
+
+                        {showExercisePerformance && (
+                            <div className="mt-4 space-y-2">
+                                {exerciseStats.map((ex) => {
+                                    const attempted = parseInt(ex.students_attempted) || 0;
+                                    const completed = parseInt(ex.students_completed) || 0;
+                                    const passRate = attempted > 0
+                                        ? Math.round((completed / attempted) * 100)
+                                        : null;
+                                    const rateColor = passRate === null ? '#6b7280'
+                                        : passRate >= 70 ? '#4ade80'
+                                        : passRate >= 40 ? '#fbbf24'
+                                        : '#f87171';
+                                    return (
+                                        <div
+                                            key={ex.exercise_id}
+                                            className="flex items-center gap-4 py-2.5 px-3 bg-black/20 rounded-lg"
+                                        >
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium truncate">{ex.exercise_title}</p>
+                                                <p className="text-xs text-gray-500 truncate">
+                                                    {ex.chapter_title || 'No chapter'}
+                                                    {ex.difficulty ? ` · ${ex.difficulty}` : ''}
+                                                </p>
                                             </div>
-                                            <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full rounded-full"
-                                                    style={{ width: `${passRate || 0}%`, background: rateColor }}
-                                                />
+                                            <div className="text-xs text-gray-400 text-right hidden sm:block">
+                                                <div>{attempted} attempted</div>
+                                                <div>{ex.avg_attempts || 0} avg tries</div>
+                                            </div>
+                                            <div className="w-28 flex-shrink-0">
+                                                <div className="flex justify-between text-xs mb-1">
+                                                    <span className="text-gray-400">Pass rate</span>
+                                                    <span style={{ color: rateColor }}>
+                                                        {passRate === null ? '—' : `${passRate}%`}
+                                                    </span>
+                                                </div>
+                                                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full rounded-full"
+                                                        style={{ width: `${passRate || 0}%`, background: rateColor }}
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 )}
 
