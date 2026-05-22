@@ -6,6 +6,7 @@ import { AuthContext } from '../context/AuthContext';
 const ProfessorDashboard = () => {
     const [courses, setCourses] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const { user } = useContext(AuthContext);
     const navigate = useNavigate();
@@ -16,10 +17,12 @@ const ProfessorDashboard = () => {
 
     const loadCourses = async () => {
         try {
+            setLoadError(null);
             const response = await courseService.getProfessorCourses();
             setCourses(response.data);
         } catch (error) {
             console.error('Error loading courses:', error);
+            setLoadError('Something went wrong while loading your courses.');
         } finally {
             setLoading(false);
         }
@@ -53,6 +56,24 @@ const ProfessorDashboard = () => {
                 <div className="text-center">
                     <div className="w-16 h-16 border-4 border-[#a1609d] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                     <p className="text-gray-400">Loading your courses...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (loadError) {
+        return (
+            <div className="min-h-screen flex items-center justify-center px-6">
+                <div className="text-center max-w-sm">
+                    <h3 className="text-xl font-semibold mb-2">Couldn't load your courses</h3>
+                    <p className="text-gray-400 mb-6">{loadError}</p>
+                    <button
+                        onClick={() => { setLoading(true); loadCourses(); }}
+                        className="px-6 py-3 rounded-xl font-semibold text-white"
+                        style={{ background: 'linear-gradient(135deg, #a1609d, #b870ad)' }}
+                    >
+                        Try Again
+                    </button>
                 </div>
             </div>
         );
@@ -114,7 +135,7 @@ const ProfessorDashboard = () => {
                         className="inline-flex items-center gap-3 px-6 py-4 rounded-xl no-underline transition-all hover:scale-[1.02] surface-card"
                         style={{ border: '1px solid rgba(161, 96, 157, 0.3)' }}
                     >
-                        <span className="text-2xl">🔍</span>
+                        <span className="text-sm font-semibold">Scan</span>
                         <div>
                             <div className="text-white font-semibold">Plagiarism Detection</div>
                             <div className="text-xs text-gray-400">Compare submissions and detect suspicious similarities</div>
@@ -126,7 +147,7 @@ const ProfessorDashboard = () => {
                 {/* Courses Section */}
                 {courses.length === 0 ? (
                     <div className="surface-card rounded-3xl p-12 text-center">
-                        <div className="text-6xl mb-6">📚</div>
+                        <div className="text-2xl font-semibold text-gray-500 mb-6">No courses yet</div>
                         <h2 className="text-2xl font-bold mb-3">No Courses Yet</h2>
                         <p className="text-gray-400 mb-8 max-w-md mx-auto">
                             Start creating your first course and share your knowledge with students.
@@ -161,9 +182,9 @@ const ProfessorDashboard = () => {
                                             {course.description}
                                         </p>
                                         <div className="flex items-center gap-4 text-sm text-gray-500">
-                                            <span>📖 {course.chapter_count || 0} chapters</span>
-                                            <span>💻 {course.exercise_count || 0} exercises</span>
-                                            <span>👥 {course.enrollment_count || 0} enrolled</span>
+                                            <span>{course.chapter_count || 0} chapters</span>
+                                            <span>{course.exercise_count || 0} exercises</span>
+                                            <span>{course.enrollment_count || 0} enrolled</span>
                                         </div>
                                     </div>
 
