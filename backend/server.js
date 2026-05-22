@@ -17,6 +17,15 @@ const analyticsRoutes = require('./routes/analytics');
 const calendarRoutes = require('./routes/calendar');
 const { DISTRIBUTED_MODE, closeRedis } = require('./utils/redisClient');
 
+// Fail fast if critical environment variables are missing
+const REQUIRED_ENV = ['JWT_SECRET', 'DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'];
+const missingEnv = REQUIRED_ENV.filter((key) => !process.env[key]);
+if (missingEnv.length > 0) {
+    console.error(`Missing required environment variables: ${missingEnv.join(', ')}`);
+    console.error('Copy backend/.env.example to backend/.env and fill in the values.');
+    process.exit(1);
+}
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -63,10 +72,14 @@ wss.on('connection', (ws, req) => {
 });
 
 // Middleware
+// Allowed origins: production URLs come from FRONTEND_URL (comma-separated),
+// local dev origins are always permitted.
 const allowedOrigins = [
-    process.env.FRONTEND_URL || 'https://my-noteg.com',
-    'https://my-noteg.com',
-    'https://www.my-noteg.com',
+    ...(process.env.FRONTEND_URL
+        ? process.env.FRONTEND_URL.split(',').map((origin) => origin.trim())
+        : []),
+    'http://localhost:3000',
+    'http://localhost:3001',
 ];
 app.use(cors({
     origin: (origin, callback) => {
@@ -99,8 +112,8 @@ app.get('/api/health', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ error: 'Something went wrong!' });
+    console.error(`[ERROR] ${req.method} ${req.originalUrl} -`, err.stack || err.message);
+    res.status(err.status || 500).json({ error: 'Something went wrong!' });
 });
 
 // Start server (using http server instead of express directly)

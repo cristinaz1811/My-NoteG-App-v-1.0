@@ -2,6 +2,12 @@
 node_modules/
 package-lock.json
 
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+
 # Environment variables (IMPORTANT - contains database credentials)
 .env*
 .env.local
