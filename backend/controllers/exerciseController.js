@@ -50,23 +50,66 @@ const getExerciseById = async (req, res) => {
             await cacheSet(cacheKey, { exercise, testCases: testCasesRows, exerciseFiles }, 300);
         }
 
-        // Get user progress if authenticated
+        // Check if this is the first exercise of its course (for demo access)
+        let isFirstExercise = false;
+        let isFirstChapter = false;
+        let courseId = exercise.course_id;
+
+        if (courseId) {
+            // Find the first chapter of the course
+            const firstChapterResult = await db.query(
+                'SELECT id FROM chapters WHERE course_id = $1 ORDER BY order_index NULLS LAST, id LIMIT 1',
+                [courseId]
+            );
+
+            let firstChapterId = null;
+            if (firstChapterResult.rows.length > 0) {
+                firstChapterId = firstChapterResult.rows[0].id;
+                isFirstChapter = exercise.chapter_id === firstChapterId;
+            }
+
+            // Find the first exercise in the course (general case - no chapter)
+            const firstExerciseResult = await db.query(
+                `SELECT id FROM exercises 
+                 WHERE course_id = $1 
+                 ORDER BY COALESCE(chapter_id, 0), order_index NULLS LAST, id 
+                 LIMIT 1`,
+                [courseId]
+            );
+
+            if (firstExerciseResult.rows.length > 0) {
+                isFirstExercise = exercise.id === firstExerciseResult.rows[0].id;
+            }
+        }
+
+        // Check enrollment and whether this is a demo exercise
+        let isEnrolled = false;
         let userProgress = null;
         let timedSession = null;
-        if (req.user) {
-            const progressResult = await db.query(
-                'SELECT * FROM user_progress WHERE user_id = $1 AND exercise_id = $2',
-                [req.user.id, id]
-            );
-            userProgress = progressResult.rows[0] || null;
 
-            // Get timed session if exercise has a time limit
-            if (exercise.time_limit_minutes) {
-                const sessionResult = await db.query(
-                    'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
+        if (req.user) {
+            const enrollmentResult = await db.query(
+                'SELECT * FROM enrollments WHERE user_id = $1 AND course_id = $2',
+                [req.user.id, courseId]
+            );
+            isEnrolled = enrollmentResult.rows.length > 0;
+
+            // Only get user progress if enrolled or if this is a demo exercise
+            if (isEnrolled || isFirstExercise) {
+                const progressResult = await db.query(
+                    'SELECT * FROM user_progress WHERE user_id = $1 AND exercise_id = $2',
                     [req.user.id, id]
                 );
-                timedSession = sessionResult.rows[0] || null;
+                userProgress = progressResult.rows[0] || null;
+
+                // Get timed session if exercise has a time limit
+                if (exercise.time_limit_minutes) {
+                    const sessionResult = await db.query(
+                        'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
+                        [req.user.id, id]
+                    );
+                    timedSession = sessionResult.rows[0] || null;
+                }
             }
         }
 
@@ -77,6 +120,9 @@ const getExerciseById = async (req, res) => {
             userProgress,
             timedSession,
             exerciseFiles,
+            isFirstExercise,
+            isFirstChapter,
+            isEnrolled,
         });
     } catch (error) {
         console.error('Get exercise error:', error);
@@ -146,6 +192,30 @@ const submitSolution = async (req, res) => {
         }
 
         const exercise = exerciseResult.rows[0];
+
+        // Check if this is the first exercise of the course (for demo access)
+        let isFirstExercise = false;
+        if (exercise.course_id) {
+            const firstExerciseResult = await db.query(
+                `SELECT id FROM exercises 
+                 WHERE course_id = $1 
+                 ORDER BY COALESCE(chapter_id, 0), order_index NULLS LAST, id 
+                 LIMIT 1`,
+                [exercise.course_id]
+            );
+            isFirstExercise = firstExerciseResult.rows.length > 0 && exercise.id === firstExerciseResult.rows[0].id;
+        }
+
+        // Check enrollment: only required if not the first exercise
+        if (!isFirstExercise) {
+            const enrollmentResult = await db.query(
+                'SELECT * FROM enrollments WHERE user_id = $1 AND course_id = $2',
+                [userId, exercise.course_id]
+            );
+            if (enrollmentResult.rows.length === 0) {
+                return res.status(403).json({ error: 'You must be enrolled in this course to submit. Complete the demo exercise and enroll to continue.' });
+            }
+        }
 
         // Check if this is a timed exercise and if the timer has expired
         if (exercise.time_limit_minutes) {
@@ -271,6 +341,7 @@ const submitSolution = async (req, res) => {
             score,
             testsPassed,
             testsTotal,
+            isFirstExercise,
         });
     } catch (error) {
         console.error('Submit solution error:', error);

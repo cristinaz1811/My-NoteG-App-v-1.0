@@ -1,12 +1,14 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { exerciseService, notificationService } from '../services/api';
+import { AuthContext } from '../context/AuthContext';
 import SubmissionHistory from '../components/SubmissionHistory';
 
 const Exercise = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { user } = useContext(AuthContext);
     const [exercise, setExercise] = useState(null);
     const [code, setCode] = useState('');
     const [results, setResults] = useState(null);
@@ -50,6 +52,10 @@ const Exercise = () => {
     const [timerExpired, setTimerExpired] = useState(false);
     const [showTimerStartModal, setShowTimerStartModal] = useState(false);
     const timerIntervalRef = useRef(null);
+
+    // Enrollment prompt state
+    const [showEnrollmentPrompt, setShowEnrollmentPrompt] = useState(false);
+    const [enrollmentLoading, setEnrollmentLoading] = useState(false);
 
     const handleRequestHelp = async () => {
         if (helpSending) return;
@@ -248,6 +254,12 @@ const Exercise = () => {
     };
 
     const handleSubmit = async () => {
+        // Check if user is authenticated (required for submission)
+        if (!user) {
+            navigate('/login', { state: { from: `/exercises/${id}` } });
+            return;
+        }
+
         // Block submission if timer expired
         if (timerExpired) {
             alert('Time has expired for this exercise. You can no longer submit solutions.');
@@ -283,8 +295,13 @@ const Exercise = () => {
             const response = await exerciseService.submitSolution(id, submitData);
             setResults(response.data);
             
-            const { score, testsPassed, testsTotal } = response.data;
+            const { score, testsPassed, testsTotal, isFirstExercise } = response.data;
             const allPassed = testsPassed === testsTotal;
+
+            // Show enrollment prompt if passed the first exercise and not enrolled
+            if (allPassed && isFirstExercise && !exercise.isEnrolled) {
+                setShowEnrollmentPrompt(true);
+            }
             setExercise(prev => {
                 const prevStatus = prev.userProgress?.completion_status || 'in_progress';
                 let newStatus = prevStatus;
@@ -1169,6 +1186,70 @@ const Exercise = () => {
                         <div>
                             <h4 className="font-semibold text-red-400 text-sm">Time Expired</h4>
                             <p className="text-xs text-gray-400">Submissions are no longer accepted for this exercise.</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Enrollment Prompt Modal - shown after completing the demo exercise */}
+            {showEnrollmentPrompt && exercise && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+                    <div className="surface-card rounded-2xl p-8 w-full max-w-md shadow-2xl border border-white/10 animate-scale-in">
+                        <div className="text-center mb-6">
+                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center mx-auto mb-4 text-white text-2xl">
+                                ✓
+                            </div>
+                            <h2 className="text-2xl font-bold text-white mb-2">Excellent Work!</h2>
+                            <p className="text-gray-400">You've completed the demo exercise. Ready to continue learning?</p>
+                        </div>
+
+                        <div className="bg-white/5 rounded-xl p-4 mb-6 border border-white/10">
+                            <p className="text-sm text-gray-300 mb-3">
+                                <span className="font-semibold">"{exercise.title}"</span> is just the beginning. Enroll in this course to unlock:
+                            </p>
+                            <ul className="text-sm text-gray-400 space-y-2">
+                                <li className="flex items-center gap-2">
+                                    <span className="text-green-400">✓</span>
+                                    <span>All remaining exercises</span>
+                                </li>
+                                <li className="flex items-center gap-2">
+                                    <span className="text-green-400">✓</span>
+                                    <span>Detailed feedback & AI hints</span>
+                                </li>
+                                <li className="flex items-center gap-2">
+                                    <span className="text-green-400">✓</span>
+                                    <span>Progress tracking & analytics</span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setShowEnrollmentPrompt(false)}
+                                className="flex-1 px-4 py-3 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-colors border border-white/10 hover:border-white/20 bg-transparent cursor-pointer"
+                            >
+                                Continue Exploring
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    setEnrollmentLoading(true);
+                                    try {
+                                        await exerciseService.enrollInCourse(exercise.course_id);
+                                        // Navigate to course page
+                                        navigate(`/my-courses/${exercise.course_id}`);
+                                    } catch (error) {
+                                        console.error('Error enrolling:', error);
+                                        alert(error.response?.data?.error || 'Failed to enroll in course');
+                                    } finally {
+                                        setEnrollmentLoading(false);
+                                    }
+                                }}
+                                disabled={enrollmentLoading}
+                                className="flex-1 px-4 py-3 rounded-lg text-sm font-semibold text-white transition-all border-none cursor-pointer"
+                                style={{ background: 'linear-gradient(135deg, #a1609d, #b870ad)' }}
+                            >
+                                {enrollmentLoading ? 'Enrolling...' : 'Enroll Now'}
+                            </button>
                         </div>
                     </div>
                 </div>
