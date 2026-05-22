@@ -5,6 +5,7 @@ import { NotificationProvider } from './context/NotificationContext';
 import { ThemeProvider } from './context/ThemeContext';
 import Layout from './components/Layout';
 import RequireAuth from './components/RequireAuth';
+import ErrorBoundary from './components/ErrorBoundary';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Courses from './pages/Courses';
@@ -277,6 +278,7 @@ function App() {
             <AuthProvider>
                 <NotificationProvider>
                 <AnimatedBackground />
+                <ErrorBoundary>
                 <Routes>
                     {/* Public routes - no navbar */}
                     <Route path="/" element={<LandingPage />} />
@@ -313,6 +315,7 @@ function App() {
                     <Route path="/professor/plagiarism" element={<RequireAuth role="professor"><Layout><PlagiarismDashboard /></Layout></RequireAuth>} />
                     <Route path="/professor/plagiarism/report/:reportId" element={<RequireAuth role="professor"><Layout><PlagiarismReport /></Layout></RequireAuth>} />
                 </Routes>
+                </ErrorBoundary>
                 </NotificationProvider>
             </AuthProvider>
             </ThemeProvider>
