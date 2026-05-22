@@ -1,9 +1,10 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Link } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { ThemeProvider } from './context/ThemeContext';
-import Navbar from './components/Navbar';
+import Layout from './components/Layout';
+import RequireAuth from './components/RequireAuth';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Courses from './pages/Courses';
@@ -28,25 +29,6 @@ import PlagiarismReport from './pages/PlagiarismReport';
 import Notifications from './pages/Notifications';
 import StudentAnalytics from './pages/StudentAnalytics';
 import Calendar from './pages/Calendar';
-
-// Protected Route Component
-const ProtectedRoute = ({ children }) => {
-    const token = localStorage.getItem('token');
-    return token ? children : <Navigate to="/login" />;
-};
-
-// Professor Route Component - requires professor or admin role
-const ProfessorRoute = ({ children }) => {
-    const { user } = useAuth();
-    const token = localStorage.getItem('token');
-    
-    if (!token) return <Navigate to="/login" />;
-    if (!user) return null; // Loading
-    if (user.role !== 'professor' && user.role !== 'admin') {
-        return <Navigate to="/student" />;
-    }
-    return children;
-};
 
 // Animated Background Component
 const AnimatedBackground = () => (
@@ -100,7 +82,7 @@ const LandingPage = () => {
                 </div>
 
                 <p className="text-[#fef483] text-sm font-medium pt-4">
-                    ✨ Join thousands of students and educators learning together
+                    Join thousands of students and educators learning together
                 </p>
             </div>
         </div>
@@ -135,7 +117,7 @@ const RoleSelection = () => {
                     >
                         <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 text-4xl"
                              style={{ background: 'linear-gradient(135deg, rgba(254, 244, 131, 0.2), rgba(161, 96, 157, 0.2))' }}>
-                            🎓
+                            Student
                         </div>
                         <h2 className="text-2xl font-bold mb-3 text-white group-hover:text-[#fef483] transition-colors">
                             I'm a Student
@@ -156,7 +138,7 @@ const RoleSelection = () => {
                     >
                         <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 text-4xl"
                              style={{ background: 'linear-gradient(135deg, rgba(161, 96, 157, 0.2), rgba(184, 138, 181, 0.2))' }}>
-                            👨‍🏫
+                            Prof
                         </div>
                         <h2 className="text-2xl font-bold mb-3 text-white group-hover:text-[#a1609d] transition-colors">
                             I'm a Professor
@@ -230,7 +212,7 @@ const Home = () => {
                                 <div className="mt-4"><span className="text-purple-400">async function</span> <span className="text-yellow-300">buildFuture</span>() {'{'}</div>
                                 <div className="pl-6"><span className="text-purple-400">await</span> <span className="text-cyan-300">learn</span>();</div>
                                 <div className="pl-6"><span className="text-purple-400">await</span> <span className="text-cyan-300">practice</span>();</div>
-                                <div className="pl-6"><span className="text-purple-400">return</span> <span className="text-amber-300">"🚀 Success!"</span>;</div>
+                                <div className="pl-6"><span className="text-purple-400">return</span> <span className="text-amber-300">"Success!"</span>;</div>
                                 <div>{'}'}</div>
                                 <div className="mt-4 text-green-400">{'// Your journey starts here'}</div>
                             </div>
@@ -252,12 +234,12 @@ const Home = () => {
                     </div>
                     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                         {[
-                            { icon: '💻', title: 'Interactive Coding', desc: 'Write real code in your browser with instant feedback and guided hints.' },
-                            { icon: '🚀', title: 'Project-Based Learning', desc: 'Build real projects for your portfolio while learning new skills.' },
-                            { icon: '🤖', title: 'AI-Powered Help', desc: 'Get instant answers and explanations from our intelligent coding assistant.' },
-                            { icon: '👥', title: 'Community Support', desc: 'Connect with fellow learners and mentors in our active community.' },
-                            { icon: '🎖️', title: 'Certificates', desc: 'Earn recognized certificates to showcase your skills to employers.' },
-                            { icon: '⏰', title: 'Learn at Your Pace', desc: 'Flexible schedules that fit your life. Learn anytime, anywhere.' },
+                            { icon: 'Code', title: 'Interactive Coding', desc: 'Write real code in your browser with instant feedback and guided hints.' },
+                            { icon: 'Build', title: 'Project-Based Learning', desc: 'Build real projects for your portfolio while learning new skills.' },
+                            { icon: 'AI', title: 'AI-Powered Help', desc: 'Get instant answers and explanations from our intelligent coding assistant.' },
+                            { icon: 'Team', title: 'Community Support', desc: 'Connect with fellow learners and mentors in our active community.' },
+                            { icon: 'Cert', title: 'Certificates', desc: 'Earn recognized certificates to showcase your skills to employers.' },
+                            { icon: 'Pace', title: 'Learn at Your Pace', desc: 'Flexible schedules that fit your life. Learn anytime, anywhere.' },
                         ].map((feature, idx) => (
                             <div key={idx} className="card-hover p-8 rounded-2xl surface-card">
                                 <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-6 text-3xl"
@@ -296,163 +278,40 @@ function App() {
                 <NotificationProvider>
                 <AnimatedBackground />
                 <Routes>
-                    {/* Landing Page - No Navbar */}
+                    {/* Public routes - no navbar */}
                     <Route path="/" element={<LandingPage />} />
-                    
-                    {/* Role Selection - No Navbar */}
                     <Route path="/get-started" element={<RoleSelection />} />
-                    
-                    {/* Student Routes - With Navbar */}
-                    <Route path="/student" element={<><Navbar /><div className="pt-16"><Home /></div></>} />
-                    <Route path="/login" element={<><Navbar /><div className="pt-16"><Login /></div></>} />
-                    <Route path="/register" element={<><Navbar /><div className="pt-16"><Register /></div></>} />
-                    
-                    {/* Email Verification & Password Reset Routes */}
-                    <Route path="/verify-email" element={<><Navbar /><div className="pt-16"><VerifyEmail /></div></>} />
-                    <Route path="/verification-pending" element={<><Navbar /><div className="pt-16"><VerificationPending /></div></>} />
-                    <Route path="/resend-verification" element={<><Navbar /><div className="pt-16"><ResendVerification /></div></>} />
-                    <Route path="/forgot-password" element={<><Navbar /><div className="pt-16"><ForgotPassword /></div></>} />
-                    <Route path="/reset-password" element={<><Navbar /><div className="pt-16"><ResetPassword /></div></>} />
-                    <Route path="/choose-username" element={<><Navbar /><div className="pt-16"><ChooseUsername /></div></>} />
-                    
-                    <Route 
-                        path="/profile" 
-                        element={
-                            <ProtectedRoute>
-                                <Navbar /><Profile />
-                            </ProtectedRoute>
-                        } 
-                    />
-                    <Route 
-                        path="/courses" 
-                        element={
-                            <ProtectedRoute>
-                                <Navbar /><div className="pt-16"><Courses /></div>
-                            </ProtectedRoute>
-                        } 
-                    />
-                    <Route 
-                        path="/courses/:id" 
-                        element={
-                            <ProtectedRoute>
-                                <Navbar /><div className="pt-24"><CourseDetail /></div>
-                            </ProtectedRoute>
-                        } 
-                    />
-                    <Route 
-                        path="/exercises/:id" 
-                        element={
-                            <ProtectedRoute>
-                                <Navbar /><div className="pt-20"><Exercise /></div>
-                            </ProtectedRoute>
-                        } 
-                    />
-                    <Route 
-                        path="/my-courses" 
-                        element={
-                            <ProtectedRoute>
-                                <Navbar /><div className="pt-16"><MyCourses /></div>
-                            </ProtectedRoute>
-                        } 
-                    />
-                    <Route 
-                        path="/my-courses/:courseId" 
-                        element={
-                            <ProtectedRoute>
-                                <Navbar /><div className="pt-24"><MyCourseDetail /></div>
-                            </ProtectedRoute>
-                        } 
-                    />
-                    
-                    {/* Professor Routes */}
-                    <Route 
-                        path="/professor" 
-                        element={
-                            <ProfessorRoute>
-                                <Navbar /><div className="pt-16"><ProfessorDashboard /></div>
-                            </ProfessorRoute>
-                        } 
-                    />
-                    <Route 
-                        path="/professor/create-course" 
-                        element={
-                            <ProfessorRoute>
-                                <Navbar /><div className="pt-16"><CreateCourse /></div>
-                            </ProfessorRoute>
-                        } 
-                    />
-                    <Route 
-                        path="/professor/course/:id" 
-                        element={
-                            <ProfessorRoute>
-                                <Navbar /><div className="pt-16"><EditCourse /></div>
-                            </ProfessorRoute>
-                        } 
-                    />
-                    <Route 
-                        path="/professor/exercise/:id" 
-                        element={
-                            <ProfessorRoute>
-                                <Navbar /><div className="pt-16"><EditExercise /></div>
-                            </ProfessorRoute>
-                        } 
-                    />
-                    <Route 
-                        path="/professor/course/:id/students" 
-                        element={
-                            <ProfessorRoute>
-                                <Navbar /><div className="pt-16"><CourseStudents /></div>
-                            </ProfessorRoute>
-                        } 
-                    />
-                    <Route 
-                        path="/professor/plagiarism" 
-                        element={
-                            <ProfessorRoute>
-                                <Navbar /><div className="pt-16"><PlagiarismDashboard /></div>
-                            </ProfessorRoute>
-                        } 
-                    />
-                    <Route 
-                        path="/professor/plagiarism/report/:reportId" 
-                        element={
-                            <ProfessorRoute>
-                                <Navbar /><div className="pt-16"><PlagiarismReport /></div>
-                            </ProfessorRoute>
-                        } 
-                    />
-                    
-                    {/* Student Analytics Route */}
-                    <Route 
-                        path="/my-analytics" 
-                        element={
-                            <ProtectedRoute>
-                                <Navbar /><div className="pt-16"><StudentAnalytics /></div>
-                            </ProtectedRoute>
-                        } 
-                    />
-                    
-                    {/* Calendar Route */}
-                    <Route 
-                        path="/calendar" 
-                        element={
-                            <ProtectedRoute>
-                                <Navbar /><div className="pt-16"><Calendar /></div>
-                            </ProtectedRoute>
-                        } 
-                    />
-                    
-                    {/* Notifications Route */}
-                    <Route 
-                        path="/notifications" 
-                        element={
-                            <ProtectedRoute>
-                                <Navbar /><div className="pt-16"><Notifications /></div>
-                            </ProtectedRoute>
-                        } 
-                    />
-                        
-                    
+
+                    {/* Public routes - with navbar */}
+                    <Route path="/student" element={<Layout><Home /></Layout>} />
+                    <Route path="/login" element={<Layout><Login /></Layout>} />
+                    <Route path="/register" element={<Layout><Register /></Layout>} />
+                    <Route path="/verify-email" element={<Layout><VerifyEmail /></Layout>} />
+                    <Route path="/verification-pending" element={<Layout><VerificationPending /></Layout>} />
+                    <Route path="/resend-verification" element={<Layout><ResendVerification /></Layout>} />
+                    <Route path="/forgot-password" element={<Layout><ForgotPassword /></Layout>} />
+                    <Route path="/reset-password" element={<Layout><ResetPassword /></Layout>} />
+                    <Route path="/choose-username" element={<Layout><ChooseUsername /></Layout>} />
+
+                    {/* Authenticated routes - student */}
+                    <Route path="/profile" element={<RequireAuth><Layout padding={null}><Profile /></Layout></RequireAuth>} />
+                    <Route path="/courses" element={<RequireAuth><Layout><Courses /></Layout></RequireAuth>} />
+                    <Route path="/courses/:id" element={<RequireAuth><Layout padding="pt-24"><CourseDetail /></Layout></RequireAuth>} />
+                    <Route path="/exercises/:id" element={<RequireAuth><Layout padding="pt-20"><Exercise /></Layout></RequireAuth>} />
+                    <Route path="/my-courses" element={<RequireAuth><Layout><MyCourses /></Layout></RequireAuth>} />
+                    <Route path="/my-courses/:courseId" element={<RequireAuth><Layout padding="pt-24"><MyCourseDetail /></Layout></RequireAuth>} />
+                    <Route path="/my-analytics" element={<RequireAuth><Layout><StudentAnalytics /></Layout></RequireAuth>} />
+                    <Route path="/calendar" element={<RequireAuth><Layout><Calendar /></Layout></RequireAuth>} />
+                    <Route path="/notifications" element={<RequireAuth><Layout><Notifications /></Layout></RequireAuth>} />
+
+                    {/* Authenticated routes - professor */}
+                    <Route path="/professor" element={<RequireAuth role="professor"><Layout><ProfessorDashboard /></Layout></RequireAuth>} />
+                    <Route path="/professor/create-course" element={<RequireAuth role="professor"><Layout><CreateCourse /></Layout></RequireAuth>} />
+                    <Route path="/professor/course/:id" element={<RequireAuth role="professor"><Layout><EditCourse /></Layout></RequireAuth>} />
+                    <Route path="/professor/exercise/:id" element={<RequireAuth role="professor"><Layout><EditExercise /></Layout></RequireAuth>} />
+                    <Route path="/professor/course/:id/students" element={<RequireAuth role="professor"><Layout><CourseStudents /></Layout></RequireAuth>} />
+                    <Route path="/professor/plagiarism" element={<RequireAuth role="professor"><Layout><PlagiarismDashboard /></Layout></RequireAuth>} />
+                    <Route path="/professor/plagiarism/report/:reportId" element={<RequireAuth role="professor"><Layout><PlagiarismReport /></Layout></RequireAuth>} />
                 </Routes>
                 </NotificationProvider>
             </AuthProvider>
