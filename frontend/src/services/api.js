@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || '/api';
+export const BACKEND_URL = API_URL.replace('/api', '');
 
 const api = axios.create({
     baseURL: API_URL,
@@ -35,6 +36,8 @@ export const authService = {
     completeGoogleSignup: (tempToken, username) => api.post('/auth/google/complete', { tempToken, username }),
     checkUsername: (username) => api.get(`/auth/check-username?username=${encodeURIComponent(username)}`),
     deleteAccount: () => api.delete('/auth/delete-account'),
+    uploadAvatar: (base64) => api.post('/auth/avatar', { avatar: base64 }),
+    updateProfile: (data) => api.put('/auth/profile', data),
 };
 
 // Course services

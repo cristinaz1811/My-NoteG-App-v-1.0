@@ -75,20 +75,27 @@ export const AuthProvider = ({ children }) => {
         setUser(userData);
     };
 
+    const updateUser = (fields) => {
+        const updated = { ...user, ...fields };
+        localStorage.setItem('user', JSON.stringify(updated));
+        setUser(updated);
+    };
+
     const logout = () => {
         authService.logout();
         setUser(null);
     };
 
     return (
-        <AuthContext.Provider value={{ 
-            user, 
-            login, 
-            register, 
+        <AuthContext.Provider value={{
+            user,
+            login,
+            register,
             googleLogin,
             setUserAfterVerification,
-            logout, 
-            loading 
+            updateUser,
+            logout,
+            loading
         }}>
             {children}
         </AuthContext.Provider>

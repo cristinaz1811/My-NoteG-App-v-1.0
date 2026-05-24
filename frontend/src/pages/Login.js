@@ -1,6 +1,7 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import PasswordInput from '../components/PasswordInput';
 
 const Login = () => {
     const [email, setEmail] = useState('');
@@ -8,8 +9,14 @@ const Login = () => {
     const [error, setError] = useState('');
     const [showResendVerification, setShowResendVerification] = useState(false);
     const [unverifiedEmail, setUnverifiedEmail] = useState('');
-    const { login, googleLogin } = useContext(AuthContext);
+    const { login, googleLogin, user } = useContext(AuthContext);
     const navigate = useNavigate();
+
+    useEffect(() => {
+        if (user) {
+            navigate(user.role === 'professor' ? '/professor' : '/student', { replace: true });
+        }
+    }, [user, navigate]);
 
     // Initialize Google Sign-In
     useEffect(() => {
@@ -143,13 +150,10 @@ const Login = () => {
                                     Forgot password?
                                 </Link>
                             </div>
-                            <input
-                                type="password"
+                            <PasswordInput
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                placeholder="••••••••"
                                 required
-                                className="w-full"
                             />
                         </div>
 

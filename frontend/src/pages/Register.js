@@ -1,6 +1,7 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import PasswordInput, { PasswordStrengthBar } from '../components/PasswordInput';
 
 const Register = () => {
     const [searchParams] = useSearchParams();
@@ -176,14 +177,12 @@ const Register = () => {
                             <label className="block text-sm font-medium text-gray-300 mb-2">
                                 Password
                             </label>
-                            <input
-                                type="password"
+                            <PasswordInput
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                placeholder="••••••••"
                                 required
-                                className="w-full"
                             />
+                            <PasswordStrengthBar password={password} />
                         </div>
 
                         <button 

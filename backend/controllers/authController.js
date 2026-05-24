@@ -149,6 +149,7 @@ const login = async (req, res) => {
                 username: user.username,
                 email: user.email,
                 role: user.role,
+                avatar_url: user.avatar_url || null,
             },
             token,
         });
@@ -161,7 +162,7 @@ const login = async (req, res) => {
 const getProfile = async (req, res) => {
     try {
         const result = await db.query(
-            'SELECT id, username, email, role, created_at, email_verified FROM users WHERE id = $1',
+            'SELECT id, username, email, role, created_at, email_verified, avatar_url FROM users WHERE id = $1',
             [req.user.id]
         );
 
@@ -172,6 +173,75 @@ const getProfile = async (req, res) => {
         res.json(result.rows[0]);
     } catch (error) {
         console.error('Get profile error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+const uploadAvatar = async (req, res) => {
+    try {
+        const { avatar } = req.body;
+        if (!avatar || !avatar.startsWith('data:image/')) {
+            return res.status(400).json({ error: 'Invalid image data' });
+        }
+
+        // Rough size guard: base64 of a 256×256 JPEG is well under 100 KB
+        if (Buffer.byteLength(avatar, 'utf8') > 200 * 1024) {
+            return res.status(400).json({ error: 'Image too large (max ~150 KB after compression)' });
+        }
+
+        await db.query('UPDATE users SET avatar_url = $1, updated_at = NOW() WHERE id = $2', [avatar, req.user.id]);
+
+        res.json({ avatarUrl: avatar });
+    } catch (error) {
+        console.error('Upload avatar error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+const updateProfile = async (req, res) => {
+    try {
+        const { username, currentPassword, newPassword } = req.body;
+        const userId = req.user.id;
+
+        const updates = [];
+        const values = [];
+        let idx = 1;
+
+        if (username) {
+            if (username.length < 3 || username.length > 30 || !/^[a-zA-Z0-9_]+$/.test(username)) {
+                return res.status(400).json({ error: 'Username must be 3–30 characters and only contain letters, numbers, and underscores' });
+            }
+            const taken = await db.query('SELECT id FROM users WHERE username = $1 AND id != $2', [username, userId]);
+            if (taken.rows.length > 0) return res.status(409).json({ error: 'Username already taken' });
+            updates.push(`username = $${idx++}`);
+            values.push(username);
+        }
+
+        if (currentPassword && newPassword) {
+            if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+            const userResult = await db.query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+            const user = userResult.rows[0];
+            if (!user.password_hash) return res.status(400).json({ error: 'Password change is not available for Google accounts' });
+            const valid = await bcrypt.compare(currentPassword, user.password_hash);
+            if (!valid) return res.status(401).json({ error: 'Current password is incorrect' });
+            const hash = await bcrypt.hash(newPassword, 10);
+            updates.push(`password_hash = $${idx++}`);
+            values.push(hash);
+        }
+
+        if (updates.length === 0) return res.status(400).json({ error: 'No updates provided' });
+
+        updates.push('updated_at = NOW()');
+        values.push(userId);
+
+        const result = await db.query(
+            `UPDATE users SET ${updates.join(', ')} WHERE id = $${idx} RETURNING id, username, email, role, avatar_url`,
+            values
+        );
+
+        res.json({ user: result.rows[0] });
+    } catch (error) {
+        console.error('Update profile error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };
@@ -637,13 +707,15 @@ const checkUsername = async (req, res) => {
     }
 };
 
-module.exports = { 
-    register, 
-    login, 
-    getProfile, 
-    verifyEmail, 
-    resendVerificationEmail, 
-    forgotPassword, 
+module.exports = {
+    register,
+    login,
+    getProfile,
+    uploadAvatar,
+    updateProfile,
+    verifyEmail,
+    resendVerificationEmail,
+    forgotPassword,
     resetPassword,
     googleAuth,
     completeGoogleSignup,

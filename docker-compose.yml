@@ -6,8 +6,7 @@
 #   2. redis      — Redis (caching + message broker + pub/sub)
 #   3. api        — Express.js REST API + WebSocket (can scale horizontally)
 #   4. worker     — Code execution worker (consumes from BullMQ queue)
-#   5. dashboard  — Streamlit analytics dashboard
-#   6. frontend   — Nginx serving React SPA + reverse proxy to API
+#   5. frontend   — Nginx serving React SPA + reverse proxy to API
 #
 # Usage:
 #   cp .env.example .env          # fill in your secrets
@@ -131,27 +130,6 @@ services:
     networks:
       - noteg-network
 
-  # ─── Streamlit Dashboard ──────────────────────────────────────────────────
-  dashboard:
-    build:
-      context: ./dashboard
-      dockerfile: Dockerfile
-    container_name: noteg-dashboard
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: ${DB_NAME:-code_learning}
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-    ports:
-      - "${DASHBOARD_PORT:-8501}:8501"
-    networks:
-      - noteg-network
-
   # ─── Frontend (Nginx + React SPA) ─────────────────────────────────────────
   frontend:
     build:
@@ -160,7 +138,6 @@ services:
       args:
         REACT_APP_API_URL: /api
         REACT_APP_WS_URL: ""
-        REACT_APP_DASHBOARD_URL: ${DASHBOARD_URL:-https://my-noteg.com:8501}
         REACT_APP_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     container_name: noteg-frontend
     restart: unless-stopped
