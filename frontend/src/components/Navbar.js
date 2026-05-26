@@ -197,7 +197,7 @@ const Navbar = () => {
                                     aria-label="Account menu"
                                     aria-haspopup="menu"
                                     aria-expanded={profileOpen}
-                                    className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm border-2 cursor-pointer transition-all hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fef483]"
+                                    className="w-9 h-9 rounded-full overflow-hidden border-2 cursor-pointer transition-all hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fef483] flex items-center justify-center"
                                     style={{
                                         background: isProfessor
                                             ? 'linear-gradient(135deg, #a1609d, #b88ab5)'
@@ -205,7 +205,17 @@ const Navbar = () => {
                                         borderColor: accent,
                                     }}
                                 >
-                                    {user.username?.charAt(0).toUpperCase()}
+                                    {user.avatar_url ? (
+                                        <img
+                                            src={user.avatar_url}
+                                            alt={user.username}
+                                            className="w-full h-full object-cover"
+                                        />
+                                    ) : (
+                                        <span className="text-white font-bold text-sm">
+                                            {user.username?.charAt(0).toUpperCase()}
+                                        </span>
+                                    )}
                                 </button>
                                 {profileOpen && (
                                     <div

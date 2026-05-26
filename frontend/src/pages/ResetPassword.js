@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { authService } from '../services/api';
+import PasswordInput, { PasswordStrengthBar } from '../components/PasswordInput';
 
 const ResetPassword = () => {
     const [searchParams] = useSearchParams();
@@ -110,29 +111,24 @@ const ResetPassword = () => {
                                     <label className="block text-sm font-medium text-gray-300 mb-2">
                                         New Password
                                     </label>
-                                    <input
-                                        type="password"
+                                    <PasswordInput
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
-                                        placeholder="••••••••"
                                         required
-                                        className="w-full"
                                         disabled={status === 'loading'}
                                         minLength={6}
                                     />
+                                    <PasswordStrengthBar password={password} />
                                 </div>
 
                                 <div>
                                     <label className="block text-sm font-medium text-gray-300 mb-2">
                                         Confirm Password
                                     </label>
-                                    <input
-                                        type="password"
+                                    <PasswordInput
                                         value={confirmPassword}
                                         onChange={(e) => setConfirmPassword(e.target.value)}
-                                        placeholder="••••••••"
                                         required
-                                        className="w-full"
                                         disabled={status === 'loading'}
                                         minLength={6}
                                     />

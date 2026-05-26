@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { courseService } from '../services/api';
+import { AuthContext } from '../context/AuthContext';
 
 const CourseDetail = () => {
     const { id } = useParams();
+    const { user } = useContext(AuthContext);
     const [course, setCourse] = useState(null);
     const [loading, setLoading] = useState(true);
     const [isEnrolled, setIsEnrolled] = useState(false);
-    const [checkingEnrollment, setCheckingEnrollment] = useState(true);
+    const [checkingEnrollment, setCheckingEnrollment] = useState(!user); // Only check if authenticated
     const [expandedChapters, setExpandedChapters] = useState({});
     const [enrollmentCode, setEnrollmentCode] = useState('');
     const [showCodeInput, setShowCodeInput] = useState(false);
@@ -16,8 +18,12 @@ const CourseDetail = () => {
 
     useEffect(() => {
         loadCourse();
-        checkEnrollment();
-    }, [id]);
+        if (user) {
+            checkEnrollment();
+        } else {
+            setCheckingEnrollment(false);
+        }
+    }, [id, user]);
 
     const loadCourse = async () => {
         try {
@@ -332,26 +338,41 @@ const CourseDetail = () => {
 
                                             {expandedChapters[chapter.id] && chapter.exercises?.length > 0 && (
                                                 <div className="border-t border-white/5 bg-black/20">
-                                                    {chapter.exercises.map((exercise, exIndex) => (
-                                                        <div key={exercise.id} className="flex items-center justify-between px-4 py-3 border-b border-white/5 last:border-b-0">
-                                                            <div className="flex items-center gap-3">
-                                                                <span className="text-sm text-gray-500 w-8">
-                                                                    {chapterIndex + 1}.{exIndex + 1}
+                                                    {chapter.exercises.map((exercise, exIndex) => {
+                                                        const isFirstExercise = chapterIndex === 0 && exIndex === 0;
+                                                        const canAccess = isEnrolled || isFirstExercise;
+                                                        return (
+                                                            <div 
+                                                                key={exercise.id} 
+                                                                className={`flex items-center justify-between px-4 py-3 border-b border-white/5 last:border-b-0 ${
+                                                                    canAccess ? 'cursor-pointer hover:bg-white/5 transition-colors' : ''
+                                                                }`}
+                                                                onClick={() => canAccess && navigate(`/exercises/${exercise.id}`)}
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="text-sm text-gray-500 w-8">
+                                                                        {chapterIndex + 1}.{exIndex + 1}
+                                                                    </span>
+                                                                    <span className="text-gray-300">{exercise.title}</span>
+                                                                    <span className={`badge text-xs ${getDifficultyBadgeClass(exercise.difficulty)}`}>
+                                                                        {exercise.difficulty}
+                                                                    </span>
+                                                                    {exercise.is_multi_file && (
+                                                                        <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">Multi-file</span>
+                                                                    )}
+                                                                    {exercise.time_limit_minutes && (
+                                                                        <span className="text-xs text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">{exercise.time_limit_minutes}m</span>
+                                                                    )}
+                                                                    {isFirstExercise && !isEnrolled && (
+                                                                        <span className="text-[10px] text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">Demo</span>
+                                                                    )}
+                                                                </div>
+                                                                <span className={isFirstExercise ? 'text-green-400' : 'text-gray-500'}>
+                                                                    {isFirstExercise && !isEnrolled ? 'Try Demo' : canAccess ? '→' : 'Locked'}
                                                                 </span>
-                                                                <span className="text-gray-300">{exercise.title}</span>
-                                                                <span className={`badge text-xs ${getDifficultyBadgeClass(exercise.difficulty)}`}>
-                                                                    {exercise.difficulty}
-                                                                </span>
-                                                                {exercise.is_multi_file && (
-                                                                    <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">Multi-file</span>
-                                                                )}
-                                                                {exercise.time_limit_minutes && (
-                                                                    <span className="text-xs text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">{exercise.time_limit_minutes}m</span>
-                                                                )}
                                                             </div>
-                                                            <span className="text-gray-500">Locked</span>
-                                                        </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             )}
                                         </div>
@@ -359,24 +380,39 @@ const CourseDetail = () => {
                                 </div>
                             ) : course.exercises?.length > 0 ? (
                                 <div className="space-y-2">
-                                    {course.exercises.map((exercise, index) => (
-                                        <div key={exercise.id} className="flex items-center justify-between p-4 border border-white/10 rounded-xl">
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-sm text-gray-500 w-8">{index + 1}</span>
-                                                <span className="text-gray-300">{exercise.title}</span>
-                                                <span className={`badge text-xs ${getDifficultyBadgeClass(exercise.difficulty)}`}>
-                                                    {exercise.difficulty}
+                                    {course.exercises.map((exercise, index) => {
+                                        const isFirstExercise = index === 0;
+                                        const canAccess = isEnrolled || isFirstExercise;
+                                        return (
+                                            <div 
+                                                key={exercise.id}
+                                                className={`flex items-center justify-between p-4 border border-white/10 rounded-xl ${
+                                                    canAccess ? 'cursor-pointer hover:bg-white/5 transition-colors' : ''
+                                                }`}
+                                                onClick={() => canAccess && navigate(`/exercises/${exercise.id}`)}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-sm text-gray-500 w-8">{index + 1}</span>
+                                                    <span className="text-gray-300">{exercise.title}</span>
+                                                    <span className={`badge text-xs ${getDifficultyBadgeClass(exercise.difficulty)}`}>
+                                                        {exercise.difficulty}
+                                                    </span>
+                                                    {exercise.is_multi_file && (
+                                                        <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">Multi-file</span>
+                                                    )}
+                                                    {exercise.time_limit_minutes && (
+                                                        <span className="text-xs text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">{exercise.time_limit_minutes}m</span>
+                                                    )}
+                                                    {isFirstExercise && !isEnrolled && (
+                                                        <span className="text-[10px] text-green-400 bg-green-500/10 px-1.5 py-0.5 rounded">Demo</span>
+                                                    )}
+                                                </div>
+                                                <span className={isFirstExercise ? 'text-green-400' : 'text-gray-500'}>
+                                                    {isFirstExercise && !isEnrolled ? 'Try Demo' : canAccess ? '→' : 'Locked'}
                                                 </span>
-                                                {exercise.is_multi_file && (
-                                                    <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">Multi-file</span>
-                                                )}
-                                                {exercise.time_limit_minutes && (
-                                                    <span className="text-xs text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">{exercise.time_limit_minutes}m</span>
-                                                )}
                                             </div>
-                                            <span className="text-gray-500">Locked</span>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             ) : (
                                 <p className="text-gray-500">No content available yet.</p>

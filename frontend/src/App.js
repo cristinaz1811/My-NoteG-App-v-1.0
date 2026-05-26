@@ -298,8 +298,8 @@ function App() {
                     {/* Authenticated routes - student */}
                     <Route path="/profile" element={<RequireAuth><Layout padding={null}><Profile /></Layout></RequireAuth>} />
                     <Route path="/courses" element={<RequireAuth><Layout><Courses /></Layout></RequireAuth>} />
-                    <Route path="/courses/:id" element={<RequireAuth><Layout padding="pt-24"><CourseDetail /></Layout></RequireAuth>} />
-                    <Route path="/exercises/:id" element={<RequireAuth><Layout padding="pt-20"><Exercise /></Layout></RequireAuth>} />
+                    <Route path="/courses/:id" element={<Layout padding="pt-24"><CourseDetail /></Layout>} />
+                    <Route path="/exercises/:id" element={<Layout padding="pt-20"><Exercise /></Layout>} />
                     <Route path="/my-courses" element={<RequireAuth><Layout><MyCourses /></Layout></RequireAuth>} />
                     <Route path="/my-courses/:courseId" element={<RequireAuth><Layout padding="pt-24"><MyCourseDetail /></Layout></RequireAuth>} />
                     <Route path="/my-analytics" element={<RequireAuth><Layout><StudentAnalytics /></Layout></RequireAuth>} />

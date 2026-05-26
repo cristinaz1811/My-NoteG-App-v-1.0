@@ -1,12 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const { 
-    register, 
-    login, 
-    getProfile, 
-    verifyEmail, 
-    resendVerificationEmail, 
-    forgotPassword, 
+const {
+    register,
+    login,
+    getProfile,
+    uploadAvatar,
+    updateProfile,
+    verifyEmail,
+    resendVerificationEmail,
+    forgotPassword,
     resetPassword,
     googleAuth,
     completeGoogleSignup,
@@ -19,6 +21,10 @@ const { authMiddleware } = require('../middleware/auth');
 router.post('/register', register);
 router.post('/login', login);
 router.get('/profile', authMiddleware, getProfile);
+
+// Profile update routes
+router.post('/avatar', authMiddleware, uploadAvatar);
+router.put('/profile', authMiddleware, updateProfile);
 
 // Email verification routes
 router.post('/verify-email', verifyEmail);

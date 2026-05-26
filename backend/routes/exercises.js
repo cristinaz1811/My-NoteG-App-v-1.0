@@ -24,11 +24,11 @@ const {
     bulkImportExercises,
     bulkExportExercises,
 } = require('../controllers/exerciseController');
-const { authMiddleware, isAdmin, isProfessor } = require('../middleware/auth');
+const { authMiddleware, optionalAuth, isAdmin, isProfessor } = require('../middleware/auth');
 
-// Student routes
+// Student routes - allow demo access to first exercise with optional auth
 router.get('/submissions/:submissionId/detail', authMiddleware, getSubmissionDetail);
-router.get('/:id', authMiddleware, getExerciseById);
+router.get('/:id', optionalAuth, getExerciseById);
 router.post('/:id/submit', authMiddleware, submitSolution);
 router.get('/:exerciseId/submissions', authMiddleware, getUserSubmissions);
 
