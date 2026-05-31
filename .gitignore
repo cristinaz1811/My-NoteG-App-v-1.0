@@ -2,6 +2,8 @@
 node_modules/
 package-lock.json
 
+docs/*
+docs/
 # Python
 venv/
 .venv/
