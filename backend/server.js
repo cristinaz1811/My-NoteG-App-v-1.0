@@ -16,6 +16,11 @@ const plagiarismRoutes = require('./routes/plagiarism');
 const exportRoutes = require('./routes/export');
 const analyticsRoutes = require('./routes/analytics');
 const calendarRoutes = require('./routes/calendar');
+const yearRoutes = require('./routes/years');
+const classRoutes = require('./routes/classes');
+const lectureRoutes = require('./routes/lectures');
+const sqlSessionRoutes = require('./routes/sqlSessions');
+const { cleanupStaleSessions } = require('./controllers/sqlSessionController');
 const { DISTRIBUTED_MODE, closeRedis } = require('./utils/redisClient');
 
 // Fail fast if critical environment variables are missing
@@ -108,6 +113,10 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/years', yearRoutes);
+app.use('/api/classes', classRoutes);
+app.use('/api/lectures', lectureRoutes);
+app.use('/api/sql-sessions', sqlSessionRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -130,6 +139,9 @@ server.listen(PORT, () => {
     if (DISTRIBUTED_MODE) {
         initRedisSubscriber();
     }
+
+    // Drop SQL sandbox schemas that have been idle longer than SESSION_TTL_MINUTES
+    setInterval(cleanupStaleSessions, 15 * 60 * 1000);
 });
 
 // Graceful shutdown

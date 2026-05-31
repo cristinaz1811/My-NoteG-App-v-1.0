@@ -98,10 +98,10 @@ const runPlagiarismScan = async (req, res) => {
             const message = `Plagiarism alert: ${flaggedPairs.length} suspicious pair(s) detected for exercise "${exercise.exercise_title}" in course "${exercise.course_title}". Maximum similarity: ${maxSimilarity.toFixed(1)}%.`;
 
             await db.query(`
-                INSERT INTO plagiarism_notifications 
-                    (report_id, professor_id, course_id, exercise_id, message)
-                VALUES ($1, $2, $3, $4, $5)
-            `, [report.id, professorId, exercise.course_id, exerciseId, message]);
+                INSERT INTO notifications
+                    (user_id, type, title, message, course_id, exercise_id, report_id)
+                VALUES ($1, 'plagiarism_alert', 'Plagiarism Alert', $2, $3, $4, $5)
+            `, [professorId, message, exercise.course_id, exerciseId, report.id]);
 
             // Get professor email and send notification
             try {
@@ -117,10 +117,6 @@ const runPlagiarismScan = async (req, res) => {
                         maxSimilarity,
                         report.id
                     );
-                    await db.query(`
-                        UPDATE plagiarism_notifications SET email_sent = TRUE
-                        WHERE report_id = $1 AND professor_id = $2
-                    `, [report.id, professorId]);
                 }
             } catch (emailErr) {
                 console.error('Failed to send plagiarism alert email:', emailErr.message);
@@ -284,18 +280,18 @@ const updateMatchVerdict = async (req, res) => {
 };
 
 
-// ─── Get professor notifications ────────────────────────────────────────────
+// ─── Get professor plagiarism notifications ──────────────────────────────────
 const getNotifications = async (req, res) => {
     try {
         const professorId = req.user.id;
 
         const notifications = await db.query(`
-            SELECT pn.*, e.title as exercise_title, c.title as course_title
-            FROM plagiarism_notifications pn
-            JOIN exercises e ON pn.exercise_id = e.id
-            JOIN courses c ON pn.course_id = c.id
-            WHERE pn.professor_id = $1
-            ORDER BY pn.created_at DESC
+            SELECT n.*, e.title as exercise_title, c.title as course_title
+            FROM notifications n
+            JOIN exercises e ON n.exercise_id = e.id
+            JOIN courses c ON n.course_id = c.id
+            WHERE n.user_id = $1 AND n.type = 'plagiarism_alert'
+            ORDER BY n.created_at DESC
             LIMIT 50
         `, [professorId]);
 
@@ -307,15 +303,15 @@ const getNotifications = async (req, res) => {
 };
 
 
-// ─── Mark notification as read ──────────────────────────────────────────────
+// ─── Mark plagiarism notification as read ───────────────────────────────────
 const markNotificationRead = async (req, res) => {
     try {
         const { notificationId } = req.params;
         const professorId = req.user.id;
 
         await db.query(`
-            UPDATE plagiarism_notifications SET is_read = TRUE
-            WHERE id = $1 AND professor_id = $2
+            UPDATE notifications SET is_read = TRUE
+            WHERE id = $1 AND user_id = $2 AND type = 'plagiarism_alert'
         `, [notificationId, professorId]);
 
         res.json({ message: 'Notification marked as read' });
@@ -326,15 +322,15 @@ const markNotificationRead = async (req, res) => {
 };
 
 
-// ─── Get unread notification count ──────────────────────────────────────────
+// ─── Get unread plagiarism notification count ────────────────────────────────
 const getUnreadCount = async (req, res) => {
     try {
         const professorId = req.user.id;
 
         const result = await db.query(`
             SELECT COUNT(*) as count
-            FROM plagiarism_notifications
-            WHERE professor_id = $1 AND is_read = FALSE
+            FROM notifications
+            WHERE user_id = $1 AND type = 'plagiarism_alert' AND is_read = FALSE
         `, [professorId]);
 
         res.json({ unreadCount: parseInt(result.rows[0].count) });

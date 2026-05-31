@@ -120,7 +120,7 @@ const Register = () => {
                                     ? 'bg-[#a1609d]/20 text-[#a1609d]' 
                                     : 'bg-[#fef483]/20 text-[#fef483]'
                             }`}>
-                                    <span className="uppercase tracking-wide">{isProfessor ? 'Professor' : 'Student'}</span>
+                                    <span>{isProfessor ? 'Professor' : 'Student'}</span>
                             </span>
                         </div>
                     </div>

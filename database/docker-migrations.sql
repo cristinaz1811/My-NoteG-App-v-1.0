@@ -7,7 +7,7 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS total_time_spent INTEGER DEFAULT 0;
 
-CREATE TABLE IF NOT EXISTS time_sessions (
+CREATE TABLE IF NOT EXISTS course_time_sessions (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id),
     course_id INTEGER REFERENCES courses(id),
@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS time_sessions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_time_sessions_user ON time_sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_time_sessions_course ON time_sessions(course_id);
+CREATE INDEX IF NOT EXISTS idx_course_time_sessions_user ON course_time_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_course_time_sessions_course ON course_time_sessions(course_id);
 
 CREATE OR REPLACE VIEW user_course_stats AS
 SELECT 
@@ -74,21 +74,6 @@ ALTER TABLE exercises ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_chapters_course ON chapters(course_id);
 CREATE INDEX IF NOT EXISTS idx_exercises_chapter ON exercises(chapter_id);
 
-CREATE TABLE IF NOT EXISTS course_materials (
-    id SERIAL PRIMARY KEY,
-    course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
-    chapter_id INTEGER REFERENCES chapters(id) ON DELETE SET NULL,
-    title VARCHAR(200) NOT NULL,
-    description TEXT,
-    resource_type VARCHAR(30) NOT NULL CHECK (resource_type IN ('article', 'video', 'reading', 'cheatsheet', 'reference', 'project')),
-    resource_url VARCHAR(500),
-    order_index INTEGER DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_course_materials_course ON course_materials(course_id);
-CREATE INDEX IF NOT EXISTS idx_course_materials_chapter ON course_materials(chapter_id);
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 003: Course language
@@ -217,24 +202,10 @@ CREATE TABLE IF NOT EXISTS plagiarism_matches (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS plagiarism_notifications (
-    id SERIAL PRIMARY KEY,
-    report_id INTEGER REFERENCES plagiarism_reports(id) ON DELETE CASCADE,
-    professor_id INTEGER REFERENCES users(id),
-    course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
-    exercise_id INTEGER REFERENCES exercises(id) ON DELETE CASCADE,
-    message TEXT,
-    is_read BOOLEAN DEFAULT FALSE,
-    email_sent BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE INDEX IF NOT EXISTS idx_plagiarism_reports_course ON plagiarism_reports(course_id);
 CREATE INDEX IF NOT EXISTS idx_plagiarism_reports_exercise ON plagiarism_reports(exercise_id);
 CREATE INDEX IF NOT EXISTS idx_plagiarism_matches_report ON plagiarism_matches(report_id);
 CREATE INDEX IF NOT EXISTS idx_plagiarism_matches_similarity ON plagiarism_matches(similarity_score DESC);
-CREATE INDEX IF NOT EXISTS idx_plagiarism_notifications_professor ON plagiarism_notifications(professor_id);
-CREATE INDEX IF NOT EXISTS idx_plagiarism_notifications_unread ON plagiarism_notifications(professor_id, is_read) WHERE is_read = FALSE;
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 008: Enrollment codes
@@ -257,7 +228,7 @@ END $$;
 -- ═══════════════════════════════════════════════════════════════════════════
 ALTER TABLE exercises ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER DEFAULT NULL;
 
-CREATE TABLE IF NOT EXISTS timed_sessions (
+CREATE TABLE IF NOT EXISTS exam_sessions (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     exercise_id INTEGER REFERENCES exercises(id) ON DELETE CASCADE,
@@ -268,7 +239,7 @@ CREATE TABLE IF NOT EXISTS timed_sessions (
     UNIQUE(user_id, exercise_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_timed_sessions_user_exercise ON timed_sessions(user_id, exercise_id);
+CREATE INDEX IF NOT EXISTS idx_exam_sessions_user_exercise ON exam_sessions(user_id, exercise_id);
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 010: Multi-file exercises
@@ -318,6 +289,194 @@ CREATE INDEX IF NOT EXISTS idx_calendar_events_course ON calendar_events(course_
 CREATE INDEX IF NOT EXISTS idx_calendar_events_start ON calendar_events(start_time);
 CREATE INDEX IF NOT EXISTS idx_calendar_events_type ON calendar_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_calendar_events_user_range ON calendar_events(user_id, start_time, end_time);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 013: College structure + lecture system
+-- ═══════════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS college_years (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  description TEXT,
+  order_index INTEGER NOT NULL DEFAULT 0,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS classes (
+  id SERIAL PRIMARY KEY,
+  year_id INTEGER REFERENCES college_years(id) ON DELETE CASCADE,
+  name VARCHAR(200) NOT NULL,
+  description TEXT,
+  order_index INTEGER NOT NULL DEFAULT 0,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS class_id INTEGER REFERENCES classes(id) ON DELETE SET NULL;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS order_index INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS lectures (
+  id SERIAL PRIMARY KEY,
+  course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  chapter_id INTEGER REFERENCES chapters(id) ON DELETE SET NULL,
+  title VARCHAR(300) NOT NULL,
+  description TEXT,
+  order_index INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS lecture_pages (
+  id SERIAL PRIMARY KEY,
+  lecture_id INTEGER NOT NULL REFERENCES lectures(id) ON DELETE CASCADE,
+  title VARCHAR(300),
+  content TEXT NOT NULL DEFAULT '',
+  page_number INTEGER NOT NULL DEFAULT 1,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS lecture_media (
+  id SERIAL PRIMARY KEY,
+  lecture_id INTEGER NOT NULL REFERENCES lectures(id) ON DELETE CASCADE,
+  media_type VARCHAR(20) NOT NULL CHECK (media_type IN ('video', 'powerpoint', 'pdf')),
+  title VARCHAR(300) NOT NULL,
+  file_path VARCHAR(500) NOT NULL,
+  file_url VARCHAR(500) NOT NULL,
+  file_size_bytes BIGINT,
+  mime_type VARCHAR(100),
+  duration_seconds INTEGER,
+  order_index INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS lecture_progress (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  lecture_id INTEGER NOT NULL REFERENCES lectures(id) ON DELETE CASCADE,
+  last_page_seen INTEGER NOT NULL DEFAULT 1,
+  completed BOOLEAN DEFAULT FALSE,
+  completed_at TIMESTAMP,
+  UNIQUE(user_id, lecture_id)
+);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 014: Faculty and school_year on college_years
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE college_years
+    ADD COLUMN IF NOT EXISTS faculty VARCHAR(200),
+    ADD COLUMN IF NOT EXISTS school_year VARCHAR(20);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_college_years_faculty_name_sy
+    ON college_years (faculty, name, school_year)
+    WHERE faculty IS NOT NULL AND school_year IS NOT NULL;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 015: Class-level enrollment
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS access_key VARCHAR(20) UNIQUE;
+
+CREATE TABLE IF NOT EXISTS class_enrollments (
+  id            SERIAL PRIMARY KEY,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  class_id      INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  status        VARCHAR(20) NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'approved', 'rejected')),
+  enrolled_at   TIMESTAMP DEFAULT NOW(),
+  approved_at   TIMESTAMP,
+  approved_by   INTEGER REFERENCES users(id),
+  UNIQUE(user_id, class_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_class_enrollments_class  ON class_enrollments(class_id);
+CREATE INDEX IF NOT EXISTS idx_class_enrollments_user   ON class_enrollments(user_id);
+CREATE INDEX IF NOT EXISTS idx_class_enrollments_status ON class_enrollments(status);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 016: SQL exercise type support
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE exercises
+    ADD COLUMN IF NOT EXISTS exercise_type VARCHAR(20) NOT NULL DEFAULT 'code'
+        CHECK (exercise_type IN ('code', 'sql'));
+
+ALTER TABLE exercises
+    ADD COLUMN IF NOT EXISTS seed_sql TEXT,
+    ADD COLUMN IF NOT EXISTS validation_query TEXT,
+    ADD COLUMN IF NOT EXISTS expected_result JSONB;
+
+CREATE TABLE IF NOT EXISTS sql_sessions (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    exercise_id     INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+    schema_name     VARCHAR(100) NOT NULL UNIQUE,
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+    last_active_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id, exercise_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sql_sessions_user    ON sql_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sql_sessions_active  ON sql_sessions(last_active_at);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'sql_sandbox') THEN
+        CREATE ROLE sql_sandbox NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+    END IF;
+END$$;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 017: Store last run query in sql_sessions for SELECT exercise validation
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE sql_sessions ADD COLUMN IF NOT EXISTS last_query TEXT;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 018: Track focus violations in timed exercise sessions
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE exam_sessions ADD COLUMN IF NOT EXISTS tab_switches INTEGER DEFAULT 0;
+ALTER TABLE exam_sessions ADD COLUMN IF NOT EXISTS last_violation_at TIMESTAMP;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 019: Session lockout when cheating threshold is reached
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE exam_sessions ADD COLUMN IF NOT EXISTS locked_by_flag BOOLEAN DEFAULT FALSE;
+ALTER TABLE exam_sessions ADD COLUMN IF NOT EXISTS locked_at TIMESTAMP;
+ALTER TABLE exam_sessions ADD COLUMN IF NOT EXISTS unlocked_by INTEGER REFERENCES users(id);
+ALTER TABLE exam_sessions ADD COLUMN IF NOT EXISTS unlocked_at TIMESTAMP;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 020: Schema cleanup
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- report_id on notifications (plagiarism_notifications merged in)
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS report_id INTEGER REFERENCES plagiarism_reports(id) ON DELETE CASCADE;
+
+-- submissions: cascade on user/exercise delete
+ALTER TABLE submissions DROP CONSTRAINT IF EXISTS submissions_user_id_fkey;
+ALTER TABLE submissions ADD CONSTRAINT submissions_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE submissions DROP CONSTRAINT IF EXISTS submissions_exercise_id_fkey;
+ALTER TABLE submissions ADD CONSTRAINT submissions_exercise_id_fkey
+    FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE;
+
+-- user_progress: cascade on user/exercise delete
+ALTER TABLE user_progress DROP CONSTRAINT IF EXISTS user_progress_user_id_fkey;
+ALTER TABLE user_progress ADD CONSTRAINT user_progress_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE user_progress DROP CONSTRAINT IF EXISTS user_progress_exercise_id_fkey;
+ALTER TABLE user_progress ADD CONSTRAINT user_progress_exercise_id_fkey
+    FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE;
+
+-- help_requests: cascade on student delete
+ALTER TABLE help_requests DROP CONSTRAINT IF EXISTS help_requests_student_id_fkey;
+ALTER TABLE help_requests ADD CONSTRAINT help_requests_student_id_fkey
+    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE;
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Done

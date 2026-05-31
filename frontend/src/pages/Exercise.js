@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { exerciseService, notificationService } from '../services/api';
 import { AuthContext } from '../context/AuthContext';
+import SqlExercise from '../components/SqlExercise';
 import SubmissionHistory from '../components/SubmissionHistory';
 
 const Exercise = () => {
@@ -16,6 +17,7 @@ const Exercise = () => {
     const [submitting, setSubmitting] = useState(false);
     const editorRef = useRef(null);
     const isMountedRef = useRef(true);
+    const sqlValidateRef = useRef(null);
 
     // Multi-file state
     const [fileContents, setFileContents] = useState({}); // { filename: code }
@@ -56,6 +58,13 @@ const Exercise = () => {
     // Enrollment prompt state
     const [showEnrollmentPrompt, setShowEnrollmentPrompt] = useState(false);
     const [enrollmentLoading, setEnrollmentLoading] = useState(false);
+
+    // Anti-cheat state — active only during live timed sessions
+    const [tabSwitchCount, setTabSwitchCount] = useState(0);
+    const [showViolationBanner, setShowViolationBanner] = useState(false);
+    const [sessionLocked, setSessionLocked] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const lastViolationRef = useRef(0); // timestamp for dedup within 1s
 
     const handleRequestHelp = async () => {
         if (helpSending) return;
@@ -112,6 +121,13 @@ const Exercise = () => {
                 setTimerExpired(true);
             } else {
                 startCountdown(response.data);
+                // Enter fullscreen for exam integrity — alt-tab / Escape will trigger a violation
+                try {
+                    await document.documentElement.requestFullscreen();
+                    setIsFullscreen(true);
+                } catch {
+                    // Fullscreen may be blocked by browser policy; monitoring still works via visibilitychange
+                }
             }
         } catch (error) {
             console.error('Error starting timed session:', error);
@@ -141,6 +157,55 @@ const Exercise = () => {
             }
         };
     }, []);
+
+    // Anti-cheat: monitor focus and fullscreen during live timed sessions.
+    // Deactivates automatically when the session becomes locked or the timer expires.
+    useEffect(() => {
+        if (!timedSession || timerExpired || sessionLocked) return;
+
+        const triggerViolation = async () => {
+            // Deduplicate: visibilitychange + fullscreenchange can fire together
+            const now = Date.now();
+            if (now - lastViolationRef.current < 1000) return;
+            lastViolationRef.current = now;
+
+            setTabSwitchCount(prev => prev + 1);
+            setShowViolationBanner(true);
+            try {
+                const res = await exerciseService.recordViolation(id);
+                if (res.data.locked) setSessionLocked(true);
+            } catch { /* ignore network errors */ }
+        };
+
+        // Tab switch: page becomes hidden (new tab, minimise to a different tab)
+        const handleVisibilityChange = () => {
+            if (document.hidden) triggerViolation();
+        };
+
+        // Fullscreen exit: catches Alt-Tab, Escape, and any other app-switch
+        // when the student is in fullscreen mode (the recommended exam mode).
+        const handleFullscreenChange = () => {
+            const inFs = !!document.fullscreenElement;
+            setIsFullscreen(inFs);
+            if (!inFs) triggerViolation();
+        };
+
+        // Warn before closing / navigating away mid-session
+        const handleBeforeUnload = (e) => {
+            e.preventDefault();
+            e.returnValue = '';
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, [timedSession, timerExpired, sessionLocked, id]);
 
     useEffect(() => {
         loadExercise();
@@ -182,7 +247,10 @@ const Exercise = () => {
                 const sessionData = response.data.timedSession;
                 if (sessionData) {
                     setTimedSession(sessionData);
-                    if (sessionData.time_expired || new Date() > new Date(sessionData.expires_at)) {
+                    setTabSwitchCount(sessionData.tab_switches || 0);
+                    if (sessionData.locked_by_flag) {
+                        setSessionLocked(true);
+                    } else if (sessionData.time_expired || new Date() > new Date(sessionData.expires_at)) {
                         setTimerExpired(true);
                     } else {
                         startCountdown(sessionData);
@@ -445,6 +513,70 @@ const Exercise = () => {
 
     return (
         <div className="flex flex-col lg:flex-row page-fade-in" style={{ height: 'calc(100vh - 4rem)', overflow: 'hidden' }}>
+
+            {/* Session locked overlay — blocks all interaction */}
+            {sessionLocked && (
+                <div className="fixed inset-0 z-[200] bg-black/97 flex items-center justify-center">
+                    <div className="text-center max-w-md px-8">
+                        <div className="w-20 h-20 rounded-2xl bg-red-500/15 border border-red-500/30 flex items-center justify-center mx-auto mb-6">
+                            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-red-400" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                            </svg>
+                        </div>
+                        <h2 className="text-2xl font-bold text-red-400 mb-3">Session Locked</h2>
+                        <p className="text-gray-400 text-sm leading-relaxed mb-6">
+                            Your timed session was locked after {tabSwitchCount} focus violation{tabSwitchCount !== 1 ? 's' : ''}.
+                            Your professor has been notified and can unlock your access if appropriate.
+                        </p>
+                        <button onClick={() => navigate(-1)} className="px-6 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm font-medium transition-all border border-white/10">
+                            Return to Course
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Anti-cheat violation banner */}
+            {showViolationBanner && timedSession && !timerExpired && !sessionLocked && (
+                <div className="fixed top-16 inset-x-0 z-50 px-4 pt-2 pointer-events-none">
+                    <div className="max-w-5xl mx-auto bg-red-950/95 border border-red-500/50 rounded-lg px-4 py-3 flex items-center justify-between gap-3 shadow-xl shadow-red-900/30 pointer-events-auto">
+                        <div className="flex items-center gap-2.5 text-red-200 text-sm min-w-0">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-red-400">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                                <line x1="12" y1="9" x2="12" y2="13"/>
+                                <line x1="12" y1="17" x2="12.01" y2="17"/>
+                            </svg>
+                            <span className="truncate">
+                                <span className="font-semibold text-red-300">Focus lost ({tabSwitchCount}/3)</span>
+                                {' — '}switching tabs or exiting fullscreen is recorded.
+                                {tabSwitchCount >= 3 && (
+                                    <span className="ml-1 font-medium text-red-400">Session will be locked.</span>
+                                )}
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            {!isFullscreen && (
+                                <button
+                                    onClick={() => document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {})}
+                                    className="text-xs px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-200 rounded border border-red-500/30 transition-colors whitespace-nowrap"
+                                >
+                                    Return to Fullscreen
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setShowViolationBanner(false)}
+                                className="text-red-400 hover:text-red-200 transition-colors"
+                                aria-label="Dismiss"
+                            >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Left Panel - Description */}
             <div className={`${(showAIPanel || showHistoryPanel) ? 'lg:w-[30%]' : 'lg:w-1/2 xl:w-2/5'} p-6 overflow-y-auto bg-[#0a0a0f] border-r border-white/5 transition-all duration-300`}>
                 {/* Back Button */}
@@ -647,11 +779,11 @@ const Exercise = () => {
                             AI
                         </button>
                         <button
-                            onClick={handleSubmit}
+                            onClick={exercise?.exercise_type === 'sql' ? () => sqlValidateRef.current?.() : handleSubmit}
                             disabled={submitting || timerExpired}
                             className={`px-6 py-2 rounded-lg font-semibold text-sm transition-all ${
                                 submitting || timerExpired
-                                    ? 'bg-gray-600 cursor-not-allowed opacity-50' 
+                                    ? 'bg-gray-600 cursor-not-allowed opacity-50'
                                     : 'gradient-bg hover:opacity-90'
                             }`}
                         >
@@ -662,6 +794,8 @@ const Exercise = () => {
                                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                                     Running...
                                 </span>
+                            ) : exercise?.exercise_type === 'sql' ? (
+                                '✓ Check Answer'
                             ) : (
                                 '▶ Run Code'
                             )}
@@ -698,9 +832,27 @@ const Exercise = () => {
                     </div>
                 )}
 
+                {/* SQL Exercise */}
+                {exercise.exercise_type === 'sql' && (
+                    <div style={{ flex: '1 1 auto', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                        <SqlExercise
+                            exercise={exercise}
+                            validateRef={sqlValidateRef}
+                            onValidationResult={(result) => {
+                                if (!result.passed && !result.error) {
+                                    setShowAIPanel(true);
+                                    setShowHistoryPanel(false);
+                                    setTimeout(() => loadHintsStatus(), 300);
+                                }
+                            }}
+                        />
+                    </div>
+                )}
+
                 {/* Monaco Editor */}
+                {exercise.exercise_type !== 'sql' && (
                 <div style={{ flex: results ? '0 0 40%' : '1 1 auto', minHeight: '200px', overflow: 'hidden' }}>
-                    <Editor
+                <Editor
                         height="100%"
                         language={exercise.language}
                         value={code}
@@ -741,9 +893,10 @@ const Exercise = () => {
                         }}
                     />
                 </div>
+                )}
 
                 {/* Results Panel */}
-                {results && (
+                {exercise.exercise_type !== 'sql' && results && (
                     <div className="border-t border-white/5 bg-[#0a0a0f] overflow-y-auto" style={{ flex: '1 1 60%' }}>
                         {/* Results Header */}
                         <div className={`px-4 py-3 border-b border-white/5 ${

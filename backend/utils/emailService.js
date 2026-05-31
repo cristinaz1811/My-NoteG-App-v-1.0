@@ -173,8 +173,94 @@ const sendPlagiarismAlertEmail = async (email, username, courseTitle, exerciseTi
     return transporter.sendMail(mailOptions);
 };
 
+const sendEnrollmentRequestEmail = async (professorEmail, professorName, studentName, className, yearName, faculty) => {
+    const transporter = createTransporter();
+    const reviewUrl = `${process.env.FRONTEND_URL}/professor/enrollment-requests`;
+
+    const mailOptions = {
+        from: `"NoteG Learning" <${process.env.EMAIL_USER}>`,
+        to: professorEmail,
+        subject: `New enrollment request — ${className}`,
+        html: `
+            <div style="max-width:600px;margin:0 auto;font-family:Arial,sans-serif;background:#1a1a2e;padding:40px;border-radius:16px;">
+                <div style="text-align:center;margin-bottom:30px;">
+                    <h1 style="color:#a1609d;margin:0;">Enrollment Request</h1>
+                </div>
+                <div style="background:#232a36;padding:30px;border-radius:12px;margin-bottom:30px;">
+                    <h2 style="color:#fff;margin-top:0;">Hi ${professorName}!</h2>
+                    <p style="color:#9ca3af;line-height:1.6;">
+                        <strong style="color:#fff;">${studentName}</strong> has requested to enroll in:
+                    </p>
+                    <div style="background:rgba(161,96,157,0.1);border:1px solid rgba(161,96,157,0.3);border-radius:8px;padding:16px;margin:20px 0;">
+                        <p style="color:#b870ad;margin:0 0 4px 0;font-weight:bold;">${className}</p>
+                        <p style="color:#9ca3af;margin:0;font-size:14px;">${faculty} — ${yearName}</p>
+                    </div>
+                    <div style="text-align:center;margin:30px 0;">
+                        <a href="${reviewUrl}"
+                           style="background:linear-gradient(135deg,#a1609d,#b870ad);color:white;padding:14px 32px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">
+                            Review Requests
+                        </a>
+                    </div>
+                </div>
+                <div style="text-align:center;color:#6b7280;font-size:12px;">
+                    <p>Log in to NoteG to approve or reject this request.</p>
+                </div>
+            </div>
+        `
+    };
+
+    return transporter.sendMail(mailOptions);
+};
+
+const sendEnrollmentDecisionEmail = async (studentEmail, studentName, className, yearName, faculty, approved) => {
+    const transporter = createTransporter();
+    const link = approved
+        ? `${process.env.FRONTEND_URL}/years`
+        : `${process.env.FRONTEND_URL}/years`;
+
+    const mailOptions = {
+        from: `"NoteG Learning" <${process.env.EMAIL_USER}>`,
+        to: studentEmail,
+        subject: approved ? `Enrollment approved — ${className}` : `Enrollment request update — ${className}`,
+        html: `
+            <div style="max-width:600px;margin:0 auto;font-family:Arial,sans-serif;background:#1a1a2e;padding:40px;border-radius:16px;">
+                <div style="text-align:center;margin-bottom:30px;">
+                    <h1 style="color:${approved ? '#34d399' : '#f87171'};margin:0;">
+                        ${approved ? '✓ Enrollment Approved' : '✗ Enrollment Not Approved'}
+                    </h1>
+                </div>
+                <div style="background:#232a36;padding:30px;border-radius:12px;margin-bottom:30px;">
+                    <h2 style="color:#fff;margin-top:0;">Hi ${studentName}!</h2>
+                    ${approved
+                        ? `<p style="color:#9ca3af;line-height:1.6;">
+                                Your enrollment request for <strong style="color:#fff;">${className}</strong>
+                                (${faculty} — ${yearName}) has been <strong style="color:#34d399;">approved</strong>.
+                                You now have access to all courses in this class.
+                           </p>`
+                        : `<p style="color:#9ca3af;line-height:1.6;">
+                                Your enrollment request for <strong style="color:#fff;">${className}</strong>
+                                (${faculty} — ${yearName}) was not approved at this time.
+                                Please contact your professor for more information.
+                           </p>`
+                    }
+                    <div style="text-align:center;margin:30px 0;">
+                        <a href="${link}"
+                           style="background:linear-gradient(135deg,#a1609d,#b870ad);color:white;padding:14px 32px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">
+                            Go to Curriculum
+                        </a>
+                    </div>
+                </div>
+            </div>
+        `
+    };
+
+    return transporter.sendMail(mailOptions);
+};
+
 module.exports = {
     sendVerificationEmail,
     sendPasswordResetEmail,
-    sendPlagiarismAlertEmail
+    sendPlagiarismAlertEmail,
+    sendEnrollmentRequestEmail,
+    sendEnrollmentDecisionEmail,
 };

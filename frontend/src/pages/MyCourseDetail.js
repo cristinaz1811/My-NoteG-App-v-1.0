@@ -1,9 +1,11 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { courseService } from '../services/api';
+import { AuthContext } from '../context/AuthContext';
 
 const MyCourseDetail = () => {
     const { courseId } = useParams();
+    const { user } = useContext(AuthContext);
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('content');
@@ -14,6 +16,8 @@ const MyCourseDetail = () => {
     const heartbeatRef = useRef(null);
     const timerRef = useRef(null);
     const trackingStartRef = useRef(null);
+    // Ref so timer callbacks always read the latest persisted total without a closure dependency
+    const totalTimeRef = useRef(0);
 
     const loadCourseDetails = useCallback(async () => {
         try {
@@ -32,59 +36,76 @@ const MyCourseDetail = () => {
 
     const isContentTab = activeTab === 'content' || activeTab === 'exercises';
 
+    // Keep ref in sync so the timer interval always uses the latest persisted total
     useEffect(() => {
-        if (isContentTab) {
-            setIsTracking(true);
-            trackingStartRef.current = Date.now();
-            
-            const startSession = async () => {
-                try {
-                    await courseService.startTimeSession(courseId);
-                } catch (error) {
-                    console.error('Error starting time session:', error);
-                }
-            };
-            startSession();
+        totalTimeRef.current = data?.stats?.totalTimeSpent || 0;
+    }, [data?.stats?.totalTimeSpent]);
 
-            heartbeatRef.current = setInterval(async () => {
-                try {
-                    await courseService.heartbeat(courseId);
-                } catch (error) {
-                    console.error('Heartbeat error:', error);
-                }
-            }, 30000);
-
-            timerRef.current = setInterval(() => {
-                if (trackingStartRef.current && data?.stats?.totalTimeSpent !== undefined) {
-                    const elapsed = Math.floor((Date.now() - trackingStartRef.current) / 1000);
-                    setLiveTime(data.stats.totalTimeSpent + elapsed);
-                }
-            }, 1000);
-        } else {
+    useEffect(() => {
+        if (!isContentTab) {
             setIsTracking(false);
-            
-            if (heartbeatRef.current) {
-                clearInterval(heartbeatRef.current);
-                heartbeatRef.current = null;
-            }
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-                timerRef.current = null;
-            }
-            
-            courseService.endTimeSession(courseId).then(() => {
-                loadCourseDetails();
-            }).catch(console.error);
+            clearInterval(heartbeatRef.current);
+            heartbeatRef.current = null;
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+            courseService.endTimeSession(courseId).then(loadCourseDetails).catch(console.error);
+            return;
         }
 
-        return () => {
-            if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-            if (timerRef.current) clearInterval(timerRef.current);
-            if (isContentTab) {
-                courseService.endTimeSession(courseId).catch(console.error);
+        const startTracking = async () => {
+            // Don't track when the browser tab is hidden — prevents idle-tab inflation
+            if (document.hidden) return;
+            setIsTracking(true);
+            trackingStartRef.current = Date.now();
+
+            try { await courseService.startTimeSession(courseId); } catch (e) {
+                console.error('Error starting time session:', e);
+            }
+
+            clearInterval(heartbeatRef.current);
+            heartbeatRef.current = setInterval(() => {
+                courseService.heartbeat(courseId).catch(console.error);
+            }, 30000);
+
+            clearInterval(timerRef.current);
+            timerRef.current = setInterval(() => {
+                if (trackingStartRef.current) {
+                    const elapsed = Math.floor((Date.now() - trackingStartRef.current) / 1000);
+                    setLiveTime(totalTimeRef.current + elapsed);
+                }
+            }, 1000);
+        };
+
+        const stopTracking = () => {
+            setIsTracking(false);
+            trackingStartRef.current = null;
+            clearInterval(heartbeatRef.current);
+            heartbeatRef.current = null;
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+            courseService.endTimeSession(courseId).then(loadCourseDetails).catch(console.error);
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                stopTracking();
+            } else {
+                startTracking();
             }
         };
-    }, [courseId, isContentTab, data?.stats?.totalTimeSpent, loadCourseDetails]);
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        startTracking();
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            clearInterval(heartbeatRef.current);
+            heartbeatRef.current = null;
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+            courseService.endTimeSession(courseId).catch(console.error);
+        };
+    }, [courseId, isContentTab, loadCourseDetails]);
 
     useEffect(() => {
         loadCourseDetails();
@@ -140,7 +161,7 @@ const MyCourseDetail = () => {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">
-                    <div className="text-4xl font-semibold text-gray-500 mb-4">Course unavailable</div>
+                    <div className="text-6xl mb-4">😕</div>
                     <h2 className="text-2xl font-bold mb-2">Course not found</h2>
                     <button onClick={() => navigate('/my-courses')} className="btn-primary mt-4">
                         Back to My Courses
@@ -150,10 +171,10 @@ const MyCourseDetail = () => {
         );
     }
 
-    const { course, stats, exercises, submissions, timeBreakdown } = data;
+    const { course, stats, exercises, submissions, lectures, timeBreakdown } = data;
 
     return (
-        <div className="min-h-screen py-6 px-6 page-fade-in">
+        <div className="min-h-screen py-6 px-6">
             <div className="max-w-7xl mx-auto">
                 {/* Back Button */}
                 <button 
@@ -189,9 +210,9 @@ const MyCourseDetail = () => {
                 {/* Tabs */}
                 <div className="flex gap-1 mb-6 bg-white/5 p-1 rounded-xl w-fit">
                     {[
-                        { id: 'content', label: 'Content', tracking: true },
-                        { id: 'exercises', label: 'Exercises', tracking: true },
-                        { id: 'dashboard', label: 'Dashboard', tracking: false },
+                        { id: 'content', label: '📖 Content', tracking: true },
+                        { id: 'exercises', label: '💻 Exercises', tracking: true },
+                        { id: 'dashboard', label: '📊 Dashboard', tracking: false },
                     ].map((tab) => (
                         <button
                             key={tab.id}
@@ -211,47 +232,100 @@ const MyCourseDetail = () => {
                 <div className="min-h-[60vh]">
                     {/* Content Tab */}
                     {activeTab === 'content' && (
-                        <div className="grid md:grid-cols-2 gap-6">
-                            <div className="surface-card rounded-2xl p-6">
-                                <h3 className="text-lg font-semibold mb-4">Learning Objectives</h3>
-                                <ul className="space-y-3">
-                                    <li className="flex items-start gap-3 text-gray-300">
-                                        <span className="text-[#fef483] mt-1">•</span>
-                                        Master {course.title} fundamentals
-                                    </li>
-                                    <li className="flex items-start gap-3 text-gray-300">
-                                        <span className="text-[#fef483] mt-1">•</span>
-                                        Complete {stats.totalExercises} hands-on exercises
-                                    </li>
-                                    <li className="flex items-start gap-3 text-gray-300">
-                                        <span className="text-[#fef483] mt-1">•</span>
-                                        Build practical programming skills
-                                    </li>
-                                </ul>
-                            </div>
-
-                            <div className="surface-card rounded-2xl p-6">
-                                <h3 className="text-lg font-semibold mb-4">Time Progress</h3>
-                                <div className="text-center">
-                                    <div className="text-4xl font-bold gradient-text mb-2">
-                                        {formatTime(liveTime, true)}
+                        <div className="space-y-6">
+                            {/* Lectures */}
+                            {lectures?.length > 0 && (
+                                <div className="surface-card rounded-2xl p-6">
+                                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                        <span>📖</span> Lectures
+                                    </h3>
+                                    <div className="space-y-2">
+                                        {lectures.map((lecture) => {
+                                            const done = lecture.lecture_completed;
+                                            const seen = lecture.last_page_seen || 0;
+                                            const total = lecture.page_count || 0;
+                                            return (
+                                                <div
+                                                    key={lecture.id}
+                                                    onClick={() => navigate(`/lectures/${lecture.id}`)}
+                                                    className={`flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-colors hover:bg-white/5 ${
+                                                        done ? 'border-green-500/40' : 'border-white/10'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm ${
+                                                            done ? 'bg-green-500/20 text-green-400' : 'bg-white/5 text-gray-400'
+                                                        }`}>
+                                                            {done ? '✓' : '📖'}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-medium text-gray-200">{lecture.title}</p>
+                                                            <p className="text-xs text-gray-500">
+                                                                {lecture.chapter_title && `${lecture.chapter_title} · `}
+                                                                {total > 0 ? `${seen}/${total} pages` : 'No pages yet'}
+                                                                {lecture.media_count > 0 && ` · ${lecture.media_count} media`}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-gray-500 text-sm">→</span>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                    <p className="text-gray-400 text-sm mb-6">Time spent learning</p>
-                                    <div className="text-sm text-gray-500">
-                                        Estimated: ~{Math.max(1, Math.ceil(stats.totalExercises * 0.5))} hours
+                                </div>
+                            )}
+
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div className="surface-card rounded-2xl p-6">
+                                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                        <span>📚</span> Learning Objectives
+                                    </h3>
+                                    <ul className="space-y-3">
+                                        {course.learning_objectives?.length > 0
+                                            ? course.learning_objectives.map((obj, i) => (
+                                                <li key={i} className="flex items-start gap-3 text-gray-300">
+                                                    <span className="text-[#fef483] mt-1">✓</span>
+                                                    {obj}
+                                                </li>
+                                            ))
+                                            : (
+                                                <>
+                                                    <li className="flex items-start gap-3 text-gray-300">
+                                                        <span className="text-[#fef483] mt-1">✓</span>
+                                                        Master {course.title} fundamentals
+                                                    </li>
+                                                    <li className="flex items-start gap-3 text-gray-300">
+                                                        <span className="text-[#fef483] mt-1">✓</span>
+                                                        Complete {stats.totalExercises} hands-on exercises
+                                                    </li>
+                                                </>
+                                            )
+                                        }
+                                    </ul>
+                                </div>
+
+                                <div className="surface-card rounded-2xl p-6">
+                                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                        <span>⏱️</span> Time Progress
+                                    </h3>
+                                    <div className="text-center">
+                                        <div className="text-4xl font-bold gradient-text mb-2">
+                                            {formatTime(liveTime, true)}
+                                        </div>
+                                        <p className="text-gray-400 text-sm mb-6">Time spent learning</p>
+                                        <div className="text-sm text-gray-500">
+                                            Estimated: ~{course.estimated_hours || Math.max(1, Math.ceil(stats.totalExercises * 0.5))} hours
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="md:col-span-2 surface-card rounded-2xl p-6">
+                            <div className="surface-card rounded-2xl p-6">
                                 <h3 className="text-lg font-semibold mb-4">Ready to practice?</h3>
                                 <p className="text-gray-400 mb-4">
                                     Head over to the exercises tab to start solving problems and building your skills.
                                 </p>
-                                <button 
-                                    onClick={() => setActiveTab('exercises')}
-                                    className="btn-primary"
-                                >
+                                <button onClick={() => setActiveTab('exercises')} className="btn-primary">
                                     Go to Exercises →
                                 </button>
                             </div>
@@ -271,16 +345,12 @@ const MyCourseDetail = () => {
                                 >
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-4">
-                                            <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                                exercise.completed
-                                                    ? 'bg-green-500/15 text-green-400'
-                                                    : 'bg-white/5 text-gray-500'
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                                exercise.completed 
+                                                    ? 'bg-green-500/20 text-green-400' 
+                                                    : 'bg-white/5 text-gray-400'
                                             }`}>
-                                                {exercise.completed ? (
-                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                                                ) : (
-                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/></svg>
-                                                )}
+                                                {exercise.completed ? '✓' : '○'}
                                             </div>
                                             <div>
                                                 <h4 className="font-medium group-hover:text-[#fef483] transition-colors">
@@ -293,12 +363,9 @@ const MyCourseDetail = () => {
                                                     <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded">
                                                         {exercise.language}
                                                     </span>
-                                                    {exercise.is_multi_file && (
-                                                        <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded">Multi-file</span>
-                                                    )}
                                                     {exercise.time_limit_minutes && (
                                                         <span className="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded flex items-center gap-1">
-                                                            {exercise.time_limit_minutes}m
+                                                            ⏱ {exercise.time_limit_minutes}m
                                                         </span>
                                                     )}
                                                 </div>
@@ -323,23 +390,32 @@ const MyCourseDetail = () => {
                         <div className="space-y-6">
                             {/* Notice */}
                             <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400 flex-shrink-0"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                                <span className="text-amber-400">⏸️</span>
                                 <span className="text-sm text-amber-400">Time tracking is paused while viewing statistics</span>
                             </div>
 
                             {/* Stats Grid */}
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                {[
-                                    { label: 'Total Attempts',  value: stats.totalAttempts },
-                                    { label: 'Average Score',   value: `${stats.averageScore}%` },
-                                    { label: 'Time Spent',      value: formatTime(stats.totalTimeSpent) },
-                                    { label: 'Completed',       value: `${stats.progressPercentage}%` },
-                                ].map(({ label, value }) => (
-                                    <div key={label} className="surface-card rounded-xl p-5 text-center">
-                                        <div className="text-2xl font-bold gradient-text">{value}</div>
-                                        <div className="text-sm text-gray-400 mt-1">{label}</div>
-                                    </div>
-                                ))}
+                                <div className="surface-card rounded-xl p-5 text-center">
+                                    <div className="text-3xl mb-1">📝</div>
+                                    <div className="text-2xl font-bold gradient-text">{stats.totalAttempts}</div>
+                                    <div className="text-sm text-gray-400">Total Attempts</div>
+                                </div>
+                                <div className="surface-card rounded-xl p-5 text-center">
+                                    <div className="text-3xl mb-1">📊</div>
+                                    <div className="text-2xl font-bold gradient-text">{stats.averageScore}%</div>
+                                    <div className="text-sm text-gray-400">Average Score</div>
+                                </div>
+                                <div className="surface-card rounded-xl p-5 text-center">
+                                    <div className="text-3xl mb-1">⏱️</div>
+                                    <div className="text-2xl font-bold gradient-text">{formatTime(stats.totalTimeSpent)}</div>
+                                    <div className="text-sm text-gray-400">Time Spent</div>
+                                </div>
+                                <div className="surface-card rounded-xl p-5 text-center">
+                                    <div className="text-3xl mb-1">✅</div>
+                                    <div className="text-2xl font-bold gradient-text">{stats.progressPercentage}%</div>
+                                    <div className="text-sm text-gray-400">Completed</div>
+                                </div>
                             </div>
 
                             {/* Progress Bar */}
@@ -358,7 +434,9 @@ const MyCourseDetail = () => {
 
                             {/* Submission History */}
                             <div className="surface-card rounded-2xl p-6">
-                                <h3 className="text-lg font-semibold mb-4">Submission History</h3>
+                                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                    <span>📊</span> Submission History
+                                </h3>
                                 {submissions.length === 0 ? (
                                     <p className="text-gray-400">No submissions yet. Start solving exercises!</p>
                                 ) : (
@@ -429,7 +507,9 @@ const MyCourseDetail = () => {
 
                             {/* Time Breakdown */}
                             <div className="surface-card rounded-2xl p-6">
-                                <h3 className="text-lg font-semibold mb-4">Time Spent by Day</h3>
+                                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                    <span>⏱️</span> Time Spent by Day
+                                </h3>
                                 {timeBreakdown.length === 0 ? (
                                     <p className="text-gray-400">No time tracking data yet.</p>
                                 ) : (
@@ -458,29 +538,6 @@ const MyCourseDetail = () => {
                                     </p>
                                 </div>
                             </div>
-
-                            {data.materials?.length > 0 && (
-                                <div className="surface-card rounded-2xl p-6">
-                                    <h3 className="text-lg font-semibold mb-4">Course Materials</h3>
-                                    <div className="space-y-3">
-                                        {data.materials.map((material) => (
-                                            <a
-                                                key={material.id}
-                                                href={material.resource_url}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="block rounded-xl border border-white/10 p-4 hover:bg-white/5 transition-colors no-underline"
-                                            >
-                                                <div className="text-xs uppercase tracking-wide text-gray-500">
-                                                    {material.chapter_title || 'Course level'} · {material.resource_type}
-                                                </div>
-                                                <div className="font-medium text-white mt-1">{material.title}</div>
-                                                {material.description && <p className="text-sm text-gray-400 mt-1">{material.description}</p>}
-                                            </a>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
                         </div>
                     )}
                 </div>

@@ -20,6 +20,7 @@ const {
     getCourseEnrolledStudents,
     getStudentCourseDetails,
     getCourseExerciseStats,
+    getExerciseStudentAttempts,
     regenerateEnrollmentCode,
     verifyEnrollmentCode,
     enrollByCode,
@@ -53,6 +54,7 @@ router.delete('/professor/chapters/:chapterId', authMiddleware, isProfessor, del
 router.get('/professor/:courseId/students', authMiddleware, isProfessor, getCourseEnrolledStudents);
 router.get('/professor/:courseId/students/:studentId', authMiddleware, isProfessor, getStudentCourseDetails);
 router.get('/professor/:courseId/exercise-stats', authMiddleware, isProfessor, getCourseExerciseStats);
+router.get('/professor/:courseId/exercise/:exerciseId/students', authMiddleware, isProfessor, getExerciseStudentAttempts);
 
 // Professor: Enrollment code management
 router.post('/professor/:courseId/regenerate-code', authMiddleware, isProfessor, regenerateEnrollmentCode);

@@ -44,13 +44,25 @@ const Notifications = () => {
     };
 
     const getNotificationIcon = (type) => {
+        const p = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
         switch (type) {
-            case 'new_exercise': return '📝';
-            case 'new_chapter': return '📚';
-            case 'course_completed': return '🎉';
-            case 'student_needs_help': return '🆘';
-            case 'course_enrollment': return '👋';
-            default: return '🔔';
+            case 'new_exercise':
+                return <svg {...p}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>;
+            case 'new_chapter':
+                return <svg {...p}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>;
+            case 'course_completed':
+                return <svg {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
+            case 'student_needs_help':
+                return <svg {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
+            case 'course_enrollment':
+            case 'class_enrollment_request':
+                return <svg {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>;
+            case 'enrollment_approved':
+                return <svg {...p}><polyline points="20 6 9 17 4 12"/></svg>;
+            case 'enrollment_rejected':
+                return <svg {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+            default:
+                return <svg {...p}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>;
         }
     };
 
@@ -61,6 +73,9 @@ const Notifications = () => {
             case 'course_completed': return '#34d399';
             case 'student_needs_help': return '#f87171';
             case 'course_enrollment': return '#a1609d';
+            case 'class_enrollment_request': return '#f59e0b';
+            case 'enrollment_approved': return '#34d399';
+            case 'enrollment_rejected': return '#f87171';
             default: return '#a1609d';
         }
     };
@@ -123,7 +138,7 @@ const Notifications = () => {
                             }`}
                             style={activeTab === 'notifications' ? { background: 'rgba(161, 96, 157, 0.2)', color: '#a1609d' } : { background: 'transparent' }}
                         >
-                            🔔 Notifications
+                            Notifications
                         </button>
                         <button
                             onClick={() => setActiveTab('help')}
@@ -134,7 +149,7 @@ const Notifications = () => {
                             }`}
                             style={activeTab === 'help' ? { background: 'rgba(248, 113, 113, 0.2)', color: '#f87171' } : { background: 'transparent' }}
                         >
-                            🆘 Help Requests
+                            Help Requests
                         </button>
                     </div>
                 )}
@@ -161,7 +176,6 @@ const Notifications = () => {
                         <div className="space-y-2">
                             {notifications.length === 0 ? (
                                 <div className="surface-card rounded-2xl p-12 text-center">
-                                    <div className="text-5xl mb-4">🔕</div>
                                     <h3 className="text-lg font-medium text-white mb-2">
                                         {filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
                                     </h3>
@@ -183,9 +197,9 @@ const Notifications = () => {
                                         } : {}}
                                     >
                                         {/* Icon */}
-                                        <div 
-                                            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-xl"
-                                            style={{ background: getNotificationColor(notification.type) + '20' }}
+                                        <div
+                                            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                                            style={{ background: getNotificationColor(notification.type) + '20', color: getNotificationColor(notification.type) }}
                                         >
                                             {getNotificationIcon(notification.type)}
                                         </div>
@@ -275,7 +289,6 @@ const Notifications = () => {
                         <div className="space-y-2">
                             {helpRequests.length === 0 ? (
                                 <div className="surface-card rounded-2xl p-12 text-center">
-                                    <div className="text-5xl mb-4">✅</div>
                                     <h3 className="text-lg font-medium text-white mb-2">No help requests</h3>
                                     <p className="text-gray-400 text-sm">
                                         {helpFilter === 'open' ? 'All students are doing well!' : 'No help requests found.'}
@@ -284,11 +297,14 @@ const Notifications = () => {
                             ) : (
                                 helpRequests.map(hr => (
                                     <div key={hr.id} className="surface-card rounded-xl p-4 flex items-start gap-4">
-                                        <div 
-                                            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-xl"
-                                            style={{ background: hr.status === 'open' ? 'rgba(248, 113, 113, 0.2)' : 'rgba(52, 211, 153, 0.2)' }}
+                                        <div
+                                            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                                            style={{ background: hr.status === 'open' ? 'rgba(248, 113, 113, 0.2)' : 'rgba(52, 211, 153, 0.2)', color: hr.status === 'open' ? '#f87171' : '#34d399' }}
                                         >
-                                            {hr.status === 'open' ? '🆘' : '✅'}
+                                            {hr.status === 'open'
+                                                ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                                : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                            }
                                         </div>
 
                                         <div className="flex-1 min-w-0">

@@ -295,6 +295,57 @@ const notifyNewEnrollment = async ({ studentId, courseId }) => {
     }
 };
 
+/**
+ * Notify the professor that a student has requested to enroll in their class
+ */
+const notifyClassEnrollmentRequest = async ({ studentId, classId, className, yearName, faculty }) => {
+    try {
+        // Find who created the class
+        const classRow = await db.query(
+            `SELECT cl.created_by, u.username AS professor_name
+             FROM classes cl
+             JOIN users u ON u.id = cl.created_by
+             WHERE cl.id = $1`,
+            [classId]
+        );
+        if (classRow.rows.length === 0) return;
+        const professorId = classRow.rows[0].created_by;
+
+        const student = await db.query('SELECT username FROM users WHERE id = $1', [studentId]);
+        const studentName = student.rows[0]?.username || 'A student';
+
+        await createNotification({
+            userId: professorId,
+            type: 'class_enrollment_request',
+            title: 'New Enrollment Request',
+            message: `${studentName} has requested to enroll in "${className}" (${faculty} — ${yearName})`,
+            link: `/professor/enrollment-requests`,
+            fromUserId: studentId,
+        });
+    } catch (error) {
+        console.error('Error notifying class enrollment request:', error);
+    }
+};
+
+/**
+ * Notify a student that their class enrollment was approved or rejected
+ */
+const notifyEnrollmentDecision = async ({ studentId, classId, className, yearName, faculty, approved }) => {
+    try {
+        await createNotification({
+            userId: studentId,
+            type: approved ? 'enrollment_approved' : 'enrollment_rejected',
+            title: approved ? 'Enrollment Approved' : 'Enrollment Rejected',
+            message: approved
+                ? `Your enrollment in "${className}" (${faculty} — ${yearName}) has been approved. You now have access to all its courses.`
+                : `Your enrollment request for "${className}" (${faculty} — ${yearName}) was not approved. Contact your professor for more information.`,
+            link: approved ? `/class/${classId}` : `/years`,
+        });
+    } catch (error) {
+        console.error('Error notifying enrollment decision:', error);
+    }
+};
+
 module.exports = {
     registerClient,
     removeClient,
@@ -305,5 +356,7 @@ module.exports = {
     notifyCourseCompleted,
     notifyStudentNeedsHelp,
     notifyNewEnrollment,
+    notifyClassEnrollmentRequest,
+    notifyEnrollmentDecision,
     initRedisSubscriber,
 };

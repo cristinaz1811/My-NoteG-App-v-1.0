@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { courseService } from '../services/api';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { courseService, yearService, classService } from '../services/api';
 
 const CreateCourse = () => {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const preselectedClassId = searchParams.get('class');
+
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         title: '',
@@ -14,10 +17,38 @@ const CreateCourse = () => {
         estimated_hours: 1,
         tags: [],
         learning_objectives: [],
-        is_private: false
+        is_private: false,
+        class_id: preselectedClassId || '',
+        order_index: 0,
     });
     const [tagInput, setTagInput] = useState('');
     const [objectiveInput, setObjectiveInput] = useState('');
+    const [years, setYears] = useState([]);
+    const [classes, setClasses] = useState([]);
+    const [selectedYear, setSelectedYear] = useState('');
+
+    useEffect(() => {
+        yearService.getYears().then(r => setYears(r.data)).catch(() => {});
+    }, []);
+
+    // If arriving with ?class=X, resolve which year it belongs to
+    useEffect(() => {
+        if (preselectedClassId) {
+            classService.getClassById(preselectedClassId).then(r => {
+                setSelectedYear(String(r.data.year_id));
+                setFormData(prev => ({ ...prev, class_id: preselectedClassId }));
+            }).catch(() => {});
+        }
+    }, [preselectedClassId]);
+
+    useEffect(() => {
+        if (selectedYear) {
+            yearService.getClassesByYear(selectedYear).then(r => setClasses(r.data)).catch(() => setClasses([]));
+        } else {
+            setClasses([]);
+            if (!preselectedClassId) setFormData(prev => ({ ...prev, class_id: '' }));
+        }
+    }, [selectedYear]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -58,7 +89,11 @@ const CreateCourse = () => {
 
         try {
             const response = await courseService.createProfessorCourse(formData);
-            navigate(`/professor/course/${response.data.id}`);
+            if (preselectedClassId) {
+                navigate(`/class/${preselectedClassId}`);
+            } else {
+                navigate(`/professor/course/${response.data.id}`);
+            }
         } catch (error) {
             console.error('Error creating course:', error);
             alert(error.response?.data?.error || 'Failed to create course');
@@ -71,11 +106,11 @@ const CreateCourse = () => {
         <div className="min-h-screen pt-24 pb-8 px-6">
             <div className="max-w-3xl mx-auto">
                 {/* Back Button */}
-                <Link 
-                    to="/professor"
+                <Link
+                    to={preselectedClassId ? `/class/${preselectedClassId}` : '/professor'}
                     className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-6 no-underline"
                 >
-                    <span>←</span> Back to Dashboard
+                    <span>←</span> {preselectedClassId ? 'Back to Class' : 'Back to Dashboard'}
                 </Link>
 
                 {/* Header */}
@@ -182,6 +217,55 @@ const CreateCourse = () => {
                                 rows={4}
                                 className="w-full"
                             />
+                        </div>
+
+                        {/* Year / Class assignment */}
+                        <div className="border border-white/10 rounded-xl p-4 space-y-4">
+                            <h3 className="text-sm font-medium text-gray-300">Assign to Class (optional)</h3>
+                            <div className="grid sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1">College Year</label>
+                                    <select
+                                        value={selectedYear}
+                                        onChange={e => setSelectedYear(e.target.value)}
+                                        className="w-full"
+                                    >
+                                        <option value="">— No year —</option>
+                                        {years.map(y => (
+                                            <option key={y.id} value={y.id}>{y.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1">Class / Subject</label>
+                                    <select
+                                        name="class_id"
+                                        value={formData.class_id}
+                                        onChange={handleChange}
+                                        disabled={!selectedYear}
+                                        className="w-full disabled:opacity-50"
+                                    >
+                                        <option value="">— No class —</option>
+                                        {classes.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                            {formData.class_id && (
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1">Order within class</label>
+                                    <input
+                                        type="number"
+                                        name="order_index"
+                                        min="0"
+                                        value={formData.order_index}
+                                        onChange={handleChange}
+                                        className="w-32"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Lower number = shown first (beginner)</p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Privacy Toggle */}

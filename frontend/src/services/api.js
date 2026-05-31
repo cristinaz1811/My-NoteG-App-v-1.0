@@ -66,6 +66,7 @@ export const courseService = {
     getCourseStudents: (courseId) => api.get(`/courses/professor/${courseId}/students`),
     getStudentDetails: (courseId, studentId) => api.get(`/courses/professor/${courseId}/students/${studentId}`),
     getCourseExerciseStats: (courseId) => api.get(`/courses/professor/${courseId}/exercise-stats`),
+    getExerciseStudentAttempts: (courseId, exerciseId) => api.get(`/courses/professor/${courseId}/exercise/${exerciseId}/students`),
     // Enrollment code
     regenerateEnrollmentCode: (courseId) => api.post(`/courses/professor/${courseId}/regenerate-code`),
     verifyEnrollmentCode: (courseId, code) => api.post(`/courses/${courseId}/verify-code`, { code }),
@@ -86,6 +87,8 @@ export const exerciseService = {
     // Timed sessions
     startTimedSession: (id) => api.post(`/exercises/${id}/timed-session/start`),
     getTimedSession: (id) => api.get(`/exercises/${id}/timed-session`),
+    recordViolation: (id) => api.post(`/exercises/${id}/timed-session/violation`),
+    unlockStudentSession: (exerciseId, userId) => api.post(`/exercises/professor/${exerciseId}/sessions/${userId}/unlock`),
     createExercise: (exerciseData) => api.post('/exercises', exerciseData),
     // Professor endpoints
     createProfessorExercise: (exerciseData) => api.post('/exercises/professor/create', exerciseData),
@@ -138,11 +141,61 @@ export const calendarService = {
     getEventById: (id) => api.get(`/calendar/${id}`),
     createEvent: (data) => api.post('/calendar', data),
     createCourseEvent: (data) => api.post('/calendar/course-event', data),
+    createClassEvent: (data) => api.post('/calendar/class-event', data),
+    createYearEvent: (data) => api.post('/calendar/year-event', data),
+    createStudentsEvent: (data) => api.post('/calendar/students-event', data),
     updateEvent: (id, data) => api.put(`/calendar/${id}`, data),
     deleteEvent: (id) => api.delete(`/calendar/${id}`),
     exportICS: (params) => api.get('/calendar/export/ics', { params, responseType: 'blob' }),
     getGoogleCalendarUrl: (id) => api.get(`/calendar/${id}/google-url`),
     getOutlookCalendarUrl: (id) => api.get(`/calendar/${id}/outlook-url`),
+};
+
+// Year services
+export const yearService = {
+    getYears: () => api.get('/years'),
+    getYearById: (id) => api.get(`/years/${id}`),
+    createYear: (data) => api.post('/years', data),
+    updateYear: (id, data) => api.put(`/years/${id}`, data),
+    deleteYear: (id) => api.delete(`/years/${id}`),
+    getClassesByYear: (yearId) => api.get(`/years/${yearId}/classes`),
+    createClass: (yearId, data) => api.post(`/years/${yearId}/classes`, data),
+};
+
+// Class services
+export const classService = {
+    getClassById: (id) => api.get(`/classes/${id}`),
+    updateClass: (id, data) => api.put(`/classes/${id}`, data),
+    deleteClass: (id) => api.delete(`/classes/${id}`),
+    // Enrollment
+    getEnrollmentStatus: (classId) => api.get(`/classes/${classId}/enrollment-status`),
+    requestEnrollment: (classId, data) => api.post(`/classes/${classId}/enroll`, data || {}),
+    getAllEnrollmentRequests: (status) => api.get('/classes/all-enrollment-requests', { params: status ? { status } : {} }),
+    getEnrollmentRequests: (classId) => api.get(`/classes/${classId}/enrollment-requests`),
+    approveEnrollment: (classId, userId) => api.put(`/classes/${classId}/enrollment-requests/${userId}/approve`),
+    rejectEnrollment: (classId, userId) => api.put(`/classes/${classId}/enrollment-requests/${userId}/reject`),
+    regenerateAccessKey: (classId) => api.post(`/classes/${classId}/regenerate-key`),
+    getClassStudents: (classId) => api.get(`/classes/${classId}/students`),
+};
+
+// Lecture services
+export const lectureService = {
+    getLecturesByCourse: (courseId) => api.get(`/lectures/course/${courseId}`),
+    getLecture: (id) => api.get(`/lectures/${id}`),
+    createLecture: (courseId, data) => api.post(`/lectures/course/${courseId}`, data),
+    updateLecture: (id, data) => api.put(`/lectures/${id}`, data),
+    deleteLecture: (id) => api.delete(`/lectures/${id}`),
+    // Pages
+    addPage: (lectureId, data) => api.post(`/lectures/${lectureId}/pages`, data),
+    updatePage: (lectureId, pageId, data) => api.put(`/lectures/${lectureId}/pages/${pageId}`, data),
+    deletePage: (lectureId, pageId) => api.delete(`/lectures/${lectureId}/pages/${pageId}`),
+    // Media (FormData upload)
+    uploadMedia: (lectureId, formData) => api.post(`/lectures/${lectureId}/media`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+    deleteMedia: (lectureId, mediaId) => api.delete(`/lectures/${lectureId}/media/${mediaId}`),
+    // Student progress
+    updateProgress: (lectureId, data) => api.post(`/lectures/${lectureId}/progress`, data),
 };
 
 // Notification services
@@ -155,6 +208,13 @@ export const notificationService = {
     requestHelp: (exerciseId, message) => api.post(`/notifications/help/${exerciseId}`, { message }),
     getHelpRequests: (status) => api.get('/notifications/help-requests', { params: { status } }),
     resolveHelpRequest: (id) => api.put(`/notifications/help-requests/${id}/resolve`),
+};
+
+export const sqlSessionService = {
+    startSession:    (exerciseId)         => api.post(`/sql-sessions/${exerciseId}/start`).then(r => r.data),
+    runQuery:        (exerciseId, query)  => api.post(`/sql-sessions/${exerciseId}/query`, { query }).then(r => r.data),
+    validateAnswer:  (exerciseId, query)  => api.post(`/sql-sessions/${exerciseId}/validate`, { query }).then(r => r.data),
+    resetSession:    (exerciseId)         => api.post(`/sql-sessions/${exerciseId}/reset`).then(r => r.data),
 };
 
 export default api;

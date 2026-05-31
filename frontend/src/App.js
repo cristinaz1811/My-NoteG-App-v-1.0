@@ -18,6 +18,7 @@ import CreateCourse from './pages/CreateCourse';
 import EditCourse from './pages/EditCourse';
 import EditExercise from './pages/EditExercise';
 import CourseStudents from './pages/CourseStudents';
+import ExerciseAttempts from './pages/ExerciseAttempts';
 import VerifyEmail from './pages/VerifyEmail';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
@@ -30,6 +31,11 @@ import PlagiarismReport from './pages/PlagiarismReport';
 import Notifications from './pages/Notifications';
 import StudentAnalytics from './pages/StudentAnalytics';
 import Calendar from './pages/Calendar';
+import YearsClasses from './pages/YearsClasses';
+import ClassDetail from './pages/ClassDetail';
+import EnrollmentRequests from './pages/EnrollmentRequests';
+import LectureViewer from './pages/LectureViewer';
+import CreateEditLecture from './pages/CreateEditLecture';
 
 // Animated Background Component
 const AnimatedBackground = () => (
@@ -116,9 +122,12 @@ const RoleSelection = () => {
                         to="/register?role=student"
                         className="surface-card card-hover p-8 rounded-2xl text-left group no-underline"
                     >
-                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 text-4xl"
-                             style={{ background: 'linear-gradient(135deg, rgba(254, 244, 131, 0.2), rgba(161, 96, 157, 0.2))' }}>
-                            Student
+                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6"
+                             style={{ background: 'linear-gradient(135deg, rgba(254, 244, 131, 0.2), rgba(161, 96, 157, 0.2))', color: '#fef483' }}>
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                            </svg>
                         </div>
                         <h2 className="text-2xl font-bold mb-3 text-white group-hover:text-[#fef483] transition-colors">
                             I'm a Student
@@ -137,9 +146,13 @@ const RoleSelection = () => {
                         to="/register?role=professor"
                         className="surface-card card-hover p-8 rounded-2xl text-left group no-underline"
                     >
-                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 text-4xl"
-                             style={{ background: 'linear-gradient(135deg, rgba(161, 96, 157, 0.2), rgba(184, 138, 181, 0.2))' }}>
-                            Prof
+                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6"
+                             style={{ background: 'linear-gradient(135deg, rgba(161, 96, 157, 0.2), rgba(184, 138, 181, 0.2))', color: '#a1609d' }}>
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="2" y="3" width="20" height="14" rx="2"/>
+                                <line x1="8" y1="21" x2="16" y2="21"/>
+                                <line x1="12" y1="17" x2="12" y2="21"/>
+                            </svg>
                         </div>
                         <h2 className="text-2xl font-bold mb-3 text-white group-hover:text-[#a1609d] transition-colors">
                             I'm a Professor
@@ -305,6 +318,10 @@ function App() {
                     <Route path="/my-analytics" element={<RequireAuth><Layout><StudentAnalytics /></Layout></RequireAuth>} />
                     <Route path="/calendar" element={<RequireAuth><Layout><Calendar /></Layout></RequireAuth>} />
                     <Route path="/notifications" element={<RequireAuth><Layout><Notifications /></Layout></RequireAuth>} />
+                    <Route path="/years" element={<Layout><YearsClasses /></Layout>} />
+                    <Route path="/class/:classId" element={<Layout><ClassDetail /></Layout>} />
+                    <Route path="/professor/enrollment-requests" element={<RequireAuth role="professor"><Layout><EnrollmentRequests /></Layout></RequireAuth>} />
+                    <Route path="/lectures/:lectureId" element={<RequireAuth><LectureViewer /></RequireAuth>} />
 
                     {/* Authenticated routes - professor */}
                     <Route path="/professor" element={<RequireAuth role="professor"><Layout><ProfessorDashboard /></Layout></RequireAuth>} />
@@ -312,8 +329,11 @@ function App() {
                     <Route path="/professor/course/:id" element={<RequireAuth role="professor"><Layout><EditCourse /></Layout></RequireAuth>} />
                     <Route path="/professor/exercise/:id" element={<RequireAuth role="professor"><Layout><EditExercise /></Layout></RequireAuth>} />
                     <Route path="/professor/course/:id/students" element={<RequireAuth role="professor"><Layout><CourseStudents /></Layout></RequireAuth>} />
+                    <Route path="/professor/course/:courseId/exercise/:exerciseId/students" element={<RequireAuth role="professor"><Layout><ExerciseAttempts /></Layout></RequireAuth>} />
                     <Route path="/professor/plagiarism" element={<RequireAuth role="professor"><Layout><PlagiarismDashboard /></Layout></RequireAuth>} />
                     <Route path="/professor/plagiarism/report/:reportId" element={<RequireAuth role="professor"><Layout><PlagiarismReport /></Layout></RequireAuth>} />
+                    <Route path="/professor/course/:courseId/lecture/create" element={<RequireAuth role="professor"><CreateEditLecture /></RequireAuth>} />
+                    <Route path="/professor/course/:courseId/lecture/:lectureId/edit" element={<RequireAuth role="professor"><CreateEditLecture /></RequireAuth>} />
                 </Routes>
                 </ErrorBoundary>
                 </NotificationProvider>

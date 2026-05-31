@@ -46,11 +46,13 @@ const Navbar = () => {
           ? [
                 { to: '/professor', label: 'Dashboard' },
                 { to: '/professor/plagiarism', label: 'Plagiarism' },
-                { to: '/courses', label: 'All Courses' },
+                { to: '/years', label: 'Curriculum' },
+                { to: '/professor/enrollment-requests', label: 'Enrollments' },
                 { to: '/calendar', label: 'Calendar' },
             ]
           : [
                 { to: '/courses', label: 'Courses' },
+                { to: '/years', label: 'Curriculum' },
                 { to: '/my-courses', label: 'My Courses' },
                 { to: '/my-analytics', label: 'Analytics' },
                 { to: '/calendar', label: 'Calendar' },

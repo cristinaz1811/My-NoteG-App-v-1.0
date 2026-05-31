@@ -17,6 +17,8 @@ const {
     getComplexityAnalysis,
     startTimedSession,
     getTimedSession,
+    recordViolation,
+    unlockSession,
     getExerciseFiles,
     addExerciseFile,
     updateExerciseFile,
@@ -35,6 +37,9 @@ router.get('/:exerciseId/submissions', authMiddleware, getUserSubmissions);
 // Timed session routes
 router.post('/:id/timed-session/start', authMiddleware, startTimedSession);
 router.get('/:id/timed-session', authMiddleware, getTimedSession);
+router.post('/:id/timed-session/violation', authMiddleware, recordViolation);
+// Professor: unlock a locked timed session for a specific student
+router.post('/professor/:exerciseId/sessions/:userId/unlock', authMiddleware, isProfessor, unlockSession);
 
 // AI Hints routes
 router.get('/:id/ai-hints', authMiddleware, getAIHints);

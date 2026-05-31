@@ -631,52 +631,9 @@ const deleteAccount = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // Get all courses the user is enrolled in
-        const enrollments = await db.query(
-            'SELECT course_id FROM enrollments WHERE user_id = $1',
-            [userId]
-        );
-
-        // Delete all progress data for each enrolled course
-        for (const enrollment of enrollments.rows) {
-            const courseId = enrollment.course_id;
-            await db.query(
-                `DELETE FROM ai_complexity_analysis 
-                 WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
-                [userId, courseId]
-            );
-            await db.query(
-                `DELETE FROM ai_hints 
-                 WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
-                [userId, courseId]
-            );
-            await db.query(
-                `DELETE FROM submissions 
-                 WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
-                [userId, courseId]
-            );
-            await db.query(
-                `DELETE FROM user_progress 
-                 WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
-                [userId, courseId]
-            );
-            await db.query(
-                'DELETE FROM time_sessions WHERE user_id = $1 AND course_id = $2',
-                [userId, courseId]
-            );
-        }
-
-        // Delete enrollments
+        // submissions, user_progress, ai_hints, ai_complexity_analysis, help_requests cascade from users
         await db.query('DELETE FROM enrollments WHERE user_id = $1', [userId]);
-
-        // Delete any remaining submissions/progress not tied to enrollments
-        await db.query('DELETE FROM ai_complexity_analysis WHERE user_id = $1', [userId]);
-        await db.query('DELETE FROM ai_hints WHERE user_id = $1', [userId]);
-        await db.query('DELETE FROM submissions WHERE user_id = $1', [userId]);
-        await db.query('DELETE FROM user_progress WHERE user_id = $1', [userId]);
-        await db.query('DELETE FROM time_sessions WHERE user_id = $1', [userId]);
-
-        // Finally delete the user
+        await db.query('DELETE FROM course_time_sessions WHERE user_id = $1', [userId]);
         await db.query('DELETE FROM users WHERE id = $1', [userId]);
 
         res.json({ message: 'Account deleted successfully' });

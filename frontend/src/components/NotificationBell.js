@@ -19,14 +19,40 @@ const NotificationBell = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const getNotificationIcon = (type) => {
+    const getNotificationColor = (type) => {
         switch (type) {
-            case 'new_exercise': return 'Exercise';
-            case 'new_chapter': return 'Chapter';
-            case 'course_completed': return 'Completed';
-            case 'student_needs_help': return 'Help';
-            case 'course_enrollment': return 'Enroll';
-            default: return 'Alert';
+            case 'new_exercise': return '#fef483';
+            case 'new_chapter': return '#60a5fa';
+            case 'course_completed': return '#34d399';
+            case 'student_needs_help': return '#f87171';
+            case 'course_enrollment': return '#a1609d';
+            case 'class_enrollment_request': return '#f59e0b';
+            case 'enrollment_approved': return '#34d399';
+            case 'enrollment_rejected': return '#f87171';
+            default: return '#a1609d';
+        }
+    };
+
+    const getNotificationIcon = (type) => {
+        const p = { width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' };
+        switch (type) {
+            case 'new_exercise':
+                return <svg {...p}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>;
+            case 'new_chapter':
+                return <svg {...p}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>;
+            case 'course_completed':
+                return <svg {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
+            case 'student_needs_help':
+                return <svg {...p}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
+            case 'course_enrollment':
+            case 'class_enrollment_request':
+                return <svg {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>;
+            case 'enrollment_approved':
+                return <svg {...p}><polyline points="20 6 9 17 4 12"/></svg>;
+            case 'enrollment_rejected':
+                return <svg {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+            default:
+                return <svg {...p}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>;
         }
     };
 
@@ -80,9 +106,9 @@ const NotificationBell = () => {
 
             {/* Dropdown */}
             {isOpen && (
-                <div 
-                    className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-2xl overflow-hidden shadow-2xl border border-white/10 z-50"
-                    style={{ background: 'rgba(30, 35, 44, 0.98)', backdropFilter: 'blur(20px)', maxHeight: '480px' }}
+                <div
+                    className="notification-dropdown absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-2xl overflow-hidden shadow-2xl border border-white/10 z-50"
+                    style={{ backdropFilter: 'blur(20px)', maxHeight: '480px', background: 'var(--notification-dropdown-bg, rgba(30,35,44,0.98))' }}
                 >
                     {/* Header */}
                     <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
@@ -125,7 +151,10 @@ const NotificationBell = () => {
                                     style={!notification.is_read ? { background: 'rgba(161, 96, 157, 0.08)' } : {}}
                                 >
                                     {/* Icon */}
-                                    <span className="text-xl flex-shrink-0 mt-0.5">
+                                    <span
+                                        className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                                        style={{ background: getNotificationColor(notification.type) + '20', color: getNotificationColor(notification.type) }}
+                                    >
                                         {getNotificationIcon(notification.type)}
                                     </span>
                                     

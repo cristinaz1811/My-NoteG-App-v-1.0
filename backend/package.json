@@ -12,7 +12,6 @@
     "format": "prettier --write ."
   },
   "dependencies": {
-    "@aws-sdk/client-sqs": "^3.500.0",
     "bcrypt": "^5.1.1",
     "body-parser": "^1.20.2",
     "bullmq": "^5.70.1",

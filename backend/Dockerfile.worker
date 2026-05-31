@@ -12,8 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
-COPY package*.json ./
+# Install dependencies (copy only package.json to avoid lockfile integrity issues cross-platform)
+COPY package.json ./
 RUN npm install --omit=dev
 
 # Copy only the files the worker needs
