@@ -8,34 +8,55 @@ jobs:
   backend:
     name: Backend (lint + test)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+
+      - uses: ./.github/actions/setup-node
         with:
-          node-version: '20'
-      - run: npm install
-      - run: npm run lint
-      - run: npm test
+          working-directory: backend
+
+      - name: Lint
+        working-directory: backend
+        run: npm run lint
+
+      - name: Test
+        working-directory: backend
+        run: npm test
 
   frontend:
     name: Frontend (test + build)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+
+      - uses: ./.github/actions/setup-node
         with:
-          node-version: '20'
-      - run: npm install
-      - run: npm test -- --watchAll=false
+          working-directory: frontend
+
+      - name: Test
+        working-directory: frontend
+        run: npm test -- --watchAll=false
+
       - name: Build
+        working-directory: frontend
+        # CI=false so pre-existing lint warnings don't fail the build.
+        # Remove once those warnings have been cleared.
         run: npm run build
-        # CI=false so the build does not treat pre-existing lint warnings as
-        # errors. Remove this once those warnings have been cleared.
         env:
           CI: false
+
+  dashboard:
+    name: Dashboard (lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-python
+        with:
+          working-directory: dashboard
+
+      - name: Lint
+        working-directory: dashboard
+        run: |
+          pip install flake8
+          flake8 . --max-line-length=100 --exclude=__pycache__
