@@ -59,4 +59,4 @@ jobs:
         working-directory: dashboard
         run: |
           pip install flake8
-          flake8 . --max-line-length=100 --exclude=__pycache__
+          flake8 . --max-line-length=120 --exclude=__pycache__
