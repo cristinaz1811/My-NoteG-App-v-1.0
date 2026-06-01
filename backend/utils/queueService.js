@@ -1,5 +1,5 @@
 const { Queue, Worker, QueueEvents } = require('bullmq');
-const { getRedisClient, DISTRIBUTED_MODE } = require('./redisClient');
+const { DISTRIBUTED_MODE } = require('./redisClient');
 
 const QUEUE_NAME = 'code-execution';
 const EMAIL_QUEUE_NAME = 'email';

@@ -91,8 +91,8 @@ const getYearById = async (req, res) => {
 };
 
 const createYear = async (req, res) => {
+    const { name, description, order_index = 0, faculty, school_year, start_date, active_until } = req.body;
     try {
-        const { name, description, order_index = 0, faculty, school_year, start_date, active_until } = req.body;
         if (!name) return res.status(400).json({ error: 'Name is required' });
         if (!faculty) return res.status(400).json({ error: 'Faculty is required' });
         if (!school_year) return res.status(400).json({ error: 'School year is required' });
@@ -107,7 +107,8 @@ const createYear = async (req, res) => {
         res.status(201).json(result.rows[0]);
     } catch (err) {
         if (err.code === '23505') {
-            return res.status(409).json({ error: `${name} for ${faculty} already exists in ${school_year}` });
+            const { name: n, faculty: f, school_year: sy } = req.body;
+            return res.status(409).json({ error: `${n} for ${f} already exists in ${sy}` });
         }
         console.error('createYear error:', err);
         res.status(500).json({ error: 'Failed to create year' });

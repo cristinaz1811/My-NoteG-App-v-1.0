@@ -140,12 +140,6 @@ function getKeywords(language) {
 
 // ─── Similarity Algorithms ──────────────────────────────────────────────────
 
-/**
- * Convert token list to a string of type-value pairs for fingerprinting.
- */
-function tokensToString(tokens) {
-    return tokens.map(t => `${t.type}:${t.value}`).join(' ');
-}
 
 /**
  * Generate n-grams from a token array.

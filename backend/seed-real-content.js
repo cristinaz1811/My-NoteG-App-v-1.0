@@ -883,7 +883,7 @@ seed()
     .finally(async () => {
         try {
             await db.pool.end();
-        } catch (e) {
+        } catch {
             // ignore
         }
     });

@@ -213,7 +213,7 @@ const runQuery = async (req, res) => {
                         columns: stateResult.fields.map((f) => f.name),
                         rows: stateResult.rows,
                     };
-                } catch (_) { /* ignore if table detection fails */ }
+                } catch { /* ignore if table detection fails */ }
             }
         }
 

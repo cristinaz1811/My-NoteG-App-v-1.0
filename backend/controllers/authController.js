@@ -453,7 +453,7 @@ const googleAuth = async (req, res) => {
             return res.status(401).json({ error: 'Invalid token audience' });
         }
 
-        const { email, name, sub: googleId, picture } = googleUser;
+        const { email, name, sub: googleId } = googleUser;
 
         // Check if user exists
         let result = await db.query(
@@ -462,7 +462,6 @@ const googleAuth = async (req, res) => {
         );
 
         let user;
-        let isNewUser = false;
 
         if (result.rows.length === 0) {
             // New user - validate academic email
@@ -472,7 +471,6 @@ const googleAuth = async (req, res) => {
             }
 
             // New user - they need to choose a username
-            isNewUser = true;
             
             // Generate a temporary token with Google info for username selection
             const tempToken = jwt.sign(
@@ -552,7 +550,7 @@ const completeGoogleSignup = async (req, res) => {
         let decoded;
         try {
             decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
-        } catch (e) {
+        } catch {
             return res.status(401).json({ error: 'Invalid or expired token. Please sign in with Google again.' });
         }
 

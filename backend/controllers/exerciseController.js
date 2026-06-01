@@ -1,7 +1,7 @@
 const db = require('../config/database');
 const { generateHints, generateOptimizationHints, analyzeComplexity } = require('../utils/openaiService');
 const { notifyNewExercise, notifyCourseCompleted, createNotification } = require('../utils/notificationService');
-const { DISTRIBUTED_MODE, cacheGet, cacheSet, cacheDel } = require('../utils/redisClient');
+const { DISTRIBUTED_MODE, cacheGet, cacheSet } = require('../utils/redisClient');
 
 const getExerciseById = async (req, res) => {
     try {

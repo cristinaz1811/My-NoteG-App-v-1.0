@@ -41,7 +41,7 @@ const server = http.createServer(app);
 // WebSocket server attached to the same HTTP server
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', (ws, _req) => {
     let userId = null;
 
     ws.on('message', (data) => {
@@ -55,7 +55,7 @@ wss.on('connection', (ws, req) => {
                 registerClient(userId, ws);
                 ws.send(JSON.stringify({ type: 'auth_success', userId }));
             }
-        } catch (err) {
+        } catch {
             ws.send(JSON.stringify({ type: 'error', message: 'Invalid message or token' }));
         }
     });
@@ -124,7 +124,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
     console.error(`[ERROR] ${req.method} ${req.originalUrl} -`, err.stack || err.message);
     res.status(err.status || 500).json({ error: 'Something went wrong!' });
 });

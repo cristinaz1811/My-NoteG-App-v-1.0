@@ -17,7 +17,7 @@ const authMiddleware = async (req, res, next) => {
 
         req.user = decoded;
         next();
-    } catch (error) {
+    } catch {
         return res.status(401).json({ error: 'Invalid token' });
     }
 };
@@ -30,7 +30,7 @@ const optionalAuth = (req, res, next) => {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             req.user = decoded;
         }
-    } catch (error) {
+    } catch {
         // Token invalid - just continue without user
     }
     next();

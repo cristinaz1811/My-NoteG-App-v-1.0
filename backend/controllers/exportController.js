@@ -280,7 +280,7 @@ const exportCourseGradesPDF = async (req, res) => {
 // CSV — student exports own records
 const exportStudentProgressCSV = async (req, res) => {
     try {
-        const { courses, exercises, user } = await fetchStudentProgress(req.user.id);
+        const { exercises, user } = await fetchStudentProgress(req.user.id);
 
         // Build per-exercise rows
         const rows = exercises.map((ex) => ({
