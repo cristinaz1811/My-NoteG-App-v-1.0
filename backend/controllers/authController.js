@@ -631,7 +631,7 @@ const deleteAccount = async (req, res) => {
 
         // submissions, user_progress, ai_hints, ai_complexity_analysis, help_requests cascade from users
         await db.query('DELETE FROM enrollments WHERE user_id = $1', [userId]);
-        await db.query('DELETE FROM course_time_sessions WHERE user_id = $1', [userId]);
+        await db.query('DELETE FROM time_sessions WHERE user_id = $1', [userId]);
         await db.query('DELETE FROM users WHERE id = $1', [userId]);
 
         res.json({ message: 'Account deleted successfully' });

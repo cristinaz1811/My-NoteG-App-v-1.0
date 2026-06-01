@@ -57,7 +57,10 @@ const CourseDetail = () => {
             navigate(`/my-courses/${id}`);
         } catch (error) {
             console.error('Error enrolling:', error);
-            if (error.response?.data?.requiresCode) {
+            if (error.response?.status === 409) {
+                setIsEnrolled(true);
+                navigate(`/my-courses/${id}`);
+            } else if (error.response?.data?.requiresCode) {
                 setShowCodeInput(true);
                 setCodeError('This is a private course. Please enter the enrollment code.');
             } else {
@@ -550,26 +553,34 @@ const CourseDetail = () => {
                         <div className="sticky top-24 space-y-6">
                             {/* Mobile Enroll Button */}
                             <div className="lg:hidden surface-card rounded-2xl p-6">
-                                {course.is_private && (
-                                    <div className="mb-3">
-                                        <label className="block text-sm text-gray-400 mb-2">Enrollment Code</label>
-                                        <input
-                                            type="text"
-                                            value={enrollmentCode}
-                                            onChange={(e) => { setEnrollmentCode(e.target.value.toUpperCase()); setCodeError(''); }}
-                                            placeholder="Enter code..."
-                                            className="w-full font-mono text-center text-lg tracking-widest uppercase"
-                                            maxLength={6}
-                                        />
-                                    </div>
+                                {isEnrolled ? (
+                                    <button onClick={handleGoToCourse} className="w-full btn-primary py-4 text-lg">
+                                        Continue Learning →
+                                    </button>
+                                ) : (
+                                    <>
+                                        {course.is_private && (
+                                            <div className="mb-3">
+                                                <label className="block text-sm text-gray-400 mb-2">Enrollment Code</label>
+                                                <input
+                                                    type="text"
+                                                    value={enrollmentCode}
+                                                    onChange={(e) => { setEnrollmentCode(e.target.value.toUpperCase()); setCodeError(''); }}
+                                                    placeholder="Enter code..."
+                                                    className="w-full font-mono text-center text-lg tracking-widest uppercase"
+                                                    maxLength={6}
+                                                />
+                                            </div>
+                                        )}
+                                        <button
+                                            onClick={handleEnroll}
+                                            className="w-full btn-primary py-4 text-lg"
+                                            disabled={course.is_private && !enrollmentCode}
+                                        >
+                                            {course.is_private ? 'Enroll with Code' : 'Enroll Now - It\'s Free'}
+                                        </button>
+                                    </>
                                 )}
-                                <button 
-                                    onClick={handleEnroll} 
-                                    className="w-full btn-primary py-4 text-lg"
-                                    disabled={course.is_private && !enrollmentCode}
-                                >
-                                    {course.is_private ? 'Enroll with Code' : 'Enroll Now - It\'s Free'}
-                                </button>
                             </div>
 
                             {/* Instructor Card */}

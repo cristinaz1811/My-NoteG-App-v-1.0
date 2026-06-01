@@ -143,6 +143,56 @@ CRITICAL RULES:
 };
 
 /**
+ * Generate progressive hints for a SQL exercise.
+ * Hint 1 → which tables/relationships to consider.
+ * Hint 2 → which SQL clause or operation is needed.
+ * Hint 3 → structural nudge toward the correct query shape.
+ */
+const generateSQLHints = async ({ exerciseTitle, exerciseDescription, seedSQL, code, failedTests, hintNumber }) => {
+    const hintLevels = {
+        1: 'Identify which tables and relationships the student needs to work with. Mention the relevant columns by name if helpful. Do NOT suggest any clause or operation yet. 1-2 sentences max.',
+        2: 'Identify the SQL clause or operation (JOIN, GROUP BY, subquery, aggregate, etc.) that is needed but missing or wrong in the student\'s query. Ask a leading question. Do NOT write any SQL. 1-2 sentences max.',
+        3: 'Describe the overall shape of the correct query (e.g. "you need a subquery in the WHERE clause that filters by…"). Still do NOT write actual SQL. 1-2 sentences max.',
+    };
+
+    const schemaBlock = seedSQL
+        ? `Database schema (seed SQL):\n\`\`\`sql\n${seedSQL}\n\`\`\``
+        : '';
+
+    const prompt = `SQL Exercise: "${exerciseTitle}"
+Description: ${exerciseDescription}
+${schemaBlock}
+
+Student query:
+\`\`\`sql
+${code || '-- (empty)'}
+\`\`\`
+
+Failing tests:
+${(failedTests || []).map(t => `Input: ${t.input || 'n/a'} → expected: ${t.expected}, got: ${t.actual || 'error'}`).join('\n') || 'No output produced.'}
+
+Generate hint #${hintNumber}/3.
+${hintLevels[hintNumber]}
+
+CRITICAL RULES:
+- NEVER write SQL code. Guide the student's thinking only.
+- Hint 1 = tables/relationships. Hint 2 = missing clause/operation. Hint 3 = query structure.
+- 1-2 short sentences. No greetings. No filler.`;
+
+    const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+            { role: 'system', content: 'You write short progressive SQL hints that guide the student\'s thinking without writing any SQL. Hint 1 points to relevant tables, hint 2 identifies the missing or incorrect clause/operation, hint 3 describes the query structure needed. Never write actual SQL.' },
+            { role: 'user', content: prompt },
+        ],
+        max_tokens: 100,
+        temperature: 0.5,
+    });
+
+    return response.choices[0].message.content.trim();
+};
+
+/**
  * Generate personalised growth feedback for a student based on their analytics data.
  */
 const generateStudentFeedback = async (studentData) => {
@@ -206,6 +256,7 @@ Provide your response in EXACTLY this JSON format (raw JSON, no markdown):
 
 module.exports = {
     generateHints,
+    generateSQLHints,
     generateOptimizationHints,
     analyzeComplexity,
     generateStudentFeedback,

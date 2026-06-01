@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { courseService, calendarService } from './services/api';
 import { NotificationProvider } from './context/NotificationContext';
 import { ThemeProvider } from './context/ThemeContext';
 import Layout from './components/Layout';
@@ -176,7 +177,55 @@ const RoleSelection = () => {
     );
 };
 
+const EVENT_COLORS = {
+    deadline: '#ef4444',
+    live_session: '#8b5cf6',
+    reminder: '#f59e0b',
+    custom: '#06b6d4',
+};
+const EVENT_LABELS = {
+    deadline: 'Deadline',
+    live_session: 'Live Session',
+    reminder: 'Reminder',
+    custom: 'Event',
+};
+
 const Home = () => {
+    const { user } = useAuth();
+    const [courses, setCourses] = useState([]);
+    const [events, setEvents] = useState([]);
+    const [loadingCourses, setLoadingCourses] = useState(false);
+    const [loadingEvents, setLoadingEvents] = useState(false);
+
+    useEffect(() => {
+        if (!user) return;
+
+        setLoadingCourses(true);
+        const fetchCourses = user.role === 'professor'
+            ? courseService.getProfessorCourses()
+            : courseService.getUserCourses();
+        fetchCourses
+            .then(res => setCourses((res.data || []).slice(0, 3)))
+            .catch(() => {})
+            .finally(() => setLoadingCourses(false));
+
+        setLoadingEvents(true);
+        calendarService.getUpcoming(7)
+            .then(res => setEvents((res.data || []).slice(0, 4)))
+            .catch(() => {})
+            .finally(() => setLoadingEvents(false));
+    }, [user]);
+
+    const formatEventDate = (dateStr) => {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        const now = new Date();
+        const diffDays = Math.floor((d - now) / (1000 * 60 * 60 * 24));
+        if (diffDays === 0) return 'Today';
+        if (diffDays === 1) return 'Tomorrow';
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
     return (
         <div className="min-h-screen pt-8">
             {/* Hero Section */}
@@ -184,23 +233,23 @@ const Home = () => {
                 <div className="max-w-7xl mx-auto w-full grid lg:grid-cols-2 gap-12 items-start">
                     {/* Left Content */}
                     <div className="animate-slideUp">
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm mb-6" 
+                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm mb-6"
                              style={{ background: 'rgba(161, 96, 157, 0.1)', border: '1px solid rgba(161, 96, 157, 0.3)' }}>
                             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
                             <span>Join thousands of developers learning right now</span>
                         </div>
-                        
+
                         <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight mb-6">
                             Master Code,<br/>
                             <span className="gradient-text">Build Your Future</span>
                         </h1>
-                        
+
                         <p className="text-lg sm:text-xl mb-8 opacity-80 max-w-lg">
                             Interactive lessons, real-world projects, and a supportive community to take you from beginner to professional developer.
                         </p>
-                        
-                        <Link 
-                            to="/courses" 
+
+                        <Link
+                            to="/courses"
                             className="inline-block px-8 py-4 rounded-xl font-semibold text-lg transition-all hover:scale-105 glow gradient-bg text-white text-center no-underline"
                         >
                             Browse Courses
@@ -235,38 +284,141 @@ const Home = () => {
                 </div>
             </section>
 
-            {/* Features Section */}
-            <section className="pt-12 pb-24 px-6" style={{ background: 'var(--section-bg)' }}>
-                <div className="max-w-7xl mx-auto">
-                    <div className="text-center mb-16">
-                        <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-                            Why Learn With <span className="gradient-text">Note G</span>
-                        </h2>
-                        <p className="text-lg opacity-70 max-w-2xl mx-auto">
-                            Everything you need to go from zero to professional developer, all in one place.
-                        </p>
-                    </div>
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {[
-                            { icon: 'Code', title: 'Interactive Coding', desc: 'Write real code in your browser with instant feedback and guided hints.' },
-                            { icon: 'Build', title: 'Project-Based Learning', desc: 'Build real projects for your portfolio while learning new skills.' },
-                            { icon: 'AI', title: 'AI-Powered Help', desc: 'Get instant answers and explanations from our intelligent coding assistant.' },
-                            { icon: 'Team', title: 'Community Support', desc: 'Connect with fellow learners and mentors in our active community.' },
-                            { icon: 'Cert', title: 'Certificates', desc: 'Earn recognized certificates to showcase your skills to employers.' },
-                            { icon: 'Pace', title: 'Learn at Your Pace', desc: 'Flexible schedules that fit your life. Learn anytime, anywhere.' },
-                        ].map((feature, idx) => (
-                            <div key={idx} className="card-hover p-8 rounded-2xl surface-card">
-                                <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-6 text-3xl"
-                                     style={{ background: 'linear-gradient(135deg, rgba(161, 96, 157, 0.2), rgba(254, 244, 131, 0.2))' }}>
-                                    {feature.icon}
-                                </div>
-                                <h3 className="text-xl font-semibold mb-3">{feature.title}</h3>
-                                <p className="opacity-70">{feature.desc}</p>
+            {/* Dashboard Section — only shown when logged in */}
+            {user && (
+                <section className="pb-24 px-6 pt-4" style={{ background: 'var(--section-bg)' }}>
+                    <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-8">
+
+                        {/* Continue Learning / Your Courses */}
+                        <div>
+                            <div className="flex items-center justify-between mb-5">
+                                <h2 className="text-xl font-bold">
+                                    {user.role === 'professor' ? 'Your Courses' : 'Continue Learning'}
+                                </h2>
+                                <Link
+                                    to={user.role === 'professor' ? '/professor' : '/my-courses'}
+                                    className="text-sm no-underline opacity-60 hover:opacity-100 transition-opacity"
+                                    style={{ color: '#fef483' }}
+                                >
+                                    View all →
+                                </Link>
                             </div>
-                        ))}
+
+                            {loadingCourses ? (
+                                <div className="space-y-3">
+                                    {[1, 2, 3].map(i => (
+                                        <div key={i} className="surface-card rounded-xl p-4 animate-pulse h-16" />
+                                    ))}
+                                </div>
+                            ) : courses.length === 0 ? (
+                                <div className="surface-card rounded-xl p-8 text-center opacity-60">
+                                    <p className="mb-3">No courses yet.</p>
+                                    <Link
+                                        to={user.role === 'professor' ? '/professor/create-course' : '/courses'}
+                                        className="text-sm no-underline"
+                                        style={{ color: '#fef483' }}
+                                    >
+                                        {user.role === 'professor' ? 'Create your first course →' : 'Browse available courses →'}
+                                    </Link>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {courses.map(course => (
+                                        <Link
+                                            key={course.id}
+                                            to={user.role === 'professor' ? `/professor/course/${course.id}` : `/my-courses/${course.id}`}
+                                            className="surface-card card-hover rounded-xl p-4 flex items-center gap-4 no-underline group"
+                                        >
+                                            <div
+                                                className="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center font-bold text-sm"
+                                                style={{ background: 'linear-gradient(135deg, rgba(161,96,157,0.3), rgba(254,244,131,0.2))', color: '#fef483' }}
+                                            >
+                                                {course.title?.[0]?.toUpperCase() || '?'}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-medium text-white truncate group-hover:opacity-90">{course.title}</p>
+                                                {user.role === 'student' && course.progress !== undefined && (
+                                                    <div className="mt-1.5 flex items-center gap-2">
+                                                        <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                                                            <div
+                                                                className="h-full rounded-full"
+                                                                style={{ width: `${course.progress || 0}%`, background: 'linear-gradient(90deg, #a1609d, #fef483)' }}
+                                                            />
+                                                        </div>
+                                                        <span className="text-xs opacity-50 flex-shrink-0">{Math.round(course.progress || 0)}%</span>
+                                                    </div>
+                                                )}
+                                                {user.role === 'professor' && (
+                                                    <p className="text-xs opacity-50 mt-0.5">{course.student_count ?? 0} students</p>
+                                                )}
+                                            </div>
+                                            <span className="opacity-30 group-hover:opacity-70 transition-opacity">→</span>
+                                        </Link>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Upcoming Events */}
+                        <div>
+                            <div className="flex items-center justify-between mb-5">
+                                <h2 className="text-xl font-bold">Upcoming</h2>
+                                <Link
+                                    to="/calendar"
+                                    className="text-sm no-underline opacity-60 hover:opacity-100 transition-opacity"
+                                    style={{ color: '#fef483' }}
+                                >
+                                    View calendar →
+                                </Link>
+                            </div>
+
+                            {loadingEvents ? (
+                                <div className="space-y-3">
+                                    {[1, 2, 3].map(i => (
+                                        <div key={i} className="surface-card rounded-xl p-4 animate-pulse h-16" />
+                                    ))}
+                                </div>
+                            ) : events.length === 0 ? (
+                                <div className="surface-card rounded-xl p-8 text-center opacity-60">
+                                    <p className="mb-3">Nothing coming up in the next 7 days.</p>
+                                    <Link to="/calendar" className="text-sm no-underline" style={{ color: '#fef483' }}>
+                                        Open calendar →
+                                    </Link>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {events.map(event => {
+                                        const color = EVENT_COLORS[event.event_type] || EVENT_COLORS.custom;
+                                        const label = EVENT_LABELS[event.event_type] || 'Event';
+                                        return (
+                                            <Link
+                                                key={event.id}
+                                                to="/calendar"
+                                                className="surface-card card-hover rounded-xl p-4 flex items-center gap-4 no-underline group"
+                                            >
+                                                <div
+                                                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                                    style={{ background: color, boxShadow: `0 0 8px ${color}` }}
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-medium text-white truncate group-hover:opacity-90">{event.title}</p>
+                                                    <p className="text-xs opacity-50 mt-0.5">{label}</p>
+                                                </div>
+                                                <span
+                                                    className="text-xs font-medium flex-shrink-0 px-2.5 py-1 rounded-lg"
+                                                    style={{ background: `${color}25`, color }}
+                                                >
+                                                    {formatEventDate(event.start_datetime)}
+                                                </span>
+                                            </Link>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
-            </section>
+                </section>
+            )}
 
             {/* Footer */}
             <footer className="py-12 px-6 border-t border-white/10">

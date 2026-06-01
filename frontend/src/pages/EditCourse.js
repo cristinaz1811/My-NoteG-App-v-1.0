@@ -56,6 +56,7 @@ const EditCourse = () => {
                 tags: response.data.tags || [],
                 learning_objectives: response.data.learning_objectives || [],
                 is_private: response.data.is_private || false,
+                ai_hints_enabled: response.data.ai_hints_enabled !== false,
             });
         } catch (error) {
             console.error('Error loading course:', error);
@@ -519,6 +520,27 @@ const EditCourse = () => {
                                             </p>
                                         </div>
                                     )}
+                                </div>
+                                <div className="border border-white/10 rounded-xl p-4">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <label className="text-sm font-medium text-gray-300">AI Hints</label>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Allow students to request AI-generated hints across all exercises in this course. Can also be toggled per exercise.
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, ai_hints_enabled: !formData.ai_hints_enabled })}
+                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
+                                                formData.ai_hints_enabled ? 'bg-[#a1609d]' : 'bg-white/20'
+                                            }`}
+                                        >
+                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                                formData.ai_hints_enabled ? 'translate-x-6' : 'translate-x-1'
+                                            }`} />
+                                        </button>
+                                    </div>
                                 </div>
                                 <button
                                     onClick={handleUpdateCourse}

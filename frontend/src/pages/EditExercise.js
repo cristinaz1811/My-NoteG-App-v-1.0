@@ -21,7 +21,12 @@ const EditExercise = () => {
         starter_code: '',
         requires_efficiency: false,
         time_limit_minutes: '',
-        is_multi_file: false
+        is_multi_file: false,
+        ai_hints_enabled: true,
+        is_test: false,
+        is_published: true,
+        available_from: '',
+        available_until: '',
     });
 
     // New test case
@@ -55,7 +60,12 @@ const EditExercise = () => {
                 starter_code: exerciseRes.data.starter_code || '',
                 requires_efficiency: exerciseRes.data.requires_efficiency || false,
                 time_limit_minutes: exerciseRes.data.time_limit_minutes || '',
-                is_multi_file: exerciseRes.data.is_multi_file || false
+                is_multi_file: exerciseRes.data.is_multi_file || false,
+                ai_hints_enabled: exerciseRes.data.ai_hints_enabled !== false,
+                is_test: exerciseRes.data.is_test || false,
+                is_published: exerciseRes.data.is_published !== false,
+                available_from: exerciseRes.data.available_from ? exerciseRes.data.available_from.slice(0, 16) : '',
+                available_until: exerciseRes.data.available_until ? exerciseRes.data.available_until.slice(0, 16) : '',
             });
 
             // Load test cases
@@ -346,6 +356,87 @@ const EditExercise = () => {
                                 </div>
                             </div>
                         </div>
+
+                        {/* AI Hints */}
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/10">
+                            <div>
+                                <p className="text-sm font-medium text-gray-300">AI Hints</p>
+                                <p className="text-xs text-gray-500">Allow students to request AI-generated progressive hints on this exercise.</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setFormData({ ...formData, ai_hints_enabled: !formData.ai_hints_enabled })}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${formData.ai_hints_enabled ? 'bg-[#a1609d]' : 'bg-white/20'}`}
+                            >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${formData.ai_hints_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                            </button>
+                        </div>
+
+                        {/* Test / Scheduling */}
+                        <div className="p-3 rounded-lg bg-white/[0.03] border border-white/10 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-medium text-gray-300">Mark as Test</p>
+                                    <p className="text-xs text-gray-500">Identifies this exercise as a graded test (shown with a badge to students).</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setFormData({ ...formData, is_test: !formData.is_test })}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${formData.is_test ? 'bg-[#a1609d]' : 'bg-white/20'}`}
+                                >
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${formData.is_test ? 'translate-x-6' : 'translate-x-1'}`} />
+                                </button>
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-medium text-gray-300">Published</p>
+                                    <p className="text-xs text-gray-500">Unpublish to hide the exercise from students immediately, regardless of scheduling.</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setFormData({ ...formData, is_published: !formData.is_published })}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${formData.is_published ? 'bg-green-600' : 'bg-white/20'}`}
+                                >
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${formData.is_published ? 'translate-x-6' : 'translate-x-1'}`} />
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3 pt-1">
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1">Available from</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={formData.available_from}
+                                        onChange={(e) => setFormData({ ...formData, available_from: e.target.value })}
+                                        className="w-full text-sm"
+                                    />
+                                    {formData.available_from && (
+                                        <button type="button" onClick={() => setFormData({ ...formData, available_from: '' })} className="text-xs text-red-400 hover:text-red-300 mt-1">Clear</button>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-400 mb-1">Available until</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={formData.available_until}
+                                        onChange={(e) => setFormData({ ...formData, available_until: e.target.value })}
+                                        className="w-full text-sm"
+                                    />
+                                    {formData.available_until && (
+                                        <button type="button" onClick={() => setFormData({ ...formData, available_until: '' })} className="text-xs text-red-400 hover:text-red-300 mt-1">Clear</button>
+                                    )}
+                                </div>
+                            </div>
+                            {(formData.available_from || formData.available_until) && (
+                                <p className="text-xs text-[#fef483] opacity-80">
+                                    Students can access this exercise
+                                    {formData.available_from ? ` from ${new Date(formData.available_from).toLocaleString()}` : ''}
+                                    {formData.available_until ? ` until ${new Date(formData.available_until).toLocaleString()}` : ''}.
+                                </p>
+                            )}
+                        </div>
+
                         <button
                             onClick={handleUpdateExercise}
                             disabled={saving}
