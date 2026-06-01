@@ -1,6 +1,7 @@
 const db = require('../config/database');
-const { compareAllSubmissions, compareSubmissions } = require('../utils/plagiarismDetector');
-const { sendPlagiarismAlertEmail } = require('../utils/emailService');
+const { compareSubmissions } = require('../utils/plagiarismDetector');
+const { enqueuePlagiarism } = require('../utils/queueService');
+const { DISTRIBUTED_MODE } = require('../utils/redisClient');
 
 // ─── Run plagiarism scan for an exercise ────────────────────────────────────
 const runPlagiarismScan = async (req, res) => {
@@ -9,11 +10,10 @@ const runPlagiarismScan = async (req, res) => {
         const { threshold = 70 } = req.body;
         const professorId = req.user.id;
 
-        // Verify the professor owns this exercise's course
         const exerciseCheck = await db.query(`
             SELECT e.*, c.created_by, c.id as course_id, c.title as course_title, e.title as exercise_title
-            FROM exercises e 
-            JOIN courses c ON e.course_id = c.id 
+            FROM exercises e
+            JOIN courses c ON e.course_id = c.id
             WHERE e.id = $1
         `, [exerciseId]);
 
@@ -26,14 +26,12 @@ const runPlagiarismScan = async (req, res) => {
             return res.status(403).json({ error: 'You do not own this course' });
         }
 
-        // Create a report entry
         const reportResult = await db.query(`
             INSERT INTO plagiarism_reports (course_id, exercise_id, initiated_by, status)
             VALUES ($1, $2, $3, 'running') RETURNING *
         `, [exercise.course_id, exerciseId, professorId]);
         const report = reportResult.rows[0];
 
-        // Get all passed submissions for this exercise from enrolled students
         const submissionsResult = await db.query(`
             SELECT s.id, s.user_id, s.code, s.language, s.submitted_at, s.score,
                    u.username, u.email
@@ -48,7 +46,7 @@ const runPlagiarismScan = async (req, res) => {
 
         if (submissions.length < 2) {
             await db.query(`
-                UPDATE plagiarism_reports 
+                UPDATE plagiarism_reports
                 SET status = 'completed', completed_at = CURRENT_TIMESTAMP,
                     total_submissions_compared = $2, flagged_pairs = 0
                 WHERE id = $1
@@ -61,91 +59,59 @@ const runPlagiarismScan = async (req, res) => {
             });
         }
 
-        // Run the plagiarism detection
+        if (DISTRIBUTED_MODE) {
+            // Async: enqueue the heavy comparison work — professor gets WS notification when done
+            await enqueuePlagiarism({
+                reportId: report.id,
+                submissions,
+                threshold,
+                professorId,
+                exercise: {
+                    id: exercise.id,
+                    course_id: exercise.course_id,
+                    course_title: exercise.course_title,
+                    exercise_title: exercise.exercise_title,
+                },
+            });
+
+            return res.json({ reportId: report.id, status: 'running' });
+        }
+
+        // Fallback: run inline when not in distributed mode
+        const { compareAllSubmissions } = require('../utils/plagiarismDetector');
         const flaggedPairs = compareAllSubmissions(submissions, threshold);
 
-        // Save matches to database
         let maxSimilarity = 0;
         for (const pair of flaggedPairs) {
             if (pair.similarity > maxSimilarity) maxSimilarity = pair.similarity;
-
             await db.query(`
-                INSERT INTO plagiarism_matches 
+                INSERT INTO plagiarism_matches
                     (report_id, submission_a_id, submission_b_id, user_a_id, user_b_id,
                      similarity_score, matching_tokens, total_tokens_a, total_tokens_b, matching_fragments)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            `, [
-                report.id,
-                pair.submissionA.id, pair.submissionB.id,
+            `, [report.id, pair.submissionA.id, pair.submissionB.id,
                 pair.submissionA.user_id, pair.submissionB.user_id,
-                pair.similarity,
-                pair.matchingTokens,
-                pair.totalTokensA, pair.totalTokensB,
-                JSON.stringify(pair.fragments)
-            ]);
+                pair.similarity, pair.matchingTokens,
+                pair.totalTokensA, pair.totalTokensB, JSON.stringify(pair.fragments)]);
         }
 
-        // Update the report
         await db.query(`
-            UPDATE plagiarism_reports 
+            UPDATE plagiarism_reports
             SET status = 'completed', completed_at = CURRENT_TIMESTAMP,
                 total_submissions_compared = $2, flagged_pairs = $3, max_similarity = $4
             WHERE id = $1
         `, [report.id, submissions.length, flaggedPairs.length, maxSimilarity]);
 
-        // If there are flagged pairs, create a notification and send email
-        if (flaggedPairs.length > 0) {
-            const message = `Plagiarism alert: ${flaggedPairs.length} suspicious pair(s) detected for exercise "${exercise.exercise_title}" in course "${exercise.course_title}". Maximum similarity: ${maxSimilarity.toFixed(1)}%.`;
-
-            await db.query(`
-                INSERT INTO notifications
-                    (user_id, type, title, message, course_id, exercise_id, report_id)
-                VALUES ($1, 'plagiarism_alert', 'Plagiarism Alert', $2, $3, $4, $5)
-            `, [professorId, message, exercise.course_id, exerciseId, report.id]);
-
-            // Get professor email and send notification
-            try {
-                const profResult = await db.query('SELECT email, username FROM users WHERE id = $1', [professorId]);
-                if (profResult.rows.length > 0) {
-                    const prof = profResult.rows[0];
-                    await sendPlagiarismAlertEmail(
-                        prof.email,
-                        prof.username,
-                        exercise.course_title,
-                        exercise.exercise_title,
-                        flaggedPairs.length,
-                        maxSimilarity,
-                        report.id
-                    );
-                }
-            } catch (emailErr) {
-                console.error('Failed to send plagiarism alert email:', emailErr.message);
-            }
-        }
-
-        // Build response with enriched match data
         const enrichedMatches = flaggedPairs.map(pair => ({
             userA: { id: pair.submissionA.user_id, username: pair.submissionA.username },
             userB: { id: pair.submissionB.user_id, username: pair.submissionB.username },
-            submissionAId: pair.submissionA.id,
-            submissionBId: pair.submissionB.id,
-            similarity: pair.similarity,
-            ngramScore: pair.ngramScore,
-            lcsScore: pair.lcsScore,
-            matchingTokens: pair.matchingTokens,
-            totalTokensA: pair.totalTokensA,
-            totalTokensB: pair.totalTokensB,
+            submissionAId: pair.submissionA.id, submissionBId: pair.submissionB.id,
+            similarity: pair.similarity, ngramScore: pair.ngramScore, lcsScore: pair.lcsScore,
+            matchingTokens: pair.matchingTokens, totalTokensA: pair.totalTokensA, totalTokensB: pair.totalTokensB,
         }));
 
         res.json({
-            report: {
-                id: report.id,
-                status: 'completed',
-                totalSubmissions: submissions.length,
-                flaggedPairs: flaggedPairs.length,
-                maxSimilarity,
-                threshold,
-            },
+            report: { id: report.id, status: 'completed', totalSubmissions: submissions.length, flaggedPairs: flaggedPairs.length, maxSimilarity, threshold },
             matches: enrichedMatches,
         });
     } catch (error) {

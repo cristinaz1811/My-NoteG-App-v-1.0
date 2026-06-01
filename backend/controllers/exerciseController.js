@@ -1,8 +1,7 @@
 const db = require('../config/database');
 const { generateHints, generateOptimizationHints, analyzeComplexity } = require('../utils/openaiService');
 const { notifyNewExercise, notifyCourseCompleted, createNotification } = require('../utils/notificationService');
-const { DISTRIBUTED_MODE } = require('../utils/redisClient');
-const { cacheGet, cacheSet, cacheDel } = require('../utils/redisClient');
+const { DISTRIBUTED_MODE, cacheGet, cacheSet, cacheDel } = require('../utils/redisClient');
 
 const getExerciseById = async (req, res) => {
     try {
@@ -251,8 +250,8 @@ const submitSolution = async (req, res) => {
         let results;
 
         if (DISTRIBUTED_MODE) {
-            // Distributed mode: send job to the worker queue
-            const { enqueueExecution, waitForResult } = require('../utils/queueService');
+            // Async: enqueue and return job ID immediately — client polls /jobs/:jobId/result
+            const { enqueueExecution } = require('../utils/queueService');
 
             const job = await enqueueExecution({
                 code,
@@ -264,8 +263,18 @@ const submitSolution = async (req, res) => {
                 userId,
             });
 
-            const jobResult = await waitForResult(job.id, 30000);
-            results = jobResult.results;
+            // Store submission context so getJobResult can finalize it
+            await cacheSet(`job:ctx:${job.id}`, {
+                exerciseId: parseInt(id),
+                userId,
+                code: exercise.is_multi_file && files ? JSON.stringify(files) : code,
+                language,
+                isFirstExercise,
+                requiresEfficiency: exercise.requires_efficiency,
+                courseId: exercise.course_id,
+            }, 3600);
+
+            return res.json({ jobId: job.id, status: 'queued' });
         } else {
             // Local mode: execute directly in-process
             const { executeCode, executeMultiFileCode } = require('../utils/codeExecutor');
@@ -348,6 +357,124 @@ const submitSolution = async (req, res) => {
         });
     } catch (error) {
         console.error('Submit solution error:', error);
+        res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+};
+
+const getJobResult = async (req, res) => {
+    try {
+        const { jobId } = req.params;
+        const userId = req.user.id;
+
+        // Return cached result if already processed
+        const cached = await cacheGet(`job:result:${jobId}`);
+        if (cached) return res.json(cached);
+
+        const { getJobStatus } = require('../utils/queueService');
+        const jobStatus = await getJobStatus(jobId);
+
+        if (jobStatus.status === 'not_found') {
+            return res.status(404).json({ error: 'Job not found' });
+        }
+        if (jobStatus.status === 'waiting') {
+            return res.json({ status: 'queued', position: jobStatus.position, total: jobStatus.total });
+        }
+        if (jobStatus.status === 'active') {
+            return res.json({ status: 'running' });
+        }
+        if (jobStatus.status === 'failed') {
+            return res.status(500).json({ error: 'Execution failed', details: jobStatus.reason });
+        }
+        if (jobStatus.status !== 'completed') {
+            return res.json({ status: jobStatus.status });
+        }
+
+        // Job completed — process and save (idempotent: Redis lock prevents double-save)
+        const lockKey = `job:processing:${jobId}`;
+        const client = require('../utils/redisClient').getRedisClient();
+        if (client) {
+            const locked = await client.set(lockKey, '1', 'NX', 'EX', 60);
+            if (!locked) {
+                // Another request is processing — return running status briefly
+                return res.json({ status: 'running' });
+            }
+        }
+
+        try {
+            const ctx = await cacheGet(`job:ctx:${jobId}`);
+            if (!ctx) return res.status(404).json({ error: 'Job context expired' });
+
+            // Verify this job belongs to the requesting user
+            if (ctx.userId !== userId) return res.status(403).json({ error: 'Forbidden' });
+
+            const execResult = jobStatus.result;
+            const { results, testsPassed, testsTotal } = execResult;
+            const allPassed = testsPassed === testsTotal;
+
+            let score;
+            if (allPassed && ctx.requiresEfficiency) {
+                score = 80;
+            } else {
+                score = (testsPassed / testsTotal) * 100;
+            }
+            const status = allPassed ? 'passed' : 'failed';
+
+            const submissionResult = await db.query(
+                `INSERT INTO submissions (user_id, exercise_id, code, language, status, score, tests_passed, tests_total)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+                [userId, ctx.exerciseId, ctx.code, ctx.language, status, score, testsPassed, testsTotal]
+            );
+
+            const progressCheck = await db.query(
+                'SELECT * FROM user_progress WHERE user_id = $1 AND exercise_id = $2',
+                [userId, ctx.exerciseId]
+            );
+
+            if (progressCheck.rows.length === 0) {
+                const completionStatus = allPassed
+                    ? (ctx.requiresEfficiency ? 'inefficient' : 'completed')
+                    : 'in_progress';
+                await db.query(
+                    `INSERT INTO user_progress (user_id, exercise_id, completed, best_score, attempts, last_attempt_at, completion_status)
+                     VALUES ($1, $2, $3, $4, 1, CURRENT_TIMESTAMP, $5)`,
+                    [userId, ctx.exerciseId, allPassed, score, completionStatus]
+                );
+            } else {
+                const newBestScore = Math.max(progressCheck.rows[0].best_score, score);
+                const currentStatus = progressCheck.rows[0].completion_status;
+                let newStatus = currentStatus;
+                if (allPassed && currentStatus === 'in_progress') {
+                    newStatus = ctx.requiresEfficiency ? 'inefficient' : 'completed';
+                }
+                await db.query(
+                    `UPDATE user_progress
+                     SET completed = $3, best_score = $4, attempts = attempts + 1, last_attempt_at = CURRENT_TIMESTAMP, completion_status = $5
+                     WHERE user_id = $1 AND exercise_id = $2`,
+                    [userId, ctx.exerciseId, allPassed || progressCheck.rows[0].completed, newBestScore, newStatus]
+                );
+            }
+
+            if (allPassed) {
+                notifyCourseCompleted({ studentId: userId, courseId: ctx.courseId });
+            }
+
+            const response = {
+                status: 'completed',
+                submission: submissionResult.rows[0],
+                results,
+                score,
+                testsPassed,
+                testsTotal,
+                isFirstExercise: ctx.isFirstExercise,
+            };
+
+            await cacheSet(`job:result:${jobId}`, response, 3600);
+            return res.json(response);
+        } finally {
+            if (client) await client.del(lockKey);
+        }
+    } catch (error) {
+        console.error('Get job result error:', error);
         res.status(500).json({ error: 'Internal server error', details: error.message });
     }
 };
@@ -1394,6 +1521,7 @@ module.exports = {
     updateExercise,
     deleteExercise,
     submitSolution,
+    getJobResult,
     getUserSubmissions,
     getSubmissionDetail,
     addTestCase,

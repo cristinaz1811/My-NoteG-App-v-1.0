@@ -77,6 +77,7 @@ export const courseService = {
 export const exerciseService = {
     getExerciseById: (id) => api.get(`/exercises/${id}`),
     submitSolution: (id, data) => api.post(`/exercises/${id}/submit`, data),
+    getJobResult: (jobId) => api.get(`/exercises/jobs/${jobId}/result`),
     getUserSubmissions: (exerciseId) => api.get(`/exercises/${exerciseId}/submissions`),
     getUserSubmissionsWithCode: (exerciseId) => api.get(`/exercises/${exerciseId}/submissions`, { params: { includeCode: 'true' } }),
     getSubmissionDetail: (submissionId) => api.get(`/exercises/submissions/${submissionId}/detail`),

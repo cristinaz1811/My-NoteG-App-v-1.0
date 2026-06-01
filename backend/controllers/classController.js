@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const db = require('../config/database');
 const { notifyClassEnrollmentRequest, notifyEnrollmentDecision } = require('../utils/notificationService');
-const { sendEnrollmentRequestEmail, sendEnrollmentDecisionEmail } = require('../utils/emailService');
+const { enqueueEmail } = require('../utils/queueService');
 
 const generateAccessKey = () => crypto.randomBytes(4).toString('hex').toUpperCase();
 
@@ -188,8 +188,7 @@ const requestEnrollment = async (req, res) => {
             notifyClassEnrollmentRequest({
                 studentId: userId, classId, className: class_name, yearName: year_name, faculty,
             }).catch(() => {});
-            sendEnrollmentRequestEmail(professor_email, professor_name, req.user.username, class_name, year_name, faculty)
-                .catch(() => {});
+            enqueueEmail({ type: 'sendEnrollmentRequestEmail', professorEmail: professor_email, professorName: professor_name, studentName: req.user.username, className: class_name, yearName: year_name, faculty }).catch(() => {});
         }
 
         res.status(201).json({ status: 'pending', message: 'Enrollment request sent' });
@@ -246,7 +245,7 @@ const approveEnrollment = async (req, res) => {
         if (info.rows.length > 0) {
             const { class_name, year_name, faculty, student_email, student_name } = info.rows[0];
             notifyEnrollmentDecision({ studentId: parseInt(userId), classId, className: class_name, yearName: year_name, faculty, approved: true }).catch(() => {});
-            sendEnrollmentDecisionEmail(student_email, student_name, class_name, year_name, faculty, true).catch(() => {});
+            enqueueEmail({ type: 'sendEnrollmentDecisionEmail', studentEmail: student_email, studentName: student_name, className: class_name, yearName: year_name, faculty, approved: true }).catch(() => {});
         }
 
         res.json({ message: 'Approved', enrollment: result.rows[0] });
@@ -282,7 +281,7 @@ const rejectEnrollment = async (req, res) => {
         if (info.rows.length > 0) {
             const { class_name, year_name, faculty, student_email, student_name } = info.rows[0];
             notifyEnrollmentDecision({ studentId: parseInt(userId), classId, className: class_name, yearName: year_name, faculty, approved: false }).catch(() => {});
-            sendEnrollmentDecisionEmail(student_email, student_name, class_name, year_name, faculty, false).catch(() => {});
+            enqueueEmail({ type: 'sendEnrollmentDecisionEmail', studentEmail: student_email, studentName: student_name, className: class_name, yearName: year_name, faculty, approved: false }).catch(() => {});
         }
 
         res.json({ message: 'Rejected' });

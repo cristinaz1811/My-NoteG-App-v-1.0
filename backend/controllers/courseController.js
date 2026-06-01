@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const db = require('../config/database');
 const { notifyNewChapter, notifyNewEnrollment } = require('../utils/notificationService');
 const { enrollApprovedMembersInCourse } = require('./classController');
+const { cacheGet, cacheSet, cacheDel } = require('../utils/redisClient');
 
 // Generate a random enrollment code (6 alphanumeric characters)
 const generateEnrollmentCode = () => {
@@ -12,6 +13,10 @@ const getAllCourses = async (req, res) => {
     try {
         const userId = req.user?.id || null;
         const userRole = req.user?.role || null;
+
+        const cacheKey = userId ? `courses:user:${userId}` : 'courses:public';
+        const cached = await cacheGet(cacheKey);
+        if (cached) return res.json(cached);
 
         let result;
         if (userRole === 'professor' && userId) {
@@ -51,6 +56,7 @@ const getAllCourses = async (req, res) => {
             `, [userId]);
         }
 
+        await cacheSet(cacheKey, result.rows, 120);
         res.json(result.rows);
     } catch (error) {
         console.error('Get courses error:', error);
@@ -61,6 +67,10 @@ const getAllCourses = async (req, res) => {
 const getCourseById = async (req, res) => {
     try {
         const { id } = req.params;
+
+        const cacheKey = `course:${id}`;
+        const cached = await cacheGet(cacheKey);
+        if (cached) return res.json(cached);
 
         // Get course with all details including class/year
         const courseResult = await db.query(
@@ -132,13 +142,15 @@ const getCourseById = async (req, res) => {
             ORDER BY l.order_index, l.id
         `, [id]);
 
-        res.json({
+        const courseData = {
             ...courseResult.rows[0],
             chapters: chaptersResult.rows,
             unassignedExercises: unassignedExercises.rows,
             exercises: allExercises.rows,
             lectures: lecturesResult.rows,
-        });
+        };
+        await cacheSet(`course:${id}`, courseData, 300);
+        res.json(courseData);
     } catch (error) {
         console.error('Get course error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -172,6 +184,8 @@ const createCourse = async (req, res) => {
             await enrollApprovedMembersInCourse(result.rows[0].id, class_id);
         }
 
+        await cacheDel(`courses:user:${createdBy}`);
+        await cacheDel('courses:public');
         res.status(201).json(result.rows[0]);
     } catch (error) {
         console.error('Create course error:', error);
@@ -218,8 +232,8 @@ const enrollInCourse = async (req, res) => {
             [userId, courseId]
         );
 
-        // Notify the course professor about the new enrollment
         notifyNewEnrollment({ studentId: userId, courseId: parseInt(courseId) });
+        await cacheDel(`courses:user:${userId}`);
 
         res.status(201).json(result.rows[0]);
     } catch (error) {
@@ -275,6 +289,7 @@ const unenrollFromCourse = async (req, res) => {
             [userId, courseId]
         );
 
+        await cacheDel(`courses:user:${userId}`);
         res.json({ message: 'Successfully unenrolled from course' });
     } catch (error) {
         console.error('Unenroll course error:', error);
@@ -668,6 +683,9 @@ const updateCourse = async (req, res) => {
             await enrollApprovedMembersInCourse(parseInt(id), finalClassId);
         }
 
+        await cacheDel(`course:${id}`);
+        await cacheDel(`courses:user:${userId}`);
+        await cacheDel('courses:public');
         res.json(result.rows[0]);
     } catch (error) {
         console.error('Update course error:', error);
@@ -696,6 +714,9 @@ const deleteCourse = async (req, res) => {
 
         // chapters, exercises, submissions, user_progress all cascade from courses
         await db.query('DELETE FROM courses WHERE id = $1', [id]);
+        await cacheDel(`course:${id}`);
+        await cacheDel(`courses:user:${userId}`);
+        await cacheDel('courses:public');
         res.json({ message: 'Course deleted successfully' });
     } catch (error) {
         console.error('Delete course error:', error);

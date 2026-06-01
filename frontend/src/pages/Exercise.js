@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { exerciseService, notificationService } from '../services/api';
 import { AuthContext } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import SqlExercise from '../components/SqlExercise';
 import SubmissionHistory from '../components/SubmissionHistory';
 
@@ -10,6 +11,7 @@ const Exercise = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const { user } = useContext(AuthContext);
+    const { addMessageListener } = useNotifications();
     const [exercise, setExercise] = useState(null);
     const [code, setCode] = useState('');
     const [results, setResults] = useState(null);
@@ -54,6 +56,10 @@ const Exercise = () => {
     const [timerExpired, setTimerExpired] = useState(false);
     const [showTimerStartModal, setShowTimerStartModal] = useState(false);
     const timerIntervalRef = useRef(null);
+
+    // Queue state (async distributed mode)
+    const [queueStatus, setQueueStatus] = useState(null); // { jobId, status, position, total }
+    const pollIntervalRef = useRef(null);
 
     // Enrollment prompt state
     const [showEnrollmentPrompt, setShowEnrollmentPrompt] = useState(false);
@@ -141,6 +147,106 @@ const Exercise = () => {
             if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
         };
     }, []);
+
+    // Cleanup poll interval on unmount
+    useEffect(() => {
+        return () => {
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        };
+    }, []);
+
+    // Apply job result data (shared by WS path and poll path)
+    const applyJobResult = useCallback(async (data) => {
+        if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+        }
+        setQueueStatus(null);
+        setSubmitting(false);
+        setResults(data);
+
+        const { score, testsPassed, testsTotal, isFirstExercise } = data;
+        const allPassed = testsPassed === testsTotal;
+
+        if (allPassed && isFirstExercise && !exercise?.isEnrolled) {
+            setShowEnrollmentPrompt(true);
+        }
+        setExercise(prev => {
+            if (!prev) return prev;
+            const prevStatus = prev.userProgress?.completion_status || 'in_progress';
+            let newStatus = prevStatus;
+            if (allPassed && prevStatus === 'in_progress') {
+                newStatus = prev.requires_efficiency ? 'inefficient' : 'completed';
+            }
+            return {
+                ...prev,
+                userProgress: {
+                    ...prev.userProgress,
+                    best_score: Math.max(prev.userProgress?.best_score || 0, score),
+                    attempts: (prev.userProgress?.attempts || 0) + 1,
+                    completed: allPassed || prev.userProgress?.completed,
+                    completion_status: newStatus,
+                }
+            };
+        });
+        if (showAIPanel) setTimeout(() => loadHintsStatus(), 500);
+        historyRefreshRef.current += 1;
+
+        if (testsPassed === testsTotal && code && code.trim().length > 0) {
+            setAnalyzingComplexity(true);
+            try {
+                const complexityRes = await exerciseService.getComplexityAnalysis(id, { code });
+                setComplexity(complexityRes.data);
+                if (!showAIPanel) setShowAIPanel(true);
+                if (complexityRes.data.isOptimal) {
+                    setExercise(prev => ({
+                        ...prev,
+                        userProgress: {
+                            ...prev.userProgress,
+                            completion_status: 'completed',
+                            best_score: prev.requires_efficiency ? 100 : prev.userProgress?.best_score,
+                            efficiency_star: !prev.requires_efficiency ? true : prev.userProgress?.efficiency_star,
+                        }
+                    }));
+                    setHintMode('solved');
+                } else {
+                    setHintMode('optimizing');
+                    setHints([{ number: 1, text: null, unlocked: false }, { number: 2, text: null, unlocked: false }, { number: 3, text: null, unlocked: false }]);
+                    setHintsUnlocked(0);
+                    setTimeout(() => loadHintsStatus('optimizing'), 500);
+                }
+            } catch (err) {
+                console.error('Auto complexity analysis failed:', err);
+            } finally {
+                setAnalyzingComplexity(false);
+            }
+        } else if (testsPassed !== testsTotal) {
+            setComplexity(null);
+            if (hintMode !== 'solving') {
+                setHintMode('solving');
+                setHints([{ number: 1, text: null, unlocked: false }, { number: 2, text: null, unlocked: false }, { number: 3, text: null, unlocked: false }]);
+                setHintsUnlocked(0);
+                setTimeout(() => loadHintsStatus('solving'), 500);
+            }
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [exercise, showAIPanel, hintMode, code, id]);
+
+    // Listen for execution_complete WebSocket event
+    useEffect(() => {
+        const removeListener = addMessageListener('execution_complete', async (msg) => {
+            if (!queueStatus || msg.jobId !== queueStatus.jobId) return;
+            try {
+                const res = await exerciseService.getJobResult(msg.jobId);
+                if (res.data.status === 'completed') {
+                    await applyJobResult(res.data);
+                }
+            } catch (err) {
+                console.error('[WS] Failed to fetch job result:', err);
+            }
+        });
+        return removeListener;
+    }, [addMessageListener, queueStatus, applyJobResult]);
 
     // Cleanup editor on unmount
     useEffect(() => {
@@ -361,91 +467,40 @@ const Exercise = () => {
             }
             
             const response = await exerciseService.submitSolution(id, submitData);
-            setResults(response.data);
-            
-            const { score, testsPassed, testsTotal, isFirstExercise } = response.data;
-            const allPassed = testsPassed === testsTotal;
 
-            // Show enrollment prompt if passed the first exercise and not enrolled
-            if (allPassed && isFirstExercise && !exercise.isEnrolled) {
-                setShowEnrollmentPrompt(true);
-            }
-            setExercise(prev => {
-                const prevStatus = prev.userProgress?.completion_status || 'in_progress';
-                let newStatus = prevStatus;
-                if (allPassed && prevStatus === 'in_progress') {
-                    newStatus = prev.requires_efficiency ? 'inefficient' : 'completed';
-                }
-                return {
-                    ...prev,
-                    userProgress: {
-                        ...prev.userProgress,
-                        best_score: Math.max(prev.userProgress?.best_score || 0, score),
-                        attempts: (prev.userProgress?.attempts || 0) + 1,
-                        completed: allPassed || prev.userProgress?.completed,
-                        completion_status: newStatus,
+            // Async mode: server returned a jobId — poll for result
+            if (response.data.jobId) {
+                const { jobId } = response.data;
+                setQueueStatus({ jobId, status: 'queued', position: null, total: null });
+
+                pollIntervalRef.current = setInterval(async () => {
+                    try {
+                        const res = await exerciseService.getJobResult(jobId);
+                        const { status, position, total } = res.data;
+                        if (status === 'queued' || status === 'waiting') {
+                            setQueueStatus({ jobId, status: 'queued', position, total });
+                        } else if (status === 'running' || status === 'active') {
+                            setQueueStatus({ jobId, status: 'running', position: null, total: null });
+                        } else if (status === 'completed') {
+                            clearInterval(pollIntervalRef.current);
+                            pollIntervalRef.current = null;
+                            await applyJobResult(res.data);
+                        } else if (status === 'failed') {
+                            clearInterval(pollIntervalRef.current);
+                            pollIntervalRef.current = null;
+                            setQueueStatus(null);
+                            setSubmitting(false);
+                            setResults({ score: 0, testsPassed: 0, testsTotal: 0, results: [{ passed: false, input: '', expected: '', actual: '', error: res.data.details || 'Execution failed' }] });
+                        }
+                    } catch (err) {
+                        console.error('Poll error:', err);
                     }
-                };
-            });
-
-            // Refresh hints status after each submission (new hints may unlock)
-            if (showAIPanel) {
-                setTimeout(() => loadHintsStatus(), 500);
+                }, 1500);
+                return; // don't fall through to the old sync result handling
             }
 
-            // Refresh history panel
-            historyRefreshRef.current += 1;
-
-            // Auto-analyze complexity only when ALL tests pass
-            if (testsPassed === testsTotal && code && code.trim().length > 0) {
-                setAnalyzingComplexity(true);
-                try {
-                    const complexityRes = await exerciseService.getComplexityAnalysis(id, { code });
-                    setComplexity(complexityRes.data);
-                    if (!showAIPanel) setShowAIPanel(true);
-
-                    if (complexityRes.data.isOptimal) {
-                        // Optimal! Update status accordingly
-                        setExercise(prev => ({
-                            ...prev,
-                            userProgress: {
-                                ...prev.userProgress,
-                                completion_status: 'completed',
-                                best_score: prev.requires_efficiency ? 100 : prev.userProgress?.best_score,
-                                efficiency_star: !prev.requires_efficiency ? true : prev.userProgress?.efficiency_star,
-                            }
-                        }));
-                        setHintMode('solved');
-                    } else if (!complexityRes.data.isOptimal) {
-                        // Not optimal — switch to optimization hints
-                        setHintMode('optimizing');
-                        setHints([
-                            { number: 1, text: null, unlocked: false },
-                            { number: 2, text: null, unlocked: false },
-                            { number: 3, text: null, unlocked: false },
-                        ]);
-                        setHintsUnlocked(0);
-                        setTimeout(() => loadHintsStatus('optimizing'), 500);
-                    }
-                } catch (err) {
-                    console.error('Auto complexity analysis failed:', err);
-                } finally {
-                    setAnalyzingComplexity(false);
-                }
-            } else if (testsPassed !== testsTotal) {
-                // Reset complexity and go back to solving mode
-                setComplexity(null);
-                if (hintMode !== 'solving') {
-                    setHintMode('solving');
-                    setHints([
-                        { number: 1, text: null, unlocked: false },
-                        { number: 2, text: null, unlocked: false },
-                        { number: 3, text: null, unlocked: false },
-                    ]);
-                    setHintsUnlocked(0);
-                    setTimeout(() => loadHintsStatus('solving'), 500);
-                }
-            }
+            // Sync mode (local/non-distributed): result is immediate
+            await applyJobResult(response.data);
         } catch (error) {
             console.error('Error submitting solution:', error);
             // Handle timed expiry from backend
@@ -789,6 +844,15 @@ const Exercise = () => {
                         >
                             {timerExpired ? (
                                 'Time Expired'
+                            ) : submitting && queueStatus ? (
+                                <span className="flex items-center gap-2">
+                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                    {queueStatus.status === 'queued' && queueStatus.position
+                                        ? `In queue: #${queueStatus.position}${queueStatus.total ? ` of ${queueStatus.total}` : ''}`
+                                        : queueStatus.status === 'queued'
+                                        ? 'Queued...'
+                                        : 'Running...'}
+                                </span>
                             ) : submitting ? (
                                 <span className="flex items-center gap-2">
                                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>

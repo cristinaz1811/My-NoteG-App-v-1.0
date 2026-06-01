@@ -2,7 +2,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const db = require('../config/database');
-const { sendVerificationEmail, sendPasswordResetEmail } = require('../utils/emailService');
+const { enqueueEmail } = require('../utils/queueService');
+const { blacklistToken, DISTRIBUTED_MODE } = require('../utils/redisClient');
 const swot = require('swot-node');
 
 // Validate that an email is from an academic institution
@@ -66,13 +67,10 @@ const register = async (req, res) => {
 
         const user = result.rows[0];
 
-        // Send verification email
-        try {
-            await sendVerificationEmail(email, username, verificationToken);
-        } catch (emailError) {
-            console.error('Failed to send verification email:', emailError);
-            // Don't fail registration if email fails - user can request resend
-        }
+        // Queue verification email (non-blocking)
+        enqueueEmail({ type: 'sendVerificationEmail', email, username, verificationToken }).catch(err =>
+            console.error('Failed to queue verification email:', err.message)
+        );
 
         // Generate token (but user needs to verify email before full access)
         const token = jwt.sign(
@@ -331,8 +329,9 @@ const resendVerificationEmail = async (req, res) => {
             [verificationToken, verificationExpires, user.id]
         );
 
-        // Send verification email
-        await sendVerificationEmail(email, user.username, verificationToken);
+        enqueueEmail({ type: 'sendVerificationEmail', email, username: user.username, verificationToken }).catch(err =>
+            console.error('Failed to queue verification email:', err.message)
+        );
 
         res.json({ message: 'Verification email sent' });
     } catch (error) {
@@ -377,8 +376,9 @@ const forgotPassword = async (req, res) => {
             [resetToken, resetExpires, user.id]
         );
 
-        // Send password reset email
-        await sendPasswordResetEmail(email, user.username, resetToken);
+        enqueueEmail({ type: 'sendPasswordResetEmail', email, username: user.username, resetToken }).catch(err =>
+            console.error('Failed to queue password reset email:', err.message)
+        );
 
         res.json({ message: 'If an account exists, a password reset email will be sent' });
     } catch (error) {
@@ -664,9 +664,28 @@ const checkUsername = async (req, res) => {
     }
 };
 
+const logout = async (req, res) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        if (token && DISTRIBUTED_MODE) {
+            // Decode to get expiry without re-verifying (already verified by authMiddleware)
+            const decoded = jwt.decode(token);
+            if (decoded?.exp) {
+                const ttl = decoded.exp - Math.floor(Date.now() / 1000);
+                if (ttl > 0) await blacklistToken(token, ttl);
+            }
+        }
+        res.json({ message: 'Logged out successfully' });
+    } catch (error) {
+        console.error('Logout error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 module.exports = {
     register,
     login,
+    logout,
     getProfile,
     uploadAvatar,
     updateProfile,

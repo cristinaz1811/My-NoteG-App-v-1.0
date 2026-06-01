@@ -6,6 +6,7 @@ const {
     updateExercise,
     deleteExercise,
     submitSolution,
+    getJobResult,
     getUserSubmissions,
     getSubmissionDetail,
     addTestCase,
@@ -30,6 +31,7 @@ const { authMiddleware, optionalAuth, isAdmin, isProfessor } = require('../middl
 
 // Student routes - allow demo access to first exercise with optional auth
 router.get('/submissions/:submissionId/detail', authMiddleware, getSubmissionDetail);
+router.get('/jobs/:jobId/result', authMiddleware, getJobResult);
 router.get('/:id', optionalAuth, getExerciseById);
 router.post('/:id/submit', authMiddleware, submitSolution);
 router.get('/:exerciseId/submissions', authMiddleware, getUserSubmissions);

@@ -3,6 +3,7 @@ const router = express.Router();
 const {
     register,
     login,
+    logout,
     getProfile,
     uploadAvatar,
     updateProfile,
@@ -20,6 +21,7 @@ const { authMiddleware } = require('../middleware/auth');
 // Basic auth routes
 router.post('/register', register);
 router.post('/login', login);
+router.post('/logout', authMiddleware, logout);
 router.get('/profile', authMiddleware, getProfile);
 
 // Profile update routes

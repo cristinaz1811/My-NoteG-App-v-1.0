@@ -257,10 +257,27 @@ const sendEnrollmentDecisionEmail = async (studentEmail, studentName, className,
     return transporter.sendMail(mailOptions);
 };
 
+// Dispatcher used by the email worker — each function receives its payload as an object
+const sendEmail = async ({ type, ...payload }) => {
+    const fns = {
+        sendVerificationEmail: ({ email, username, verificationToken }) => sendVerificationEmail(email, username, verificationToken),
+        sendPasswordResetEmail: ({ email, username, resetToken }) => sendPasswordResetEmail(email, username, resetToken),
+        sendPlagiarismAlertEmail: ({ email, username, courseTitle, exerciseTitle, flaggedPairs, maxSimilarity, reportId }) =>
+            sendPlagiarismAlertEmail(email, username, courseTitle, exerciseTitle, flaggedPairs, maxSimilarity, reportId),
+        sendEnrollmentRequestEmail: ({ professorEmail, professorName, studentName, className, yearName, faculty }) =>
+            sendEnrollmentRequestEmail(professorEmail, professorName, studentName, className, yearName, faculty),
+        sendEnrollmentDecisionEmail: ({ studentEmail, studentName, className, yearName, faculty, approved }) =>
+            sendEnrollmentDecisionEmail(studentEmail, studentName, className, yearName, faculty, approved),
+    };
+    if (!fns[type]) throw new Error(`Unknown email type: ${type}`);
+    return fns[type](payload);
+};
+
 module.exports = {
     sendVerificationEmail,
     sendPasswordResetEmail,
     sendPlagiarismAlertEmail,
     sendEnrollmentRequestEmail,
     sendEnrollmentDecisionEmail,
+    sendEmail,
 };

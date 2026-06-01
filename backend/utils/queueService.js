@@ -2,8 +2,12 @@ const { Queue, Worker, QueueEvents } = require('bullmq');
 const { getRedisClient, DISTRIBUTED_MODE } = require('./redisClient');
 
 const QUEUE_NAME = 'code-execution';
+const EMAIL_QUEUE_NAME = 'email';
+const PLAGIARISM_QUEUE_NAME = 'plagiarism';
 
 let executionQueue = null;
+let emailQueue = null;
+let plagiarismQueue = null;
 let queueEvents = null;
 
 /**
@@ -70,6 +74,32 @@ const enqueueExecution = async (payload) => {
     });
 
     return job;
+};
+
+/**
+ * Get the status and queue position of a job.
+ */
+const getJobStatus = async (jobId) => {
+    const queue = getQueue();
+    if (!queue) throw new Error('Queue not available');
+
+    const job = await queue.getJob(jobId);
+    if (!job) return { status: 'not_found' };
+
+    const state = await job.getState();
+
+    if (state === 'waiting' || state === 'delayed') {
+        const waitingJobs = await queue.getWaiting();
+        const position = waitingJobs.findIndex(j => j.id === jobId) + 1;
+        const total = waitingJobs.length;
+        return { status: 'waiting', position: position || total, total };
+    }
+
+    if (state === 'active') return { status: 'active' };
+    if (state === 'completed') return { status: 'completed', result: job.returnvalue };
+    if (state === 'failed') return { status: 'failed', reason: job.failedReason };
+
+    return { status: state };
 };
 
 /**
@@ -159,11 +189,89 @@ const createWorker = (processFn, concurrency = 3) => {
     return worker;
 };
 
+// ── Email queue ───────────────────────────────────────────────────────────────
+
+const getEmailQueue = () => {
+    if (!DISTRIBUTED_MODE) return null;
+    if (!emailQueue) {
+        emailQueue = new Queue(EMAIL_QUEUE_NAME, {
+            connection: { host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379'), maxRetriesPerRequest: null },
+            defaultJobOptions: {
+                removeOnComplete: { age: 3600 },
+                removeOnFail: { age: 86400 },
+                attempts: 3,
+                backoff: { type: 'exponential', delay: 2000 },
+            },
+        });
+        emailQueue.on('error', (err) => console.error('[EmailQueue] Error:', err.message));
+    }
+    return emailQueue;
+};
+
+const enqueueEmail = async (payload) => {
+    const queue = getEmailQueue();
+    if (!queue) {
+        // Fallback: send inline when not in distributed mode
+        const emailService = require('./emailService');
+        return emailService.sendEmail(payload);
+    }
+    return queue.add('send', payload);
+};
+
+const createEmailWorker = (processFn) => {
+    const worker = new Worker(EMAIL_QUEUE_NAME, processFn, {
+        connection: { host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379'), maxRetriesPerRequest: null },
+        concurrency: 5,
+    });
+    worker.on('completed', (job) => console.log(`[EmailWorker] Job ${job.id} sent`));
+    worker.on('failed', (job, err) => console.error(`[EmailWorker] Job ${job?.id} failed:`, err.message));
+    worker.on('error', (err) => console.error('[EmailWorker] Error:', err.message));
+    return worker;
+};
+
+// ── Plagiarism queue ──────────────────────────────────────────────────────────
+
+const getPlagiarismQueue = () => {
+    if (!DISTRIBUTED_MODE) return null;
+    if (!plagiarismQueue) {
+        plagiarismQueue = new Queue(PLAGIARISM_QUEUE_NAME, {
+            connection: { host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379'), maxRetriesPerRequest: null },
+            defaultJobOptions: {
+                removeOnComplete: { age: 3600 },
+                removeOnFail: { age: 86400 },
+                attempts: 2,
+                backoff: { type: 'exponential', delay: 2000 },
+            },
+        });
+        plagiarismQueue.on('error', (err) => console.error('[PlagiarismQueue] Error:', err.message));
+    }
+    return plagiarismQueue;
+};
+
+const enqueuePlagiarism = async (payload) => {
+    const queue = getPlagiarismQueue();
+    if (!queue) throw new Error('Queue not available — not in distributed mode');
+    return queue.add('scan', payload);
+};
+
+const createPlagiarismWorker = (processFn) => {
+    const worker = new Worker(PLAGIARISM_QUEUE_NAME, processFn, {
+        connection: { host: process.env.REDIS_HOST || 'localhost', port: parseInt(process.env.REDIS_PORT || '6379'), maxRetriesPerRequest: null },
+        concurrency: 2,
+    });
+    worker.on('completed', (job) => console.log(`[PlagiarismWorker] Job ${job.id} done`));
+    worker.on('failed', (job, err) => console.error(`[PlagiarismWorker] Job ${job?.id} failed:`, err.message));
+    worker.on('error', (err) => console.error('[PlagiarismWorker] Error:', err.message));
+    return worker;
+};
+
 /**
  * Graceful shutdown
  */
 const closeQueue = async () => {
     if (executionQueue) await executionQueue.close();
+    if (emailQueue) await emailQueue.close();
+    if (plagiarismQueue) await plagiarismQueue.close();
     if (queueEvents) await queueEvents.close();
 };
 
@@ -171,7 +279,12 @@ module.exports = {
     getQueue,
     getQueueEvents,
     enqueueExecution,
+    getJobStatus,
     waitForResult,
     createWorker,
+    enqueueEmail,
+    createEmailWorker,
+    enqueuePlagiarism,
+    createPlagiarismWorker,
     closeQueue,
 };
