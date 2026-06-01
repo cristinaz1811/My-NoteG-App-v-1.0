@@ -90,6 +90,28 @@ const cacheDel = async (key) => {
     }
 };
 
+const blacklistToken = async (token, ttlSeconds) => {
+    const client = getRedisClient();
+    if (!client) return;
+    try {
+        await client.set(`blacklist:${token}`, '1', 'EX', ttlSeconds);
+    } catch (err) {
+        console.error('[Redis] Token blacklist error:', err.message);
+    }
+};
+
+const isTokenBlacklisted = async (token) => {
+    const client = getRedisClient();
+    if (!client) return false;
+    try {
+        const val = await client.get(`blacklist:${token}`);
+        return val === '1';
+    } catch (err) {
+        console.error('[Redis] Token blacklist check error:', err.message);
+        return false;
+    }
+};
+
 /**
  * Graceful shutdown
  */
@@ -104,6 +126,8 @@ module.exports = {
     cacheGet,
     cacheSet,
     cacheDel,
+    blacklistToken,
+    isTokenBlacklisted,
     closeRedis,
     DISTRIBUTED_MODE,
 };

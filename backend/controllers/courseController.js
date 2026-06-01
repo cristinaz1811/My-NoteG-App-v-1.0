@@ -1,6 +1,8 @@
 const crypto = require('crypto');
 const db = require('../config/database');
 const { notifyNewChapter, notifyNewEnrollment } = require('../utils/notificationService');
+const { enrollApprovedMembersInCourse } = require('./classController');
+const { cacheGet, cacheSet, cacheDel } = require('../utils/redisClient');
 
 // Generate a random enrollment code (6 alphanumeric characters)
 const generateEnrollmentCode = () => {
@@ -9,24 +11,52 @@ const generateEnrollmentCode = () => {
 
 const getAllCourses = async (req, res) => {
     try {
-        // Public listing: show all public courses. Private courses are only shown if the user is the creator or enrolled.
         const userId = req.user?.id || null;
+        const userRole = req.user?.role || null;
 
-        const result = await db.query(`
-            SELECT c.*, u.username as creator_name,
-                   COUNT(DISTINCT e.id) as exercise_count,
-                   COUNT(DISTINCT ch.id) as chapter_count
-            FROM courses c
-            LEFT JOIN users u ON c.created_by = u.id
-            LEFT JOIN exercises e ON c.id = e.course_id
-            LEFT JOIN chapters ch ON c.id = ch.course_id
-            WHERE c.is_private = false
-               OR c.created_by = $1
-               OR EXISTS (SELECT 1 FROM enrollments en WHERE en.course_id = c.id AND en.user_id = $1)
-            GROUP BY c.id, u.username
-            ORDER BY c.created_at DESC
-        `, [userId]);
+        const cacheKey = userId ? `courses:user:${userId}` : 'courses:public';
+        const cached = await cacheGet(cacheKey);
+        if (cached) return res.json(cached);
 
+        let result;
+        if (userRole === 'professor' && userId) {
+            // Professors see only their standalone public courses here.
+            // Class-tied courses are managed through the class/year system.
+            result = await db.query(`
+                SELECT c.*, u.username as creator_name,
+                       COUNT(DISTINCT e.id) as exercise_count,
+                       COUNT(DISTINCT ch.id) as chapter_count
+                FROM courses c
+                LEFT JOIN users u ON c.created_by = u.id
+                LEFT JOIN exercises e ON c.id = e.course_id
+                LEFT JOIN chapters ch ON c.id = ch.course_id
+                WHERE c.created_by = $1
+                  AND c.class_id IS NULL
+                GROUP BY c.id, u.username
+                ORDER BY c.created_at DESC
+            `, [userId]);
+        } else {
+            // Students see standalone public courses only.
+            // Courses tied to a class are accessed through the class/year system.
+            result = await db.query(`
+                SELECT c.*, u.username as creator_name,
+                       COUNT(DISTINCT e.id) as exercise_count,
+                       COUNT(DISTINCT ch.id) as chapter_count
+                FROM courses c
+                LEFT JOIN users u ON c.created_by = u.id
+                LEFT JOIN exercises e ON c.id = e.course_id
+                LEFT JOIN chapters ch ON c.id = ch.course_id
+                WHERE c.class_id IS NULL
+                  AND (
+                      c.is_private = false
+                      OR EXISTS (SELECT 1 FROM enrollments en WHERE en.course_id = c.id AND en.user_id = $1)
+                  )
+                GROUP BY c.id, u.username
+                ORDER BY c.created_at DESC
+            `, [userId]);
+        }
+
+        await cacheSet(cacheKey, result.rows, 120);
         res.json(result.rows);
     } catch (error) {
         console.error('Get courses error:', error);
@@ -38,11 +68,19 @@ const getCourseById = async (req, res) => {
     try {
         const { id } = req.params;
 
-        // Get course with all details
+        const cacheKey = `course:${id}`;
+        const cached = await cacheGet(cacheKey);
+        if (cached) return res.json(cached);
+
+        // Get course with all details including class/year
         const courseResult = await db.query(
-            `SELECT c.*, u.username as creator_name 
-             FROM courses c 
-             LEFT JOIN users u ON c.created_by = u.id 
+            `SELECT c.*, u.username as creator_name,
+                    cl.name AS class_name, cl.id AS class_id,
+                    cy.name AS year_name, cy.id AS year_id
+             FROM courses c
+             LEFT JOIN users u ON c.created_by = u.id
+             LEFT JOIN classes cl ON c.class_id = cl.id
+             LEFT JOIN college_years cy ON cl.year_id = cy.id
              WHERE c.id = $1`,
             [id]
         );
@@ -82,19 +120,37 @@ const getCourseById = async (req, res) => {
 
         // Get all exercises flat (for backward compatibility)
         const allExercises = await db.query(
-            `SELECT id, title, description, difficulty, language 
-             FROM exercises 
-             WHERE course_id = $1 
+            `SELECT id, title, description, difficulty, language
+             FROM exercises
+             WHERE course_id = $1
              ORDER BY order_index, id`,
             [id]
         );
 
-        res.json({
+        // Get lectures with page and media counts
+        const lecturesResult = await db.query(`
+            SELECT l.*,
+                   ch.title AS chapter_title,
+                   COUNT(DISTINCT lp.id)::int AS page_count,
+                   COUNT(DISTINCT lm.id)::int AS media_count
+            FROM lectures l
+            LEFT JOIN chapters ch ON ch.id = l.chapter_id
+            LEFT JOIN lecture_pages lp ON lp.lecture_id = l.id
+            LEFT JOIN lecture_media lm ON lm.lecture_id = l.id
+            WHERE l.course_id = $1
+            GROUP BY l.id, ch.title
+            ORDER BY l.order_index, l.id
+        `, [id]);
+
+        const courseData = {
             ...courseResult.rows[0],
             chapters: chaptersResult.rows,
             unassignedExercises: unassignedExercises.rows,
-            exercises: allExercises.rows, // Keep for backward compatibility
-        });
+            exercises: allExercises.rows,
+            lectures: lecturesResult.rows,
+        };
+        await cacheSet(`course:${id}`, courseData, 300);
+        res.json(courseData);
     } catch (error) {
         console.error('Get course error:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -103,7 +159,7 @@ const getCourseById = async (req, res) => {
 
 const createCourse = async (req, res) => {
     try {
-        const { title, description, difficulty, long_description, estimated_hours, tags, learning_objectives, language, is_private } = req.body;
+        const { title, description, difficulty, long_description, estimated_hours, tags, learning_objectives, language, is_private, class_id, order_index } = req.body;
         const createdBy = req.user.id;
 
         // Generate enrollment code if course is private
@@ -119,11 +175,17 @@ const createCourse = async (req, res) => {
         }
 
         const result = await db.query(
-            `INSERT INTO courses (title, description, difficulty, created_by, long_description, estimated_hours, tags, learning_objectives, language, is_private, enrollment_code) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-            [title, description, difficulty, createdBy, long_description || null, estimated_hours || 1, tags || [], learning_objectives || [], language || 'javascript', is_private || false, enrollmentCode]
+            `INSERT INTO courses (title, description, difficulty, created_by, long_description, estimated_hours, tags, learning_objectives, language, is_private, enrollment_code, class_id, order_index)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+            [title, description, difficulty, createdBy, long_description || null, estimated_hours || 1, tags || [], learning_objectives || [], language || 'javascript', is_private || false, enrollmentCode, class_id || null, order_index || 0]
         );
 
+        if (class_id) {
+            await enrollApprovedMembersInCourse(result.rows[0].id, class_id);
+        }
+
+        await cacheDel(`courses:user:${createdBy}`);
+        await cacheDel('courses:public');
         res.status(201).json(result.rows[0]);
     } catch (error) {
         console.error('Create course error:', error);
@@ -170,8 +232,8 @@ const enrollInCourse = async (req, res) => {
             [userId, courseId]
         );
 
-        // Notify the course professor about the new enrollment
         notifyNewEnrollment({ studentId: userId, courseId: parseInt(courseId) });
+        await cacheDel(`courses:user:${userId}`);
 
         res.status(201).json(result.rows[0]);
     } catch (error) {
@@ -218,7 +280,7 @@ const unenrollFromCourse = async (req, res) => {
             [userId, courseId]
         );
         await db.query(
-            'DELETE FROM time_sessions WHERE user_id = $1 AND course_id = $2',
+            'DELETE FROM course_time_sessions WHERE user_id = $1 AND course_id = $2',
             [userId, courseId]
         );
         // Finally, delete the enrollment itself
@@ -227,6 +289,7 @@ const unenrollFromCourse = async (req, res) => {
             [userId, courseId]
         );
 
+        await cacheDel(`courses:user:${userId}`);
         res.json({ message: 'Successfully unenrolled from course' });
     } catch (error) {
         console.error('Unenroll course error:', error);
@@ -283,21 +346,20 @@ const getEnrolledCourseDetails = async (req, res) => {
         const userId = req.user.id;
         const { courseId } = req.params;
 
-        // Check enrollment
-        const enrollment = await db.query(
-            'SELECT * FROM enrollments WHERE user_id = $1 AND course_id = $2',
-            [userId, courseId]
-        );
+        // Check enrollment and creator status in parallel
+        const [enrollment, courseResult] = await Promise.all([
+            db.query('SELECT * FROM enrollments WHERE user_id = $1 AND course_id = $2', [userId, courseId]),
+            db.query('SELECT * FROM courses WHERE id = $1', [courseId])
+        ]);
 
-        if (enrollment.rows.length === 0) {
-            return res.status(404).json({ error: 'Not enrolled in this course' });
+        if (courseResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Course not found' });
         }
 
-        // Get course info
-        const courseResult = await db.query(
-            'SELECT * FROM courses WHERE id = $1',
-            [courseId]
-        );
+        const isCreator = courseResult.rows[0].created_by === userId;
+        if (enrollment.rows.length === 0 && !isCreator) {
+            return res.status(404).json({ error: 'Not enrolled in this course' });
+        }
 
         // Get all exercises with user progress
         const exercisesResult = await db.query(`
@@ -337,23 +399,23 @@ const getEnrolledCourseDetails = async (req, res) => {
             LIMIT 50
         `, [userId, courseId]);
 
-        // Get time spent breakdown
+        // Get time spent breakdown (only sessions >= 60s to exclude quick bounces)
         const timeResult = await db.query(`
-            SELECT 
+            SELECT
                 DATE(started_at) as date,
                 SUM(duration) as time_spent
-            FROM time_sessions
-            WHERE user_id = $1 AND course_id = $2 AND duration IS NOT NULL
+            FROM course_time_sessions
+            WHERE user_id = $1 AND course_id = $2 AND duration IS NOT NULL AND duration >= 60
             GROUP BY DATE(started_at)
             ORDER BY date DESC
             LIMIT 30
         `, [userId, courseId]);
 
-        // Calculate total time from time_sessions (this is more accurate than enrollment total)
+        // Calculate total time from course_time_sessions (only sessions >= 60s)
         const totalTimeResult = await db.query(`
             SELECT COALESCE(SUM(duration), 0) as total_time
-            FROM time_sessions
-            WHERE user_id = $1 AND course_id = $2 AND duration IS NOT NULL
+            FROM course_time_sessions
+            WHERE user_id = $1 AND course_id = $2 AND duration IS NOT NULL AND duration >= 60
         `, [userId, courseId]);
         const totalTimeSpent = parseInt(totalTimeResult.rows[0].total_time) || 0;
 
@@ -364,11 +426,30 @@ const getEnrolledCourseDetails = async (req, res) => {
             ? exercisesResult.rows.reduce((sum, ex) => sum + parseFloat(ex.best_score || 0), 0) / exercisesResult.rows.length
             : 0;
 
+        // Get lectures with student progress
+        const lecturesResult = await db.query(`
+            SELECT l.*,
+                   ch.title AS chapter_title,
+                   COUNT(DISTINCT lp.id)::int AS page_count,
+                   COUNT(DISTINCT lm.id)::int AS media_count,
+                   lpr.last_page_seen,
+                   lpr.completed AS lecture_completed
+            FROM lectures l
+            LEFT JOIN chapters ch ON ch.id = l.chapter_id
+            LEFT JOIN lecture_pages lp ON lp.lecture_id = l.id
+            LEFT JOIN lecture_media lm ON lm.lecture_id = l.id
+            LEFT JOIN lecture_progress lpr ON lpr.lecture_id = l.id AND lpr.user_id = $1
+            WHERE l.course_id = $2
+            GROUP BY l.id, ch.title, lpr.last_page_seen, lpr.completed
+            ORDER BY l.order_index, l.id
+        `, [userId, courseId]);
+
         res.json({
             course: courseResult.rows[0],
             enrollment: enrollment.rows[0],
             exercises: exercisesResult.rows,
             submissions: submissionsResult.rows,
+            lectures: lecturesResult.rows,
             timeBreakdown: timeResult.rows,
             stats: {
                 totalAttempts,
@@ -393,27 +474,40 @@ const startTimeSession = async (req, res) => {
         const userId = req.user.id;
         const { courseId } = req.params;
 
-        // Check enrollment
-        const enrollment = await db.query(
-            'SELECT * FROM enrollments WHERE user_id = $1 AND course_id = $2',
-            [userId, courseId]
-        );
+        // Check enrollment or creator status
+        const [enrollment, course] = await Promise.all([
+            db.query('SELECT id FROM enrollments WHERE user_id = $1 AND course_id = $2', [userId, courseId]),
+            db.query('SELECT created_by FROM courses WHERE id = $1', [courseId])
+        ]);
 
-        if (enrollment.rows.length === 0) {
+        const isCreator = course.rows[0]?.created_by === userId;
+        if (enrollment.rows.length === 0 && !isCreator) {
             return res.status(403).json({ error: 'Not enrolled in this course' });
         }
 
-        // End any existing open sessions for this user/course
+        // Creators previewing their own course don't need time tracking
+        if (isCreator) {
+            return res.status(200).json({ message: 'no-op' });
+        }
+
+        // Delete open sessions that were too short to count (quick bounces)
         await db.query(`
-            UPDATE time_sessions 
-            SET ended_at = CURRENT_TIMESTAMP, 
+            DELETE FROM course_time_sessions
+            WHERE user_id = $1 AND course_id = $2 AND ended_at IS NULL
+              AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::INTEGER < 60
+        `, [userId, courseId]);
+
+        // Properly close any remaining open sessions
+        await db.query(`
+            UPDATE course_time_sessions
+            SET ended_at = CURRENT_TIMESTAMP,
                 duration = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::INTEGER
             WHERE user_id = $1 AND course_id = $2 AND ended_at IS NULL
         `, [userId, courseId]);
 
         // Start new session
         const result = await db.query(
-            'INSERT INTO time_sessions (user_id, course_id) VALUES ($1, $2) RETURNING *',
+            'INSERT INTO course_time_sessions (user_id, course_id) VALUES ($1, $2) RETURNING *',
             [userId, courseId]
         );
 
@@ -430,10 +524,16 @@ const endTimeSession = async (req, res) => {
         const userId = req.user.id;
         const { courseId } = req.params;
 
+        // No-op for course creators
+        const course = await db.query('SELECT created_by FROM courses WHERE id = $1', [courseId]);
+        if (course.rows[0]?.created_by === userId) {
+            return res.json({ message: 'no-op', session: null });
+        }
+
         // End the session and calculate duration
         const result = await db.query(`
-            UPDATE time_sessions 
-            SET ended_at = CURRENT_TIMESTAMP, 
+            UPDATE course_time_sessions
+            SET ended_at = CURRENT_TIMESTAMP,
                 duration = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::INTEGER
             WHERE user_id = $1 AND course_id = $2 AND ended_at IS NULL
             RETURNING *
@@ -442,12 +542,17 @@ const endTimeSession = async (req, res) => {
         if (result.rows.length > 0) {
             const duration = result.rows[0].duration;
 
-            // Update total time in enrollments
-            await db.query(`
-                UPDATE enrollments 
-                SET total_time_spent = total_time_spent + $3
-                WHERE user_id = $1 AND course_id = $2
-            `, [userId, courseId, duration]);
+            if (duration < 60) {
+                // Delete the session — it's just a bounce, not real study time
+                await db.query('DELETE FROM course_time_sessions WHERE id = $1', [result.rows[0].id]);
+            } else {
+                // Update total time in enrollments
+                await db.query(`
+                    UPDATE enrollments
+                    SET total_time_spent = total_time_spent + $3
+                    WHERE user_id = $1 AND course_id = $2
+                `, [userId, courseId, duration]);
+            }
         }
 
         res.json({ message: 'Session ended', session: result.rows[0] || null });
@@ -463,9 +568,15 @@ const updateTimeSession = async (req, res) => {
         const userId = req.user.id;
         const { courseId } = req.params;
 
+        // No-op for course creators
+        const course = await db.query('SELECT created_by FROM courses WHERE id = $1', [courseId]);
+        if (course.rows[0]?.created_by === userId) {
+            return res.json({ session: null, isNew: false });
+        }
+
         // Check for active session
         const session = await db.query(`
-            SELECT * FROM time_sessions 
+            SELECT * FROM course_time_sessions
             WHERE user_id = $1 AND course_id = $2 AND ended_at IS NULL
             ORDER BY started_at DESC LIMIT 1
         `, [userId, courseId]);
@@ -473,7 +584,7 @@ const updateTimeSession = async (req, res) => {
         if (session.rows.length === 0) {
             // No active session, start one
             const newSession = await db.query(
-                'INSERT INTO time_sessions (user_id, course_id) VALUES ($1, $2) RETURNING *',
+                'INSERT INTO course_time_sessions (user_id, course_id) VALUES ($1, $2) RETURNING *',
                 [userId, courseId]
             );
             return res.json({ session: newSession.rows[0], isNew: true });
@@ -516,7 +627,7 @@ const getProfessorCourses = async (req, res) => {
 const updateCourse = async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, difficulty, long_description, learning_objectives, tags, estimated_hours, is_private } = req.body;
+        const { title, description, difficulty, long_description, learning_objectives, tags, estimated_hours, is_private, class_id, order_index } = req.body;
         const userId = req.user.id;
 
         // Verify ownership
@@ -543,8 +654,14 @@ const updateCourse = async (req, res) => {
             enrollmentCode = null;
         }
 
+        // class_id: explicit null = unassign, number = assign, absent = keep
+        const prevClassId = course.rows[0].class_id;
+        const finalClassId = 'class_id' in req.body
+            ? (class_id != null && class_id !== '' ? parseInt(class_id) : null)
+            : prevClassId;
+
         const result = await db.query(`
-            UPDATE courses 
+            UPDATE courses
             SET title = COALESCE($1, title),
                 description = COALESCE($2, description),
                 difficulty = COALESCE($3, difficulty),
@@ -554,11 +671,21 @@ const updateCourse = async (req, res) => {
                 estimated_hours = COALESCE($7, estimated_hours),
                 is_private = COALESCE($8, is_private),
                 enrollment_code = $9,
+                class_id = $10,
+                order_index = COALESCE($11, order_index),
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = $10
+            WHERE id = $12
             RETURNING *
-        `, [title, description, difficulty, long_description, learning_objectives, tags, estimated_hours, is_private, enrollmentCode, id]);
+        `, [title, description, difficulty, long_description, learning_objectives, tags, estimated_hours, is_private, enrollmentCode, finalClassId, order_index, id]);
 
+        // Auto-enroll approved class members when course is assigned to a (new) class
+        if (finalClassId && finalClassId !== prevClassId) {
+            await enrollApprovedMembersInCourse(parseInt(id), finalClassId);
+        }
+
+        await cacheDel(`course:${id}`);
+        await cacheDel(`courses:user:${userId}`);
+        await cacheDel('courses:public');
         res.json(result.rows[0]);
     } catch (error) {
         console.error('Update course error:', error);
@@ -581,31 +708,15 @@ const deleteCourse = async (req, res) => {
             return res.status(403).json({ error: 'Not authorized to delete this course' });
         }
 
-        // Delete related records that don't have ON DELETE CASCADE
-        // Get all exercise IDs for this course
-        const exercises = await db.query('SELECT id FROM exercises WHERE course_id = $1', [id]);
-        const exerciseIds = exercises.rows.map(e => e.id);
-        
-        if (exerciseIds.length > 0) {
-            // Delete user_progress for these exercises
-            await db.query('DELETE FROM user_progress WHERE exercise_id = ANY($1)', [exerciseIds]);
-            // Delete submissions for these exercises
-            await db.query('DELETE FROM submissions WHERE exercise_id = ANY($1)', [exerciseIds]);
-        }
-        
-        // Delete enrollments for this course
+        // Delete records without CASCADE from courses
         await db.query('DELETE FROM enrollments WHERE course_id = $1', [id]);
-        
-        // Delete time_sessions for this course
-        await db.query('DELETE FROM time_sessions WHERE course_id = $1', [id]);
-        
-        // Delete chapters (exercises will cascade)
-        await db.query('DELETE FROM chapters WHERE course_id = $1', [id]);
-        
-        // Delete exercises (test_cases will cascade)
-        await db.query('DELETE FROM exercises WHERE course_id = $1', [id]);
+        await db.query('DELETE FROM course_time_sessions WHERE course_id = $1', [id]);
 
+        // chapters, exercises, submissions, user_progress all cascade from courses
         await db.query('DELETE FROM courses WHERE id = $1', [id]);
+        await cacheDel(`course:${id}`);
+        await cacheDel(`courses:user:${userId}`);
+        await cacheDel('courses:public');
         res.json({ message: 'Course deleted successfully' });
     } catch (error) {
         console.error('Delete course error:', error);
@@ -769,7 +880,7 @@ const getCourseEnrolledStudents = async (req, res) => {
                         WHEN duration IS NOT NULL THEN duration
                         ELSE EXTRACT(EPOCH FROM (COALESCE(ended_at, NOW()) - started_at))::integer
                     END) as total_time
-                FROM time_sessions
+                FROM course_time_sessions
                 WHERE course_id = $1 AND started_at IS NOT NULL
                 GROUP BY user_id
             ) time_stats ON u.id = time_stats.user_id
@@ -824,22 +935,28 @@ const getStudentCourseDetails = async (req, res) => {
             [courseId]
         );
 
-        // Get all exercises with student progress
+        // Get all exercises with student progress and timed session flags
         const exercisesResult = await db.query(`
-            SELECT 
+            SELECT
                 ex.id,
                 ex.title,
                 ex.description,
                 ex.difficulty,
                 ex.language,
+                ex.time_limit_minutes,
                 ch.title as chapter_title,
                 COALESCE(up.completed, false) as completed,
                 COALESCE(up.best_score, 0) as best_score,
                 COALESCE(up.attempts, 0) as attempts,
-                up.last_attempt_at
+                up.last_attempt_at,
+                ts.tab_switches,
+                ts.locked_by_flag,
+                ts.locked_at,
+                ts.unlocked_at
             FROM exercises ex
             LEFT JOIN chapters ch ON ex.chapter_id = ch.id
             LEFT JOIN user_progress up ON ex.id = up.exercise_id AND up.user_id = $1
+            LEFT JOIN exam_sessions ts ON ex.id = ts.exercise_id AND ts.user_id = $1
             WHERE ex.course_id = $2
             ORDER BY ch.order_index, ex.order_index, ex.id
         `, [studentId, courseId]);
@@ -863,28 +980,24 @@ const getStudentCourseDetails = async (req, res) => {
             LIMIT 20
         `, [studentId, courseId]);
 
-        // Get time sessions
+        // Get time sessions (only those >= 60s — exclude quick bounces)
         const timeSessionsResult = await db.query(`
-            SELECT 
+            SELECT
                 ts.started_at,
                 ts.ended_at,
                 COALESCE(ts.duration, EXTRACT(EPOCH FROM (COALESCE(ts.ended_at, NOW()) - ts.started_at))::integer) as duration_seconds
-            FROM time_sessions ts
+            FROM course_time_sessions ts
             WHERE ts.user_id = $1 AND ts.course_id = $2 AND ts.started_at IS NOT NULL
+              AND COALESCE(ts.duration, EXTRACT(EPOCH FROM (COALESCE(ts.ended_at, NOW()) - ts.started_at))::integer) >= 60
             ORDER BY ts.started_at DESC
             LIMIT 10
         `, [studentId, courseId]);
 
-        // Calculate total time spent from all time sessions
+        // Calculate total time spent (only sessions >= 60s)
         const totalTimeResult = await db.query(`
-            SELECT COALESCE(SUM(
-                CASE 
-                    WHEN duration IS NOT NULL THEN duration
-                    ELSE EXTRACT(EPOCH FROM (COALESCE(ended_at, NOW()) - started_at))::integer
-                END
-            ), 0) as total_time
-            FROM time_sessions
-            WHERE user_id = $1 AND course_id = $2 AND started_at IS NOT NULL
+            SELECT COALESCE(SUM(duration), 0) as total_time
+            FROM course_time_sessions
+            WHERE user_id = $1 AND course_id = $2 AND duration IS NOT NULL AND duration >= 60
         `, [studentId, courseId]);
         const calculatedTotalTime = parseInt(totalTimeResult.rows[0]?.total_time || 0);
 
@@ -1086,6 +1199,71 @@ const getCourseExerciseStats = async (req, res) => {
     }
 };
 
+const getExerciseStudentAttempts = async (req, res) => {
+    try {
+        const { courseId, exerciseId } = req.params;
+        const userId = req.user.id;
+
+        // Verify professor owns the course
+        const course = await db.query('SELECT created_by FROM courses WHERE id = $1', [courseId]);
+        if (course.rows.length === 0) return res.status(404).json({ error: 'Course not found' });
+        if (course.rows[0].created_by !== userId && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        const exerciseResult = await db.query(
+            'SELECT id, title, difficulty FROM exercises WHERE id = $1 AND course_id = $2',
+            [exerciseId, courseId]
+        );
+        if (exerciseResult.rows.length === 0) return res.status(404).json({ error: 'Exercise not found' });
+
+        // All enrolled students who attempted, with their full submission history
+        const studentsResult = await db.query(`
+            SELECT
+                u.id   AS user_id,
+                u.username,
+                u.email,
+                up.attempts,
+                up.best_score,
+                up.completed,
+                up.last_attempt_at,
+                (
+                    SELECT json_agg(
+                        json_build_object(
+                            'id',           s.id,
+                            'code',         s.code,
+                            'language',     s.language,
+                            'score',        s.score,
+                            'tests_passed', s.tests_passed,
+                            'tests_total',  s.tests_total,
+                            'status',       s.status,
+                            'submitted_at', s.submitted_at
+                        ) ORDER BY s.submitted_at DESC
+                    )
+                    FROM submissions s
+                    WHERE s.user_id = u.id AND s.exercise_id = $2
+                ) AS submissions
+            FROM user_progress up
+            JOIN users u ON up.user_id = u.id
+            WHERE up.exercise_id = $2
+              AND up.attempts > 0
+              AND EXISTS (
+                  SELECT 1 FROM enrollments e
+                  WHERE e.user_id = u.id AND e.course_id = $1
+              )
+            ORDER BY up.best_score DESC NULLS LAST, up.attempts ASC
+        `, [courseId, exerciseId]);
+
+        res.json({
+            exercise: exerciseResult.rows[0],
+            students: studentsResult.rows,
+        });
+    } catch (error) {
+        console.error('Get exercise student attempts error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 module.exports = {
     getAllCourses,
     getCourseById,
@@ -1106,6 +1284,7 @@ module.exports = {
     getCourseEnrolledStudents,
     getStudentCourseDetails,
     getCourseExerciseStats,
+    getExerciseStudentAttempts,
     regenerateEnrollmentCode,
     verifyEnrollmentCode,
     enrollByCode,

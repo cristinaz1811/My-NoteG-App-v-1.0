@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { courseService, exerciseService } from '../services/api';
+import { courseService, exerciseService, lectureService } from '../services/api';
 
 const EditCourse = () => {
     const { id } = useParams();
@@ -19,10 +19,29 @@ const EditCourse = () => {
     const [editingExercise, setEditingExercise] = useState(null);
     const [tagInput, setTagInput] = useState('');
     const [objectiveInput, setObjectiveInput] = useState('');
+    const [lectures, setLectures] = useState([]);
 
     useEffect(() => {
         loadCourse();
+        loadLectures();
     }, [id]);
+
+    const loadLectures = async () => {
+        try {
+            const res = await lectureService.getLecturesByCourse(id);
+            setLectures(res.data);
+        } catch {}
+    };
+
+    const handleDeleteLecture = async (lectureId) => {
+        if (!window.confirm('Delete this lecture and all its pages?')) return;
+        try {
+            await lectureService.deleteLecture(lectureId);
+            setLectures(prev => prev.filter(l => l.id !== lectureId));
+        } catch {
+            alert('Failed to delete lecture.');
+        }
+    };
 
     const loadCourse = async () => {
         try {
@@ -249,29 +268,27 @@ const EditCourse = () => {
                         >
                             👥 Students
                         </Link>
-                        <Link
-                            to={`/courses/${id}`}
-                            className="px-4 py-2 rounded-lg text-sm border border-white/20 text-gray-300 hover:bg-white/5 no-underline"
-                            target="_blank"
-                        >
-                            View as Student →
-                        </Link>
                     </div>
                 </div>
 
                 {/* Tabs */}
                 <div className="flex gap-4 mb-6 border-b border-white/10">
-                    {['details', 'chapters', 'exercises'].map((tab) => (
+                    {['details', 'chapters', 'lectures', 'exercises'].map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
                             className={`px-4 py-3 font-medium transition-colors border-b-2 -mb-px capitalize ${
-                                activeTab === tab 
-                                    ? 'border-[#a1609d] text-[#a1609d]' 
+                                activeTab === tab
+                                    ? 'border-[#a1609d] text-[#a1609d]'
                                     : 'border-transparent text-gray-400 hover:text-white'
                             }`}
                         >
                             {tab}
+                            {tab === 'lectures' && lectures.length > 0 && (
+                                <span className="ml-1.5 text-xs bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded-full">
+                                    {lectures.length}
+                                </span>
+                            )}
                         </button>
                     ))}
                 </div>
@@ -660,6 +677,68 @@ const EditCourse = () => {
                                     )}
                                 </div>
                             ))
+                        )}
+                    </div>
+                )}
+
+                {activeTab === 'lectures' && (
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xl font-semibold">Lectures</h2>
+                            <button
+                                onClick={() => navigate(`/professor/course/${id}/lecture/create`)}
+                                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors"
+                            >
+                                + New Lecture
+                            </button>
+                        </div>
+
+                        {lectures.length === 0 ? (
+                            <div className="surface-card rounded-2xl p-12 text-center text-gray-500">
+                                <p className="text-4xl mb-3">📖</p>
+                                <p className="text-lg font-medium text-gray-400 mb-2">No lectures yet</p>
+                                <p className="text-sm mb-6">Add multi-page lectures with videos and presentations to enrich this course.</p>
+                                <button
+                                    onClick={() => navigate(`/professor/course/${id}/lecture/create`)}
+                                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition-colors"
+                                >
+                                    Create First Lecture
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {lectures.map((lecture) => (
+                                    <div key={lecture.id} className="surface-card rounded-xl p-5 flex items-center justify-between gap-4">
+                                        <div className="flex items-center gap-4 min-w-0">
+                                            <div className="w-10 h-10 rounded-lg bg-purple-600/20 flex items-center justify-center text-xl flex-shrink-0">
+                                                📖
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="font-medium text-white truncate">{lecture.title}</p>
+                                                <p className="text-xs text-gray-500 mt-0.5">
+                                                    {lecture.chapter_title ? `${lecture.chapter_title} · ` : ''}
+                                                    {lecture.page_count} page{lecture.page_count !== 1 ? 's' : ''}
+                                                    {lecture.media_count > 0 && ` · ${lecture.media_count} media`}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                            <button
+                                                onClick={() => navigate(`/professor/course/${id}/lecture/${lecture.id}/edit`)}
+                                                className="px-3 py-1.5 text-sm bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg transition-colors"
+                                            >
+                                                Edit
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteLecture(lecture.id)}
+                                                className="px-3 py-1.5 text-sm bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
+                                            >
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         )}
                     </div>
                 )}

@@ -75,9 +75,6 @@ const executeJavaScript = (code, testCase) => {
         sandbox: {},
     });
 
-    // Parse input
-    const inputs = JSON.parse(testCase.input);
-    
     // Extract function name before entering the sandbox
     const functionMatch = code.match(/function\s+(\w+)/);
     if (!functionMatch) {

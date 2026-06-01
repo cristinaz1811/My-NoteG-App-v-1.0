@@ -170,6 +170,155 @@ const createCourseEvent = async (req, res) => {
     }
 };
 
+// Professor: create event for all approved students in a class
+const createClassEvent = async (req, res) => {
+    try {
+        const professorId = req.user.id;
+        const {
+            class_id, title, description, event_type, start_time, end_time,
+            all_day, color, course_id, recurrence, recurrence_end, reminder_minutes
+        } = req.body;
+
+        if (!title || !event_type || !start_time || !class_id) {
+            return res.status(400).json({ error: 'Title, event type, start time, and class are required' });
+        }
+
+        // Verify professor owns this class (via year ownership)
+        const classCheck = await db.query(
+            `SELECT cl.id FROM classes cl
+             JOIN college_years cy ON cl.year_id = cy.id
+             WHERE cl.id = $1 AND cy.created_by = $2`,
+            [class_id, professorId]
+        );
+        if (classCheck.rows.length === 0) {
+            return res.status(403).json({ error: 'You do not have access to this class' });
+        }
+
+        const enrollments = await db.query(
+            `SELECT user_id FROM class_enrollments WHERE class_id = $1 AND status = 'approved'`,
+            [class_id]
+        );
+
+        const allUserIds = [professorId, ...enrollments.rows.map(e => e.user_id)];
+        const createdEvents = [];
+
+        for (const uid of allUserIds) {
+            const result = await db.query(
+                `INSERT INTO calendar_events
+                 (user_id, course_id, title, description, event_type,
+                  start_time, end_time, all_day, color, recurrence, recurrence_end,
+                  reminder_minutes, is_public, created_by)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                 RETURNING *`,
+                [uid, course_id || null, title, description || null,
+                 event_type, start_time, end_time || null, all_day || false,
+                 color || null, recurrence || null, recurrence_end || null,
+                 reminder_minutes || 30, true, professorId]
+            );
+            createdEvents.push(result.rows[0]);
+        }
+
+        res.status(201).json({ message: `Event created for ${enrollments.rows.length} students`, events: createdEvents });
+    } catch (error) {
+        console.error('Error creating class event:', error);
+        res.status(500).json({ error: 'Failed to create class event' });
+    }
+};
+
+// Professor: create event for all approved students across all classes in a year
+const createYearEvent = async (req, res) => {
+    try {
+        const professorId = req.user.id;
+        const {
+            year_id, title, description, event_type, start_time, end_time,
+            all_day, color, course_id, recurrence, recurrence_end, reminder_minutes
+        } = req.body;
+
+        if (!title || !event_type || !start_time || !year_id) {
+            return res.status(400).json({ error: 'Title, event type, start time, and year are required' });
+        }
+
+        const yearCheck = await db.query(
+            'SELECT id FROM college_years WHERE id = $1 AND created_by = $2',
+            [year_id, professorId]
+        );
+        if (yearCheck.rows.length === 0) {
+            return res.status(403).json({ error: 'You do not have access to this year' });
+        }
+
+        const enrollments = await db.query(
+            `SELECT DISTINCT ce.user_id
+             FROM class_enrollments ce
+             JOIN classes cl ON ce.class_id = cl.id
+             WHERE cl.year_id = $1 AND ce.status = 'approved'`,
+            [year_id]
+        );
+
+        const allUserIds = [professorId, ...enrollments.rows.map(e => e.user_id)];
+        const createdEvents = [];
+
+        for (const uid of allUserIds) {
+            const result = await db.query(
+                `INSERT INTO calendar_events
+                 (user_id, course_id, title, description, event_type,
+                  start_time, end_time, all_day, color, recurrence, recurrence_end,
+                  reminder_minutes, is_public, created_by)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                 RETURNING *`,
+                [uid, course_id || null, title, description || null,
+                 event_type, start_time, end_time || null, all_day || false,
+                 color || null, recurrence || null, recurrence_end || null,
+                 reminder_minutes || 30, true, professorId]
+            );
+            createdEvents.push(result.rows[0]);
+        }
+
+        res.status(201).json({ message: `Event created for ${enrollments.rows.length} students`, events: createdEvents });
+    } catch (error) {
+        console.error('Error creating year event:', error);
+        res.status(500).json({ error: 'Failed to create year event' });
+    }
+};
+
+// Professor: create event for specific students
+const createStudentsEvent = async (req, res) => {
+    try {
+        const professorId = req.user.id;
+        const {
+            student_ids, title, description, event_type, start_time, end_time,
+            all_day, color, course_id, recurrence, recurrence_end, reminder_minutes
+        } = req.body;
+
+        if (!title || !event_type || !start_time || !Array.isArray(student_ids) || student_ids.length === 0) {
+            return res.status(400).json({ error: 'Title, event type, start time, and at least one student are required' });
+        }
+
+        const allUserIds = [professorId, ...student_ids];
+        const createdEvents = [];
+
+        for (const uid of allUserIds) {
+            const result = await db.query(
+                `INSERT INTO calendar_events
+                 (user_id, course_id, title, description, event_type,
+                  start_time, end_time, all_day, color, recurrence, recurrence_end,
+                  reminder_minutes, is_public, created_by)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                 RETURNING *`,
+                [uid, course_id || null, title, description || null,
+                 event_type, start_time, end_time || null, all_day || false,
+                 color || null, recurrence || null, recurrence_end || null,
+                 reminder_minutes || 30, true, professorId]
+            );
+            createdEvents.push(result.rows[0]);
+        }
+
+        res.status(201).json({ message: `Event created for ${student_ids.length} students`, events: createdEvents });
+    } catch (error) {
+        console.error('Error creating students event:', error);
+        res.status(500).json({ error: 'Failed to create students event' });
+    }
+};
+
 // Update a calendar event
 const updateEvent = async (req, res) => {
     try {
@@ -508,6 +657,9 @@ module.exports = {
     getEventById,
     createEvent,
     createCourseEvent,
+    createClassEvent,
+    createYearEvent,
+    createStudentsEvent,
     updateEvent,
     deleteEvent,
     exportICS,

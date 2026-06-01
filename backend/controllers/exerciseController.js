@@ -1,8 +1,7 @@
 const db = require('../config/database');
 const { generateHints, generateOptimizationHints, analyzeComplexity } = require('../utils/openaiService');
-const { notifyNewExercise, notifyCourseCompleted } = require('../utils/notificationService');
-const { DISTRIBUTED_MODE } = require('../utils/redisClient');
-const { cacheGet, cacheSet, cacheDel } = require('../utils/redisClient');
+const { notifyNewExercise, notifyCourseCompleted, createNotification } = require('../utils/notificationService');
+const { DISTRIBUTED_MODE, cacheGet, cacheSet } = require('../utils/redisClient');
 
 const getExerciseById = async (req, res) => {
     try {
@@ -105,7 +104,7 @@ const getExerciseById = async (req, res) => {
                 // Get timed session if exercise has a time limit
                 if (exercise.time_limit_minutes) {
                     const sessionResult = await db.query(
-                        'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
+                        'SELECT * FROM exam_sessions WHERE user_id = $1 AND exercise_id = $2',
                         [req.user.id, id]
                     );
                     timedSession = sessionResult.rows[0] || null;
@@ -220,17 +219,20 @@ const submitSolution = async (req, res) => {
         // Check if this is a timed exercise and if the timer has expired
         if (exercise.time_limit_minutes) {
             const sessionResult = await db.query(
-                'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
+                'SELECT * FROM exam_sessions WHERE user_id = $1 AND exercise_id = $2',
                 [userId, id]
             );
             const session = sessionResult.rows[0];
             if (!session) {
                 return res.status(400).json({ error: 'You must start the timer before submitting. Please refresh the page.' });
             }
+            if (session.locked_by_flag) {
+                return res.status(403).json({ error: 'Your session has been locked due to focus violations. Contact your professor to unlock it.', locked: true });
+            }
             if (new Date() > new Date(session.expires_at)) {
                 // Mark session as expired
                 await db.query(
-                    'UPDATE timed_sessions SET time_expired = TRUE WHERE id = $1',
+                    'UPDATE exam_sessions SET time_expired = TRUE WHERE id = $1',
                     [session.id]
                 );
                 return res.status(403).json({ error: 'Time has expired for this exercise. You can no longer submit solutions.', timeExpired: true });
@@ -248,8 +250,8 @@ const submitSolution = async (req, res) => {
         let results;
 
         if (DISTRIBUTED_MODE) {
-            // Distributed mode: send job to the worker queue
-            const { enqueueExecution, waitForResult } = require('../utils/queueService');
+            // Async: enqueue and return job ID immediately — client polls /jobs/:jobId/result
+            const { enqueueExecution } = require('../utils/queueService');
 
             const job = await enqueueExecution({
                 code,
@@ -261,8 +263,18 @@ const submitSolution = async (req, res) => {
                 userId,
             });
 
-            const jobResult = await waitForResult(job.id, 30000);
-            results = jobResult.results;
+            // Store submission context so getJobResult can finalize it
+            await cacheSet(`job:ctx:${job.id}`, {
+                exerciseId: parseInt(id),
+                userId,
+                code: exercise.is_multi_file && files ? JSON.stringify(files) : code,
+                language,
+                isFirstExercise,
+                requiresEfficiency: exercise.requires_efficiency,
+                courseId: exercise.course_id,
+            }, 3600);
+
+            return res.json({ jobId: job.id, status: 'queued' });
         } else {
             // Local mode: execute directly in-process
             const { executeCode, executeMultiFileCode } = require('../utils/codeExecutor');
@@ -345,6 +357,124 @@ const submitSolution = async (req, res) => {
         });
     } catch (error) {
         console.error('Submit solution error:', error);
+        res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+};
+
+const getJobResult = async (req, res) => {
+    try {
+        const { jobId } = req.params;
+        const userId = req.user.id;
+
+        // Return cached result if already processed
+        const cached = await cacheGet(`job:result:${jobId}`);
+        if (cached) return res.json(cached);
+
+        const { getJobStatus } = require('../utils/queueService');
+        const jobStatus = await getJobStatus(jobId);
+
+        if (jobStatus.status === 'not_found') {
+            return res.status(404).json({ error: 'Job not found' });
+        }
+        if (jobStatus.status === 'waiting') {
+            return res.json({ status: 'queued', position: jobStatus.position, total: jobStatus.total });
+        }
+        if (jobStatus.status === 'active') {
+            return res.json({ status: 'running' });
+        }
+        if (jobStatus.status === 'failed') {
+            return res.status(500).json({ error: 'Execution failed', details: jobStatus.reason });
+        }
+        if (jobStatus.status !== 'completed') {
+            return res.json({ status: jobStatus.status });
+        }
+
+        // Job completed — process and save (idempotent: Redis lock prevents double-save)
+        const lockKey = `job:processing:${jobId}`;
+        const client = require('../utils/redisClient').getRedisClient();
+        if (client) {
+            const locked = await client.set(lockKey, '1', 'NX', 'EX', 60);
+            if (!locked) {
+                // Another request is processing — return running status briefly
+                return res.json({ status: 'running' });
+            }
+        }
+
+        try {
+            const ctx = await cacheGet(`job:ctx:${jobId}`);
+            if (!ctx) return res.status(404).json({ error: 'Job context expired' });
+
+            // Verify this job belongs to the requesting user
+            if (ctx.userId !== userId) return res.status(403).json({ error: 'Forbidden' });
+
+            const execResult = jobStatus.result;
+            const { results, testsPassed, testsTotal } = execResult;
+            const allPassed = testsPassed === testsTotal;
+
+            let score;
+            if (allPassed && ctx.requiresEfficiency) {
+                score = 80;
+            } else {
+                score = (testsPassed / testsTotal) * 100;
+            }
+            const status = allPassed ? 'passed' : 'failed';
+
+            const submissionResult = await db.query(
+                `INSERT INTO submissions (user_id, exercise_id, code, language, status, score, tests_passed, tests_total)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+                [userId, ctx.exerciseId, ctx.code, ctx.language, status, score, testsPassed, testsTotal]
+            );
+
+            const progressCheck = await db.query(
+                'SELECT * FROM user_progress WHERE user_id = $1 AND exercise_id = $2',
+                [userId, ctx.exerciseId]
+            );
+
+            if (progressCheck.rows.length === 0) {
+                const completionStatus = allPassed
+                    ? (ctx.requiresEfficiency ? 'inefficient' : 'completed')
+                    : 'in_progress';
+                await db.query(
+                    `INSERT INTO user_progress (user_id, exercise_id, completed, best_score, attempts, last_attempt_at, completion_status)
+                     VALUES ($1, $2, $3, $4, 1, CURRENT_TIMESTAMP, $5)`,
+                    [userId, ctx.exerciseId, allPassed, score, completionStatus]
+                );
+            } else {
+                const newBestScore = Math.max(progressCheck.rows[0].best_score, score);
+                const currentStatus = progressCheck.rows[0].completion_status;
+                let newStatus = currentStatus;
+                if (allPassed && currentStatus === 'in_progress') {
+                    newStatus = ctx.requiresEfficiency ? 'inefficient' : 'completed';
+                }
+                await db.query(
+                    `UPDATE user_progress
+                     SET completed = $3, best_score = $4, attempts = attempts + 1, last_attempt_at = CURRENT_TIMESTAMP, completion_status = $5
+                     WHERE user_id = $1 AND exercise_id = $2`,
+                    [userId, ctx.exerciseId, allPassed || progressCheck.rows[0].completed, newBestScore, newStatus]
+                );
+            }
+
+            if (allPassed) {
+                notifyCourseCompleted({ studentId: userId, courseId: ctx.courseId });
+            }
+
+            const response = {
+                status: 'completed',
+                submission: submissionResult.rows[0],
+                results,
+                score,
+                testsPassed,
+                testsTotal,
+                isFirstExercise: ctx.isFirstExercise,
+            };
+
+            await cacheSet(`job:result:${jobId}`, response, 3600);
+            return res.json(response);
+        } finally {
+            if (client) await client.del(lockKey);
+        }
+    } catch (error) {
+        console.error('Get job result error:', error);
         res.status(500).json({ error: 'Internal server error', details: error.message });
     }
 };
@@ -843,7 +973,7 @@ const startTimedSession = async (req, res) => {
 
         // Check if session already exists
         const existingSession = await db.query(
-            'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
+            'SELECT * FROM exam_sessions WHERE user_id = $1 AND exercise_id = $2',
             [userId, id]
         );
 
@@ -855,7 +985,7 @@ const startTimedSession = async (req, res) => {
         // Create new session
         const expiresAt = new Date(Date.now() + exercise.time_limit_minutes * 60 * 1000);
         const result = await db.query(
-            `INSERT INTO timed_sessions (user_id, exercise_id, started_at, expires_at)
+            `INSERT INTO exam_sessions (user_id, exercise_id, started_at, expires_at)
              VALUES ($1, $2, CURRENT_TIMESTAMP, $3)
              RETURNING *`,
             [userId, id, expiresAt]
@@ -875,7 +1005,7 @@ const getTimedSession = async (req, res) => {
         const userId = req.user.id;
 
         const result = await db.query(
-            'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
+            'SELECT * FROM exam_sessions WHERE user_id = $1 AND exercise_id = $2',
             [userId, id]
         );
 
@@ -889,7 +1019,7 @@ const getTimedSession = async (req, res) => {
 
         if (expired && !session.time_expired) {
             await db.query(
-                'UPDATE timed_sessions SET time_expired = TRUE WHERE id = $1',
+                'UPDATE exam_sessions SET time_expired = TRUE WHERE id = $1',
                 [session.id]
             );
             session.time_expired = true;
@@ -898,6 +1028,131 @@ const getTimedSession = async (req, res) => {
         res.json({ session });
     } catch (error) {
         console.error('Get timed session error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+const VIOLATION_LOCKOUT_THRESHOLD = 3;
+
+// Record a focus violation (tab switch / fullscreen exit) during a timed session.
+// At VIOLATION_LOCKOUT_THRESHOLD violations, locks the session and notifies the professor.
+const recordViolation = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+
+        // Increment violation counter (only on active, unlocked sessions)
+        const result = await db.query(`
+            UPDATE exam_sessions
+            SET tab_switches = COALESCE(tab_switches, 0) + 1,
+                last_violation_at = CURRENT_TIMESTAMP
+            WHERE user_id = $1 AND exercise_id = $2
+              AND time_expired = FALSE AND COALESCE(locked_by_flag, FALSE) = FALSE
+            RETURNING tab_switches, id
+        `, [userId, id]);
+
+        if (result.rows.length === 0) {
+            // Session is already locked or expired — return current state
+            const cur = await db.query(
+                'SELECT tab_switches, locked_by_flag FROM exam_sessions WHERE user_id = $1 AND exercise_id = $2',
+                [userId, id]
+            );
+            return res.json({
+                tab_switches: cur.rows[0]?.tab_switches || 0,
+                locked: cur.rows[0]?.locked_by_flag || false,
+            });
+        }
+
+        const { tab_switches, id: sessionId } = result.rows[0];
+        let locked = false;
+
+        if (tab_switches >= VIOLATION_LOCKOUT_THRESHOLD) {
+            // Lock the session
+            await db.query(`
+                UPDATE exam_sessions
+                SET locked_by_flag = TRUE, locked_at = CURRENT_TIMESTAMP
+                WHERE id = $1
+            `, [sessionId]);
+            locked = true;
+
+            // Find exercise + professor + student info for the notification
+            const info = await db.query(`
+                SELECT e.title AS exercise_title,
+                       e.course_id,
+                       c.created_by AS professor_id,
+                       u.username AS student_name
+                FROM exercises e
+                JOIN courses c ON c.id = e.course_id
+                JOIN users u ON u.id = $2
+                WHERE e.id = $1
+            `, [id, userId]);
+
+            if (info.rows.length > 0) {
+                const { exercise_title, course_id, professor_id, student_name } = info.rows[0];
+                await createNotification({
+                    userId: professor_id,
+                    type: 'cheating_flag',
+                    title: 'Student Flagged — Session Locked',
+                    message: `"${student_name}" was locked out of "${exercise_title}" after ${tab_switches} focus violations. Review and unlock from the course students page.`,
+                    link: `/professor/course/${course_id}/students?student=${userId}`,
+                    courseId: course_id,
+                    exerciseId: parseInt(id),
+                    fromUserId: userId,
+                });
+            }
+        }
+
+        res.json({ tab_switches, locked });
+    } catch (error) {
+        console.error('Record violation error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Professor: unlock a student's locked timed session
+const unlockSession = async (req, res) => {
+    try {
+        const { exerciseId, userId: studentId } = req.params;
+        const professorId = req.user.id;
+
+        // Verify the professor owns this exercise's course
+        const exRow = await db.query(`
+            SELECT e.title, e.course_id, c.created_by
+            FROM exercises e JOIN courses c ON c.id = e.course_id
+            WHERE e.id = $1
+        `, [exerciseId]);
+
+        if (exRow.rows.length === 0) return res.status(404).json({ error: 'Exercise not found' });
+        if (exRow.rows[0].created_by !== professorId) return res.status(403).json({ error: 'Not authorized' });
+
+        const result = await db.query(`
+            UPDATE exam_sessions
+            SET locked_by_flag = FALSE,
+                tab_switches   = 0,
+                unlocked_by    = $3,
+                unlocked_at    = CURRENT_TIMESTAMP
+            WHERE user_id = $1 AND exercise_id = $2
+            RETURNING *
+        `, [studentId, exerciseId, professorId]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'No timed session found for this student' });
+        }
+
+        // Notify the student they can resume
+        await createNotification({
+            userId: parseInt(studentId),
+            type: 'session_unlocked',
+            title: 'Exercise Unlocked',
+            message: `Your timed session for "${exRow.rows[0].title}" has been unlocked by your professor. You may now resume.`,
+            link: `/exercises/${exerciseId}`,
+            exerciseId: parseInt(exerciseId),
+            fromUserId: professorId,
+        });
+
+        res.json({ message: 'Session unlocked', session: result.rows[0] });
+    } catch (error) {
+        console.error('Unlock session error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };
@@ -1266,6 +1521,7 @@ module.exports = {
     updateExercise,
     deleteExercise,
     submitSolution,
+    getJobResult,
     getUserSubmissions,
     getSubmissionDetail,
     addTestCase,
@@ -1277,6 +1533,8 @@ module.exports = {
     getComplexityAnalysis,
     startTimedSession,
     getTimedSession,
+    recordViolation,
+    unlockSession,
     // Multi-file exercise management
     getExerciseFiles,
     addExerciseFile,

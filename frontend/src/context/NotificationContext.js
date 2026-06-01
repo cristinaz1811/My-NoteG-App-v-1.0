@@ -21,6 +21,16 @@ export const NotificationProvider = ({ children }) => {
     const reconnectTimeoutRef = useRef(null);
     const reconnectAttemptsRef = useRef(0);
     const MAX_RECONNECT_ATTEMPTS = 5;
+    // type -> Set of callbacks
+    const messageListenersRef = useRef(new Map());
+
+    const addMessageListener = useCallback((type, callback) => {
+        if (!messageListenersRef.current.has(type)) {
+            messageListenersRef.current.set(type, new Set());
+        }
+        messageListenersRef.current.get(type).add(callback);
+        return () => messageListenersRef.current.get(type)?.delete(callback);
+    }, []);
 
     // Fetch unread count from API
     const fetchUnreadCount = useCallback(async () => {
@@ -114,9 +124,14 @@ export const NotificationProvider = ({ children }) => {
                     if (data.type === 'auth_success') {
                         console.log('[WS] Authenticated successfully');
                     } else if (data.type === 'notification') {
-                        // Add new notification to the top of the list
                         setNotifications(prev => [data.notification, ...prev]);
                         setUnreadCount(prev => prev + 1);
+                    }
+
+                    // Dispatch to any registered listeners for this message type
+                    const listeners = messageListenersRef.current.get(data.type);
+                    if (listeners) {
+                        listeners.forEach(cb => cb(data));
                     }
                 } catch (err) {
                     console.error('[WS] Failed to parse message:', err);
@@ -183,6 +198,7 @@ export const NotificationProvider = ({ children }) => {
             markAsRead,
             markAllAsRead,
             deleteNotification,
+            addMessageListener,
         }}>
             {children}
         </NotificationContext.Provider>

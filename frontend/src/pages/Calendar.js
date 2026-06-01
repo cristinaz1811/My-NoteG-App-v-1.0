@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { calendarService, courseService } from '../services/api';
+import { calendarService, courseService, yearService, classService } from '../services/api';
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -81,6 +81,15 @@ const Calendar = () => {
     const [filterType, setFilterType] = useState('all');
     const [exportMenuOpen, setExportMenuOpen] = useState(null);
 
+    // Professor audience picker state
+    const [shareScope, setShareScope] = useState('none'); // 'none'|'course'|'class'|'year'|'students'
+    const [shareYearId, setShareYearId] = useState('');
+    const [shareClassId, setShareClassId] = useState('');
+    const [shareStudentIds, setShareStudentIds] = useState([]);
+    const [years, setYears] = useState([]);
+    const [scopeClasses, setScopeClasses] = useState([]);
+    const [scopeStudents, setScopeStudents] = useState([]);
+
     const isProfessor = user?.role === 'professor' || user?.role === 'admin';
 
     const [form, setForm] = useState({
@@ -136,9 +145,42 @@ const Calendar = () => {
     useEffect(() => { fetchEvents(); }, [fetchEvents]);
     useEffect(() => { fetchCourses(); }, [fetchCourses]);
 
+    // Load professor's years when the modal opens
+    useEffect(() => {
+        if (!showModal || !isProfessor) return;
+        yearService.getYears()
+            .then(res => setYears((res.data || []).filter(y => y.created_by === user?.id)))
+            .catch(() => {});
+    }, [showModal, isProfessor, user?.id]);
+
+    // Load classes when a year is picked
+    useEffect(() => {
+        if (!shareYearId) { setScopeClasses([]); setShareClassId(''); return; }
+        yearService.getClassesByYear(shareYearId)
+            .then(res => setScopeClasses(res.data || []))
+            .catch(() => {});
+    }, [shareYearId]);
+
+    // Load students when a class is picked (for 'students' scope)
+    useEffect(() => {
+        if (!shareClassId || shareScope !== 'students') { setScopeStudents([]); setShareStudentIds([]); return; }
+        classService.getClassStudents(shareClassId)
+            .then(res => setScopeStudents(res.data || []))
+            .catch(() => {});
+    }, [shareClassId, shareScope]);
+
     const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
     const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
     const goToday = () => setCurrentDate(new Date());
+
+    const resetShareState = () => {
+        setShareScope('none');
+        setShareYearId('');
+        setShareClassId('');
+        setShareStudentIds([]);
+        setScopeClasses([]);
+        setScopeStudents([]);
+    };
 
     const openNewEvent = (date) => {
         const d = date || new Date();
@@ -156,6 +198,7 @@ const Calendar = () => {
             recurrence: '',
             is_course_event: false,
         });
+        resetShareState();
         setShowModal(true);
     };
 
@@ -174,6 +217,7 @@ const Calendar = () => {
             recurrence: event.recurrence || '',
             is_course_event: false,
         });
+        resetShareState();
         setShowModal(true);
     };
 
@@ -189,8 +233,14 @@ const Calendar = () => {
 
             if (editingEvent) {
                 await calendarService.updateEvent(editingEvent.id, payload);
-            } else if (form.is_course_event && isProfessor) {
+            } else if (isProfessor && shareScope === 'course' && form.course_id) {
                 await calendarService.createCourseEvent(payload);
+            } else if (isProfessor && shareScope === 'class' && shareClassId) {
+                await calendarService.createClassEvent({ ...payload, class_id: shareClassId });
+            } else if (isProfessor && shareScope === 'year' && shareYearId) {
+                await calendarService.createYearEvent({ ...payload, year_id: shareYearId });
+            } else if (isProfessor && shareScope === 'students' && shareStudentIds.length > 0) {
+                await calendarService.createStudentsEvent({ ...payload, student_ids: shareStudentIds });
             } else {
                 await calendarService.createEvent(payload);
             }
@@ -620,7 +670,7 @@ const Calendar = () => {
                             <label className="flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" checked={form.all_day}
                                     onChange={e => setForm({ ...form, all_day: e.target.checked })}
-                                    className="rounded accent-purple-500" />
+                                    className="w-4 h-4 shrink-0 rounded accent-purple-500" />
                                 <span className="text-sm text-gray-300">All day event</span>
                             </label>
 
@@ -657,13 +707,88 @@ const Calendar = () => {
                                 </select>
                             </div>
 
-                            {isProfessor && !editingEvent && form.course_id && (
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" checked={form.is_course_event}
-                                        onChange={e => setForm({ ...form, is_course_event: e.target.checked })}
-                                        className="rounded accent-purple-500" />
-                                    <span className="text-sm text-gray-300">Create for all enrolled students</span>
-                                </label>
+                            {isProfessor && !editingEvent && (
+                                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 space-y-3">
+                                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Share with students</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {[
+                                            { key: 'none', label: 'Only me' },
+                                            { key: 'course', label: 'Course', disabled: !form.course_id },
+                                            { key: 'class', label: 'Class' },
+                                            { key: 'year', label: 'Year' },
+                                            { key: 'students', label: 'Specific students' },
+                                        ].map(({ key, label, disabled }) => (
+                                            <button key={key} type="button"
+                                                disabled={disabled}
+                                                onClick={() => { setShareScope(key); setShareYearId(''); setShareClassId(''); setShareStudentIds([]); }}
+                                                className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                                style={shareScope === key
+                                                    ? { background: 'rgba(161,96,157,0.25)', borderColor: '#a1609d', color: '#fff' }
+                                                    : { background: 'transparent', borderColor: 'rgba(255,255,255,0.1)', color: '#9ca3af' }}>
+                                                {label}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {(shareScope === 'class' || shareScope === 'year' || shareScope === 'students') && (
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-400 mb-1">Year</label>
+                                            <select value={shareYearId}
+                                                onChange={e => setShareYearId(e.target.value)}
+                                                className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm">
+                                                <option value="">— Select year —</option>
+                                                {years.map(y => (
+                                                    <option key={y.id} value={y.id}>{y.name} {y.faculty ? `· ${y.faculty}` : ''} {y.school_year ? `(${y.school_year})` : ''}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {(shareScope === 'class' || shareScope === 'students') && shareYearId && (
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-400 mb-1">Class</label>
+                                            <select value={shareClassId}
+                                                onChange={e => setShareClassId(e.target.value)}
+                                                className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm">
+                                                <option value="">— Select class —</option>
+                                                {scopeClasses.map(c => (
+                                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {shareScope === 'students' && shareClassId && (
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-400 mb-1">
+                                                Students ({shareStudentIds.length} selected)
+                                            </label>
+                                            {scopeStudents.length === 0
+                                                ? <p className="text-xs text-gray-500">No approved students in this class.</p>
+                                                : (
+                                                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                                                        {scopeStudents.map(s => (
+                                                            <label key={s.id} className="flex items-center gap-2 cursor-pointer py-1 px-2 rounded-lg hover:bg-white/5">
+                                                                <input type="checkbox"
+                                                                    checked={shareStudentIds.includes(s.id)}
+                                                                    onChange={e => setShareStudentIds(prev =>
+                                                                        e.target.checked ? [...prev, s.id] : prev.filter(id => id !== s.id)
+                                                                    )}
+                                                                    className="w-3.5 h-3.5 shrink-0 rounded accent-purple-500" />
+                                                                <span className="text-xs text-gray-300">{s.username}</span>
+                                                                <span className="text-xs text-gray-500 truncate">{s.email}</span>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                )
+                                            }
+                                        </div>
+                                    )}
+
+                                    {shareScope === 'course' && !form.course_id && (
+                                        <p className="text-xs text-gray-500">Select a course above to share with its students.</p>
+                                    )}
+                                </div>
                             )}
 
                             <div>

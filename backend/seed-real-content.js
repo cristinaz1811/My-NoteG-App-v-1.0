@@ -683,25 +683,6 @@ const seedCourses = [
     }
 ];
 
-async function ensureMaterialsTable() {
-    await db.query(`
-        CREATE TABLE IF NOT EXISTS course_materials (
-            id SERIAL PRIMARY KEY,
-            course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
-            chapter_id INTEGER REFERENCES chapters(id) ON DELETE SET NULL,
-            title VARCHAR(200) NOT NULL,
-            description TEXT,
-            resource_type VARCHAR(30) NOT NULL CHECK (resource_type IN ('article', 'video', 'reading', 'cheatsheet', 'reference', 'project')),
-            resource_url VARCHAR(500),
-            order_index INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
-
-    await db.query(`CREATE INDEX IF NOT EXISTS idx_course_materials_course ON course_materials(course_id)`);
-    await db.query(`CREATE INDEX IF NOT EXISTS idx_course_materials_chapter ON course_materials(chapter_id)`);
-}
 
 async function getSeedAuthorId() {
     const result = await db.query(
@@ -876,55 +857,19 @@ async function upsertExercise(courseId, chapterId, exercise) {
     }
 }
 
-async function upsertMaterials(courseId, chapterId, materials) {
-    for (const [index, material] of materials.entries()) {
-        const existing = await db.query(
-            `SELECT id FROM course_materials WHERE course_id = $1 AND title = $2 AND COALESCE(chapter_id, 0) = COALESCE($3, 0) LIMIT 1`,
-            [courseId, material.title, chapterId]
-        );
-
-        if (existing.rows.length > 0) {
-            await db.query(
-                `UPDATE course_materials
-                 SET description = $4,
-                     resource_type = $5,
-                     resource_url = $6,
-                     order_index = $7,
-                     updated_at = CURRENT_TIMESTAMP
-                 WHERE id = $1`,
-                [existing.rows[0].id, material.title, chapterId, material.description, material.resource_type, material.resource_url, index]
-            );
-        } else {
-            await db.query(
-                `INSERT INTO course_materials (
-                    course_id, chapter_id, title, description, resource_type, resource_url, order_index
-                 ) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-                [courseId, chapterId, material.title, material.description, material.resource_type, material.resource_url, index]
-            );
-        }
-    }
-}
-
 async function seed() {
-    await ensureMaterialsTable();
     const authorId = await getSeedAuthorId();
 
     for (const course of seedCourses) {
         const courseId = await upsertCourse(authorId, course);
 
-        // Remove and recreate material rows for the curated seed content to avoid duplicates.
-        await db.query('DELETE FROM course_materials WHERE course_id = $1', [courseId]);
-
         for (const chapter of course.chapters) {
             const chapterId = await upsertChapter(courseId, chapter);
-            await upsertMaterials(courseId, chapterId, chapter.materials || []);
 
             for (const exercise of chapter.exercises) {
                 await upsertExercise(courseId, chapterId, exercise);
             }
         }
-
-        await upsertMaterials(courseId, null, course.materials || []);
     }
 
     console.log('Seeded real course content successfully.');
@@ -938,7 +883,7 @@ seed()
     .finally(async () => {
         try {
             await db.pool.end();
-        } catch (e) {
+        } catch {
             // ignore
         }
     });

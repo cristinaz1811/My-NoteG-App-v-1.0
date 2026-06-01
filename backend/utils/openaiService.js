@@ -8,7 +8,7 @@ const openai = new OpenAI({
  * Generate progressive hints for an exercise based on the user's failing code.
  * Returns up to 3 hints, from vague to more specific.
  */
-const generateHints = async ({ exerciseTitle, exerciseDescription, language, code, testCases, failedTests, hintNumber }) => {
+const generateHints = async ({ exerciseTitle, exerciseDescription, language, code, _testCases, failedTests, hintNumber }) => {
     const hintLevels = {
         1: 'Describe the brute-force / naive way to solve this problem and acknowledge it works but is slow. Do NOT name the optimal technique. 1-2 sentences max.',
         2: 'Identify the specific bottleneck in the brute-force approach — what operation is being repeated unnecessarily? Ask a leading question about how to speed that up. Do NOT name the optimal data structure or technique. 1-2 sentences max.',

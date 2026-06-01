@@ -7,6 +7,12 @@
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
+    "@tiptap/extension-image": "^3.23.6",
+    "@tiptap/extension-link": "^3.23.6",
+    "@tiptap/extension-placeholder": "^3.23.6",
+    "@tiptap/pm": "^3.23.6",
+    "@tiptap/react": "^3.23.6",
+    "@tiptap/starter-kit": "^3.23.6",
     "axios": "^1.6.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -39,7 +45,7 @@
       "last 1 safari version"
     ]
   },
-  "proxy": "http://localhost:5001",
+  "proxy": "http://localhost:5002",
   "devDependencies": {
     "autoprefixer": "^10.4.24",
     "postcss": "^8.5.6",

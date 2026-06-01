@@ -16,6 +16,11 @@ const plagiarismRoutes = require('./routes/plagiarism');
 const exportRoutes = require('./routes/export');
 const analyticsRoutes = require('./routes/analytics');
 const calendarRoutes = require('./routes/calendar');
+const yearRoutes = require('./routes/years');
+const classRoutes = require('./routes/classes');
+const lectureRoutes = require('./routes/lectures');
+const sqlSessionRoutes = require('./routes/sqlSessions');
+const { cleanupStaleSessions } = require('./controllers/sqlSessionController');
 const { DISTRIBUTED_MODE, closeRedis } = require('./utils/redisClient');
 
 // Fail fast if critical environment variables are missing
@@ -36,7 +41,7 @@ const server = http.createServer(app);
 // WebSocket server attached to the same HTTP server
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', (ws, _req) => {
     let userId = null;
 
     ws.on('message', (data) => {
@@ -50,7 +55,7 @@ wss.on('connection', (ws, req) => {
                 registerClient(userId, ws);
                 ws.send(JSON.stringify({ type: 'auth_success', userId }));
             }
-        } catch (err) {
+        } catch {
             ws.send(JSON.stringify({ type: 'error', message: 'Invalid message or token' }));
         }
     });
@@ -108,6 +113,10 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/years', yearRoutes);
+app.use('/api/classes', classRoutes);
+app.use('/api/lectures', lectureRoutes);
+app.use('/api/sql-sessions', sqlSessionRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -115,7 +124,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
     console.error(`[ERROR] ${req.method} ${req.originalUrl} -`, err.stack || err.message);
     res.status(err.status || 500).json({ error: 'Something went wrong!' });
 });
@@ -130,6 +139,9 @@ server.listen(PORT, () => {
     if (DISTRIBUTED_MODE) {
         initRedisSubscriber();
     }
+
+    // Drop SQL sandbox schemas that have been idle longer than SESSION_TTL_MINUTES
+    setInterval(cleanupStaleSessions, 15 * 60 * 1000);
 });
 
 // Graceful shutdown

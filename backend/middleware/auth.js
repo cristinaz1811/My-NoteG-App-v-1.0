@@ -1,17 +1,23 @@
 const jwt = require('jsonwebtoken');
+const { isTokenBlacklisted } = require('../utils/redisClient');
 
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
     try {
         const token = req.headers.authorization?.split(' ')[1];
-        
+
         if (!token) {
             return res.status(401).json({ error: 'No token provided' });
         }
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        if (await isTokenBlacklisted(token)) {
+            return res.status(401).json({ error: 'Token has been revoked' });
+        }
+
         req.user = decoded;
         next();
-    } catch (error) {
+    } catch {
         return res.status(401).json({ error: 'Invalid token' });
     }
 };
@@ -24,7 +30,7 @@ const optionalAuth = (req, res, next) => {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             req.user = decoded;
         }
-    } catch (error) {
+    } catch {
         // Token invalid - just continue without user
     }
     next();

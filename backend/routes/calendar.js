@@ -30,6 +30,15 @@ router.post('/', calendarController.createEvent);
 // Professor: create event for all students in a course
 router.post('/course-event', isProfessor, calendarController.createCourseEvent);
 
+// Professor: create event for all approved students in a class
+router.post('/class-event', isProfessor, calendarController.createClassEvent);
+
+// Professor: create event for all approved students across a whole year
+router.post('/year-event', isProfessor, calendarController.createYearEvent);
+
+// Professor: create event for specific students
+router.post('/students-event', isProfessor, calendarController.createStudentsEvent);
+
 // Update an event
 router.put('/:id', calendarController.updateEvent);
 

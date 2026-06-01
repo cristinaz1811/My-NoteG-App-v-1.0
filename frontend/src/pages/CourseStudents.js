@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { courseService } from '../services/api';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { courseService, exerciseService } from '../services/api';
 
 const CourseStudents = () => {
     const { id } = useParams();
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [course, setCourse] = useState(null);
     const [students, setStudents] = useState([]);
     const [exerciseStats, setExerciseStats] = useState([]);
@@ -12,10 +14,19 @@ const CourseStudents = () => {
     const [studentDetails, setStudentDetails] = useState(null);
     const [loadingDetails, setLoadingDetails] = useState(false);
     const [showExercisePerformance, setShowExercisePerformance] = useState(false);
+    const [unlockingExercise, setUnlockingExercise] = useState(null);
 
     useEffect(() => {
         loadCourseAndStudents();
     }, [id]);
+
+    // Auto-open the student panel when coming from a notification link (?student=<id>)
+    useEffect(() => {
+        const targetId = parseInt(searchParams.get('student'));
+        if (targetId && students.length > 0 && !selectedStudent) {
+            loadStudentDetails(targetId);
+        }
+    }, [students, searchParams]);
 
     const loadCourseAndStudents = async () => {
         try {
@@ -33,6 +44,25 @@ const CourseStudents = () => {
         courseService.getCourseExerciseStats(id)
             .then(res => setExerciseStats(res.data))
             .catch(err => console.error('Error loading exercise stats:', err));
+    };
+
+    const handleUnlockSession = async (exerciseId) => {
+        if (!selectedStudent) return;
+        setUnlockingExercise(exerciseId);
+        try {
+            await exerciseService.unlockStudentSession(exerciseId, selectedStudent.id);
+            // Refresh student details to reflect the unlocked state
+            await loadStudentDetails(selectedStudent.id);
+        } catch (error) {
+            console.error('Error unlocking session:', error);
+            alert(error.response?.data?.error || 'Failed to unlock session');
+        } finally {
+            setUnlockingExercise(null);
+        }
+    };
+
+    const openExerciseDrillDown = (exerciseId) => {
+        navigate(`/professor/course/${id}/exercise/${exerciseId}/students`);
     };
 
     const loadStudentDetails = async (studentId) => {
@@ -82,15 +112,6 @@ const CourseStudents = () => {
         const completed = parseInt(student.completed_exercises) || 0;
         if (total === 0) return 0;
         return Math.round((completed / total) * 100);
-    };
-
-    const getDifficultyBadgeClass = (difficulty) => {
-        switch(difficulty) {
-            case 'easy': return 'badge-beginner';
-            case 'medium': return 'badge-intermediate';
-            case 'hard': return 'badge-advanced';
-            default: return 'badge-beginner';
-        }
     };
 
     if (loading) {
@@ -185,10 +206,11 @@ const CourseStudents = () => {
                                     return (
                                         <div
                                             key={ex.exercise_id}
-                                            className="flex items-center gap-4 py-2.5 px-3 bg-black/20 rounded-lg"
+                                            onClick={() => openExerciseDrillDown(ex.exercise_id)}
+                                            className="flex items-center gap-4 py-2.5 px-3 bg-black/20 rounded-lg cursor-pointer hover:bg-white/5 transition-colors group"
                                         >
                                             <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium truncate">{ex.exercise_title}</p>
+                                                <p className="text-sm font-medium truncate group-hover:text-[#fef483] transition-colors">{ex.exercise_title}</p>
                                                 <p className="text-xs text-gray-500 truncate">
                                                     {ex.chapter_title || 'No chapter'}
                                                     {ex.difficulty ? ` · ${ex.difficulty}` : ''}
@@ -212,6 +234,7 @@ const CourseStudents = () => {
                                                     />
                                                 </div>
                                             </div>
+                                            <span className="text-gray-600 group-hover:text-gray-400 transition-colors text-xs">→</span>
                                         </div>
                                     );
                                 })}
@@ -323,33 +346,6 @@ const CourseStudents = () => {
                                     </div>
                                 </div>
 
-                                {/* Exercise Progress */}
-                                <div className="surface-card rounded-xl p-5">
-                                    <h4 className="font-semibold mb-3">Exercise Progress</h4>
-                                    <div className="space-y-2 max-h-64 overflow-y-auto">
-                                        {studentDetails.exercises.map((exercise) => (
-                                            <div 
-                                                key={exercise.id}
-                                                className="flex items-center justify-between py-2 px-3 bg-black/20 rounded-lg"
-                                            >
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`w-2 h-2 rounded-full ${exercise.completed ? 'bg-green-400' : 'bg-gray-500'}`}></span>
-                                                    <span className="text-sm">{exercise.title}</span>
-                                                    <span className={`badge text-xs ${getDifficultyBadgeClass(exercise.difficulty)}`}>
-                                                        {exercise.difficulty}
-                                                    </span>
-                                                </div>
-                                                <div className="text-right text-xs text-gray-400">
-                                                    <span>{exercise.attempts} tries</span>
-                                                    {exercise.best_score > 0 && (
-                                                        <span className="ml-2 text-green-400">{exercise.best_score}%</span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
                                 {/* Recent Submissions */}
                                 {studentDetails.recentSubmissions.length > 0 && (
                                     <div className="surface-card rounded-xl p-5">
@@ -370,6 +366,45 @@ const CourseStudents = () => {
                                                         <span className="text-gray-400">{sub.tests_passed}/{sub.tests_total}</span>
                                                         <span className="ml-2 text-gray-500">{formatDateTime(sub.submitted_at)}</span>
                                                     </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Focus violations & locked sessions */}
+                                {studentDetails.exercises.some(ex => ex.tab_switches > 0) && (
+                                    <div className="surface-card rounded-xl p-5">
+                                        <h4 className="font-semibold mb-3 flex items-center gap-2">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400">
+                                                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                                                <line x1="12" y1="9" x2="12" y2="13"/>
+                                                <line x1="12" y1="17" x2="12.01" y2="17"/>
+                                            </svg>
+                                            Focus Violations
+                                        </h4>
+                                        <div className="space-y-2">
+                                            {studentDetails.exercises.filter(ex => ex.tab_switches > 0).map(ex => (
+                                                <div key={ex.id} className={`flex items-center justify-between py-2 px-3 rounded-lg text-sm ${ex.locked_by_flag ? 'bg-red-900/30 border border-red-500/30' : 'bg-black/20'}`}>
+                                                    <div className="min-w-0 mr-3">
+                                                        <span className="text-white truncate block">{ex.title}</span>
+                                                        <span className={`text-xs ${ex.locked_by_flag ? 'text-red-400' : 'text-amber-400'}`}>
+                                                            {ex.locked_by_flag ? 'Locked' : `${ex.tab_switches} violation${ex.tab_switches !== 1 ? 's' : ''}`}
+                                                        </span>
+                                                    </div>
+                                                    {ex.locked_by_flag ? (
+                                                        <button
+                                                            onClick={() => handleUnlockSession(ex.id)}
+                                                            disabled={unlockingExercise === ex.id}
+                                                            className="shrink-0 text-xs px-3 py-1.5 rounded bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-500/30 transition-colors disabled:opacity-50"
+                                                        >
+                                                            {unlockingExercise === ex.id ? 'Unlocking…' : 'Unlock'}
+                                                        </button>
+                                                    ) : (
+                                                        <span className="shrink-0 text-xs text-amber-400 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
+                                                            {ex.tab_switches}/3
+                                                        </span>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>
@@ -398,6 +433,7 @@ const CourseStudents = () => {
                     </div>
                 </div>
             </div>
+
         </div>
     );
 };

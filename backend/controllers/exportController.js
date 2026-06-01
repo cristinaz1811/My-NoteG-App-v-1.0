@@ -46,7 +46,7 @@ const fetchCourseGrades = async (courseId, professorId, role) => {
                     WHEN duration IS NOT NULL THEN duration
                     ELSE EXTRACT(EPOCH FROM (COALESCE(ended_at, NOW()) - started_at))::integer
                 END) as total_time
-            FROM time_sessions
+            FROM course_time_sessions
             WHERE course_id = $1 AND started_at IS NOT NULL
             GROUP BY user_id
         ) time_stats ON u.id = time_stats.user_id
@@ -97,7 +97,7 @@ const fetchStudentProgress = async (userId) => {
                     WHEN duration IS NOT NULL THEN duration
                     ELSE EXTRACT(EPOCH FROM (COALESCE(ended_at, NOW()) - started_at))::integer
                 END) as total_time
-            FROM time_sessions
+            FROM course_time_sessions
             WHERE started_at IS NOT NULL
             GROUP BY user_id, course_id
         ) time_stats ON time_stats.user_id = e.user_id AND time_stats.course_id = c.id
@@ -280,7 +280,7 @@ const exportCourseGradesPDF = async (req, res) => {
 // CSV — student exports own records
 const exportStudentProgressCSV = async (req, res) => {
     try {
-        const { courses, exercises, user } = await fetchStudentProgress(req.user.id);
+        const { exercises, user } = await fetchStudentProgress(req.user.id);
 
         // Build per-exercise rows
         const rows = exercises.map((ex) => ({

@@ -2,6 +2,7 @@
 node_modules/
 package-lock.json
 
+
 # Python
 venv/
 .venv/
@@ -51,3 +52,7 @@ Thumbs.db
 
 # Documentation files you might not want to commit
 INSTALLATION_COMPLETE.md
+docs/
+.claude
+.github
+.github/

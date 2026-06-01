@@ -126,11 +126,27 @@ const CourseDetail = () => {
 
     const exerciseCount = course.exercises?.length || 0;
     const chapterCount = course.chapters?.length || 0;
+    const lectureCount = course.lectures?.length || 0;
 
     // Course detail view (same for enrolled and non-enrolled, different action buttons)
     return (
         <div className="min-h-screen py-8 px-6 page-fade-in">
             <div className="max-w-7xl mx-auto">
+                {/* Year / Class breadcrumb */}
+                {(course.year_name || course.class_name) && (
+                    <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
+                        {course.year_name && (
+                            <button onClick={() => navigate('/years')} className="hover:text-purple-400 transition-colors">
+                                {course.year_name}
+                            </button>
+                        )}
+                        {course.year_name && course.class_name && <span>›</span>}
+                        {course.class_name && (
+                            <span className="text-gray-300">{course.class_name}</span>
+                        )}
+                    </div>
+                )}
+
                 {/* Hero Section */}
                 <div className="surface-card rounded-3xl p-8 lg:p-12 mb-8 glow-sm">
                     <div className="grid lg:grid-cols-3 gap-8">
@@ -171,6 +187,17 @@ const CourseDetail = () => {
                                         <div className="text-sm text-gray-400">Exercises</div>
                                     </div>
                                 </div>
+                                {lectureCount > 0 && (
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-12 h-12 rounded-xl gradient-bg opacity-20 flex items-center justify-center">
+                                            <span className="text-sm font-semibold">Lec.</span>
+                                        </div>
+                                        <div>
+                                            <div className="text-2xl font-bold">{lectureCount}</div>
+                                            <div className="text-sm text-gray-400">Lectures</div>
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="flex items-center gap-3">
                                     <div className="w-12 h-12 rounded-xl gradient-bg opacity-20 flex items-center justify-center">
                                         <span className="text-sm font-semibold">Hrs</span>
@@ -186,29 +213,62 @@ const CourseDetail = () => {
                         {/* Action Card */}
                         <div className="lg:col-span-1">
                             <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
-                                {isEnrolled ? (
+                                {Number(user?.id) === Number(course?.created_by) ? (
+                                    <>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="text-[#a1609d] text-xs uppercase tracking-widest font-semibold">Creator</span>
+                                        </div>
+                                        <h3 className="text-xl font-semibold mb-4">Your Course</h3>
+                                        <button
+                                            onClick={handleGoToCourse}
+                                            className="w-full btn-primary py-4 text-lg mb-3"
+                                        >
+                                            Preview as Student →
+                                        </button>
+                                        <button
+                                            onClick={() => navigate(`/professor/course/${id}`)}
+                                            className="w-full py-3 text-sm text-[#a1609d] hover:text-[#b870ad] transition-colors border border-[#a1609d]/30 rounded-lg hover:border-[#a1609d]/60"
+                                        >
+                                            Edit Course
+                                        </button>
+                                    </>
+                                ) : isEnrolled ? (
                                     <>
                                         <div className="flex items-center gap-2 mb-4">
                                             <span className="text-green-400 text-sm uppercase tracking-wide">Active</span>
                                             <h3 className="text-xl font-semibold">You're Enrolled!</h3>
                                         </div>
-                                        <button 
-                                            onClick={handleGoToCourse} 
+                                        <button
+                                            onClick={handleGoToCourse}
                                             className="w-full btn-primary py-4 text-lg mb-3"
                                         >
                                             Continue Learning →
                                         </button>
-                                        <button 
-                                            onClick={handleUnenroll} 
+                                        <button
+                                            onClick={handleUnenroll}
                                             className="w-full py-3 text-sm text-gray-400 hover:text-red-400 transition-colors border border-white/10 rounded-lg hover:border-red-400/30"
                                         >
                                             Unenroll from Course
                                         </button>
                                     </>
+                                ) : course.class_id ? (
+                                    <>
+                                        <h3 className="text-xl font-semibold mb-3">Enroll via Class</h3>
+                                        <p className="text-gray-400 text-sm mb-5">
+                                            This course is part of a class. Enroll in the class to get access to all its courses at once.
+                                        </p>
+                                        <button
+                                            onClick={() => navigate(`/class/${course.class_id}`)}
+                                            className="w-full py-4 text-lg rounded-xl font-semibold text-white hover:opacity-90 transition-opacity"
+                                            style={{ background: 'linear-gradient(135deg, #a1609d, #b870ad)' }}
+                                        >
+                                            Go to Class →
+                                        </button>
+                                    </>
                                 ) : (
                                     <>
                                         <h3 className="text-xl font-semibold mb-4">Start Learning Today</h3>
-                                        
+
                                         {/* Private course badge */}
                                         {course.is_private && (
                                             <div className="flex items-center gap-2 mb-4 p-2 bg-[#a1609d]/10 rounded-lg border border-[#a1609d]/20">
@@ -235,8 +295,8 @@ const CourseDetail = () => {
                                             </div>
                                         )}
 
-                                        <button 
-                                            onClick={handleEnroll} 
+                                        <button
+                                            onClick={handleEnroll}
                                             className="w-full btn-primary py-4 text-lg mb-4"
                                             disabled={course.is_private && !enrollmentCode}
                                         >
@@ -418,6 +478,43 @@ const CourseDetail = () => {
                                 <p className="text-gray-500">No content available yet.</p>
                             )}
                         </div>
+
+                        {/* Lectures */}
+                        {course.lectures?.length > 0 && (
+                            <div className="surface-card rounded-2xl p-6">
+                                <h2 className="text-xl font-semibold mb-4">Lectures</h2>
+                                <div className="space-y-2">
+                                    {course.lectures.map((lecture) => (
+                                        <div
+                                            key={lecture.id}
+                                            className={`flex items-center justify-between p-4 border border-white/10 rounded-xl ${isEnrolled ? 'cursor-pointer hover:bg-white/5 transition-colors' : ''}`}
+                                            onClick={() => isEnrolled && navigate(`/lectures/${lecture.id}`)}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-purple-400 text-lg">📖</span>
+                                                <div>
+                                                    <span className="text-gray-200">{lecture.title}</span>
+                                                    {lecture.chapter_title && (
+                                                        <span className="ml-2 text-xs text-gray-500">{lecture.chapter_title}</span>
+                                                    )}
+                                                    <div className="flex gap-2 mt-0.5">
+                                                        {lecture.page_count > 0 && (
+                                                            <span className="text-xs text-gray-500">{lecture.page_count} page{lecture.page_count !== 1 ? 's' : ''}</span>
+                                                        )}
+                                                        {lecture.media_count > 0 && (
+                                                            <span className="text-xs text-gray-500">{lecture.media_count} media</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <span className="text-gray-500 text-sm">
+                                                {isEnrolled ? '→' : 'Enroll to access'}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         {course.materials?.length > 0 && (
                             <div className="surface-card rounded-2xl p-6">

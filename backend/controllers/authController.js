@@ -2,7 +2,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const db = require('../config/database');
-const { sendVerificationEmail, sendPasswordResetEmail } = require('../utils/emailService');
+const { enqueueEmail } = require('../utils/queueService');
+const { blacklistToken, DISTRIBUTED_MODE } = require('../utils/redisClient');
 const swot = require('swot-node');
 
 // Validate that an email is from an academic institution
@@ -66,13 +67,10 @@ const register = async (req, res) => {
 
         const user = result.rows[0];
 
-        // Send verification email
-        try {
-            await sendVerificationEmail(email, username, verificationToken);
-        } catch (emailError) {
-            console.error('Failed to send verification email:', emailError);
-            // Don't fail registration if email fails - user can request resend
-        }
+        // Queue verification email (non-blocking)
+        enqueueEmail({ type: 'sendVerificationEmail', email, username, verificationToken }).catch(err =>
+            console.error('Failed to queue verification email:', err.message)
+        );
 
         // Generate token (but user needs to verify email before full access)
         const token = jwt.sign(
@@ -331,8 +329,9 @@ const resendVerificationEmail = async (req, res) => {
             [verificationToken, verificationExpires, user.id]
         );
 
-        // Send verification email
-        await sendVerificationEmail(email, user.username, verificationToken);
+        enqueueEmail({ type: 'sendVerificationEmail', email, username: user.username, verificationToken }).catch(err =>
+            console.error('Failed to queue verification email:', err.message)
+        );
 
         res.json({ message: 'Verification email sent' });
     } catch (error) {
@@ -377,8 +376,9 @@ const forgotPassword = async (req, res) => {
             [resetToken, resetExpires, user.id]
         );
 
-        // Send password reset email
-        await sendPasswordResetEmail(email, user.username, resetToken);
+        enqueueEmail({ type: 'sendPasswordResetEmail', email, username: user.username, resetToken }).catch(err =>
+            console.error('Failed to queue password reset email:', err.message)
+        );
 
         res.json({ message: 'If an account exists, a password reset email will be sent' });
     } catch (error) {
@@ -453,7 +453,7 @@ const googleAuth = async (req, res) => {
             return res.status(401).json({ error: 'Invalid token audience' });
         }
 
-        const { email, name, sub: googleId, picture } = googleUser;
+        const { email, name, sub: googleId } = googleUser;
 
         // Check if user exists
         let result = await db.query(
@@ -462,7 +462,6 @@ const googleAuth = async (req, res) => {
         );
 
         let user;
-        let isNewUser = false;
 
         if (result.rows.length === 0) {
             // New user - validate academic email
@@ -472,7 +471,6 @@ const googleAuth = async (req, res) => {
             }
 
             // New user - they need to choose a username
-            isNewUser = true;
             
             // Generate a temporary token with Google info for username selection
             const tempToken = jwt.sign(
@@ -552,7 +550,7 @@ const completeGoogleSignup = async (req, res) => {
         let decoded;
         try {
             decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
-        } catch (e) {
+        } catch {
             return res.status(401).json({ error: 'Invalid or expired token. Please sign in with Google again.' });
         }
 
@@ -631,52 +629,9 @@ const deleteAccount = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // Get all courses the user is enrolled in
-        const enrollments = await db.query(
-            'SELECT course_id FROM enrollments WHERE user_id = $1',
-            [userId]
-        );
-
-        // Delete all progress data for each enrolled course
-        for (const enrollment of enrollments.rows) {
-            const courseId = enrollment.course_id;
-            await db.query(
-                `DELETE FROM ai_complexity_analysis 
-                 WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
-                [userId, courseId]
-            );
-            await db.query(
-                `DELETE FROM ai_hints 
-                 WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
-                [userId, courseId]
-            );
-            await db.query(
-                `DELETE FROM submissions 
-                 WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
-                [userId, courseId]
-            );
-            await db.query(
-                `DELETE FROM user_progress 
-                 WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
-                [userId, courseId]
-            );
-            await db.query(
-                'DELETE FROM time_sessions WHERE user_id = $1 AND course_id = $2',
-                [userId, courseId]
-            );
-        }
-
-        // Delete enrollments
+        // submissions, user_progress, ai_hints, ai_complexity_analysis, help_requests cascade from users
         await db.query('DELETE FROM enrollments WHERE user_id = $1', [userId]);
-
-        // Delete any remaining submissions/progress not tied to enrollments
-        await db.query('DELETE FROM ai_complexity_analysis WHERE user_id = $1', [userId]);
-        await db.query('DELETE FROM ai_hints WHERE user_id = $1', [userId]);
-        await db.query('DELETE FROM submissions WHERE user_id = $1', [userId]);
-        await db.query('DELETE FROM user_progress WHERE user_id = $1', [userId]);
-        await db.query('DELETE FROM time_sessions WHERE user_id = $1', [userId]);
-
-        // Finally delete the user
+        await db.query('DELETE FROM course_time_sessions WHERE user_id = $1', [userId]);
         await db.query('DELETE FROM users WHERE id = $1', [userId]);
 
         res.json({ message: 'Account deleted successfully' });
@@ -707,9 +662,28 @@ const checkUsername = async (req, res) => {
     }
 };
 
+const logout = async (req, res) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        if (token && DISTRIBUTED_MODE) {
+            // Decode to get expiry without re-verifying (already verified by authMiddleware)
+            const decoded = jwt.decode(token);
+            if (decoded?.exp) {
+                const ttl = decoded.exp - Math.floor(Date.now() / 1000);
+                if (ttl > 0) await blacklistToken(token, ttl);
+            }
+        }
+        res.json({ message: 'Logged out successfully' });
+    } catch (error) {
+        console.error('Logout error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 module.exports = {
     register,
     login,
+    logout,
     getProfile,
     uploadAvatar,
     updateProfile,
