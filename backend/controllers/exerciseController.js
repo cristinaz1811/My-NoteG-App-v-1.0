@@ -879,11 +879,71 @@ const generateAIHint = async (req, res) => {
         const exerciseResult = await db.query('SELECT * FROM exercises WHERE id = $1', [id]);
         const exercise = exerciseResult.rows[0];
 
-        // Check course-level ai_hints_enabled
+        // Check course-level ai_hints_enabled and resolve prompt strategy
         let courseAiHints = true;
+        let systemPromptOverride = null;
+        let systemPromptAppend = null;
         if (exercise.course_id) {
-            const courseRow = await db.query('SELECT ai_hints_enabled FROM courses WHERE id = $1', [exercise.course_id]);
-            if (courseRow.rows.length > 0) courseAiHints = courseRow.rows[0].ai_hints_enabled;
+            const courseRow = await db.query(
+                'SELECT ai_hints_enabled, ai_hint_mode, ai_hint_guidance, title, description, learning_objectives, tags FROM courses WHERE id = $1',
+                [exercise.course_id]
+            );
+            if (courseRow.rows.length > 0) {
+                const course = courseRow.rows[0];
+                courseAiHints = course.ai_hints_enabled;
+                const mode = course.ai_hint_mode || 'none';
+
+                if (mode === 'custom' && course.ai_hint_guidance) {
+                    // Professor's prompt fully replaces the base prompt
+                    systemPromptOverride = course.ai_hint_guidance;
+                } else if (mode === 'course_context') {
+                    // Build context from course data and append to base prompt
+                    const parts = [
+                        `Course: "${course.title}"`,
+                        course.description ? `Description: ${course.description}` : null,
+                        course.learning_objectives?.length ? `Learning objectives: ${course.learning_objectives.join(', ')}` : null,
+                        course.tags?.length ? `Topics covered: ${course.tags.join(', ')}` : null,
+                    ].filter(Boolean);
+
+                    // Include lectures from the same chapter as additional context
+                    if (exercise.chapter_id) {
+                        const lectureRows = await db.query(
+                            `SELECT l.title, l.description, lp.title AS page_title, lp.content, lp.page_number
+                             FROM lectures l
+                             LEFT JOIN lecture_pages lp ON lp.lecture_id = l.id
+                             WHERE l.chapter_id = $1
+                             ORDER BY l.order_index, l.id, lp.page_number`,
+                            [exercise.chapter_id]
+                        );
+
+                        if (lectureRows.rows.length > 0) {
+                            // Group pages by lecture
+                            const lectureMap = new Map();
+                            for (const row of lectureRows.rows) {
+                                if (!lectureMap.has(row.title)) {
+                                    lectureMap.set(row.title, { description: row.description, pages: [] });
+                                }
+                                if (row.page_title) {
+                                    const truncated = row.content ? row.content.replace(/<[^>]*>/g, '').slice(0, 300) : '';
+                                    lectureMap.get(row.title).pages.push(
+                                        `    ${row.page_title}${truncated ? ': ' + truncated : ''}`
+                                    );
+                                }
+                            }
+
+                            const lectureLines = ['', 'Chapter lectures:'];
+                            for (const [title, data] of lectureMap) {
+                                lectureLines.push(`- "${title}"${data.description ? ' — ' + data.description : ''}`);
+                                lectureLines.push(...data.pages);
+                            }
+                            parts.push(...lectureLines);
+                        }
+                    }
+
+                    systemPromptAppend = parts.join('\n');
+                }
+                // mode === 'none': both stay null → base prompt used
+            }
         }
         if (!courseAiHints || !exercise.ai_hints_enabled) {
             return res.status(403).json({ error: 'AI hints are disabled for this exercise.' });
@@ -901,6 +961,8 @@ const generateAIHint = async (req, res) => {
                 currentComplexity: currentComplexity || 'unknown',
                 optimalComplexity: optimalComplexity || 'unknown',
                 hintNumber,
+                systemPromptOverride,
+                systemPromptAppend,
             });
         } else if (isSQLExercise) {
             hintText = await generateSQLHints({
@@ -910,6 +972,8 @@ const generateAIHint = async (req, res) => {
                 code: code || '',
                 failedTests: failedTests || [],
                 hintNumber,
+                systemPromptOverride,
+                systemPromptAppend,
             });
         } else {
             const testCasesResult = await db.query(
@@ -924,6 +988,8 @@ const generateAIHint = async (req, res) => {
                 testCases: testCasesResult.rows,
                 failedTests: failedTests || [],
                 hintNumber,
+                systemPromptOverride,
+                systemPromptAppend,
             });
         }
 

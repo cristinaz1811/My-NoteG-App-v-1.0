@@ -19,6 +19,20 @@ const EditCourse = () => {
     const [editingExercise, setEditingExercise] = useState(null);
     const [tagInput, setTagInput] = useState('');
     const [objectiveInput, setObjectiveInput] = useState('');
+    const [expandedChapters, setExpandedChapters] = useState({});
+    const [expandedSections, setExpandedSections] = useState({});
+
+    const toggleChapter = (chapterId) =>
+        setExpandedChapters(prev => ({ ...prev, [chapterId]: !prev[chapterId] }));
+
+    const toggleSection = (chapterId, section) =>
+        setExpandedSections(prev => ({
+            ...prev,
+            [`${chapterId}-${section}`]: !prev[`${chapterId}-${section}`],
+        }));
+
+    const isSectionOpen = (chapterId, section) =>
+        !!expandedSections[`${chapterId}-${section}`];
     const [lectures, setLectures] = useState([]);
 
     useEffect(() => {
@@ -57,6 +71,8 @@ const EditCourse = () => {
                 learning_objectives: response.data.learning_objectives || [],
                 is_private: response.data.is_private || false,
                 ai_hints_enabled: response.data.ai_hints_enabled !== false,
+                ai_hint_mode: response.data.ai_hint_mode || 'none',
+                ai_hint_guidance: response.data.ai_hint_guidance || '',
             });
         } catch (error) {
             console.error('Error loading course:', error);
@@ -521,7 +537,7 @@ const EditCourse = () => {
                                         </div>
                                     )}
                                 </div>
-                                <div className="border border-white/10 rounded-xl p-4">
+                                <div className="border border-white/10 rounded-xl p-4 space-y-4">
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <label className="text-sm font-medium text-gray-300">AI Hints</label>
@@ -541,6 +557,67 @@ const EditCourse = () => {
                                             }`} />
                                         </button>
                                     </div>
+                                    {formData.ai_hints_enabled && (
+                                        <div className="space-y-2">
+                                            <p className="text-sm font-medium text-gray-300 mb-1">Hint prompt strategy</p>
+                                            {[
+                                                {
+                                                    value: 'none',
+                                                    label: 'Default AI logic',
+                                                    description: 'Use the built-in progressive hint system. No course-specific customisation.',
+                                                },
+                                                {
+                                                    value: 'course_context',
+                                                    label: 'Use course information as context',
+                                                    description: 'Keep the default logic but enrich the AI with your course title, description, learning objectives, and topics.',
+                                                },
+                                                {
+                                                    value: 'custom',
+                                                    label: 'Custom prompt',
+                                                    description: 'Replace the default AI logic entirely with your own instructions.',
+                                                },
+                                            ].map((opt) => {
+                                                const selected = formData.ai_hint_mode === opt.value;
+                                                return (
+                                                    <button
+                                                        key={opt.value}
+                                                        type="button"
+                                                        onClick={() => setFormData({ ...formData, ai_hint_mode: opt.value })}
+                                                        className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                                                            selected
+                                                                ? 'border-[#a1609d]/60 bg-[#a1609d]/10'
+                                                                : 'border-white/10 hover:border-white/20'
+                                                        }`}
+                                                    >
+                                                        <p className={`text-sm font-medium ${selected ? 'text-white' : 'text-gray-300'}`}>
+                                                            {selected ? '● ' : '○ '}{opt.label}
+                                                        </p>
+                                                        <p className="text-xs text-gray-500 mt-1">{opt.description}</p>
+                                                    </button>
+                                                );
+                                            })}
+                                            {formData.ai_hint_mode === 'custom' && (
+                                                <div>
+                                                    <p className="text-xs text-gray-400 mb-1">Your custom prompt</p>
+                                                    <textarea
+                                                        value={formData.ai_hint_guidance}
+                                                        onChange={(e) => setFormData({ ...formData, ai_hint_guidance: e.target.value })}
+                                                        rows={5}
+                                                        className="w-full text-sm"
+                                                        placeholder='e.g. "You write concise hints for a dynamic programming course. Always steer students toward a bottom-up DP approach. Never reveal the recurrence relation directly. Hints should reference the Week 4 lecture on memoization."'
+                                                    />
+                                                </div>
+                                            )}
+                                            {formData.ai_hint_mode === 'course_context' && (
+                                                <div className="p-3 rounded-lg bg-black/20 border border-white/10 text-xs text-gray-400 space-y-1">
+                                                    <p className="text-gray-300 font-medium">Context that will be included:</p>
+                                                    <p>• Course title and description</p>
+                                                    <p>• Learning objectives</p>
+                                                    <p>• Tags / topics covered</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                                 <button
                                     onClick={handleUpdateCourse}
@@ -590,6 +667,32 @@ const EditCourse = () => {
                                         </ul>
                                     </div>
                                 )}
+                                {/* AI Hints */}
+                                <div className="border border-white/10 rounded-xl p-4 space-y-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-sm text-gray-400">AI Hints</span>
+                                        {course.ai_hints_enabled !== false ? (
+                                            <span className="badge bg-[#a1609d]/20 text-[#a1609d] text-xs">Enabled</span>
+                                        ) : (
+                                            <span className="badge bg-white/10 text-gray-400 text-xs">Disabled</span>
+                                        )}
+                                        {course.ai_hints_enabled !== false && (
+                                            <span className="text-xs text-gray-500">
+                                                {{
+                                                    none: '· Default logic',
+                                                    course_context: '· Course context',
+                                                    custom: '· Custom prompt',
+                                                }[course.ai_hint_mode] || '· Default logic'}
+                                            </span>
+                                        )}
+                                    </div>
+                                    {course.ai_hint_mode === 'custom' && course.ai_hint_guidance && (
+                                        <div>
+                                            <span className="text-xs text-gray-500 uppercase tracking-wider">Custom Prompt</span>
+                                            <p className="text-sm text-gray-300 mt-1 whitespace-pre-wrap">{course.ai_hint_guidance}</p>
+                                        </div>
+                                    )}
+                                </div>
                                 {/* Privacy / Enrollment Code */}
                                 <div className="border border-white/10 rounded-xl p-4">
                                     <div className="flex items-center gap-2 mb-1">
@@ -643,62 +746,152 @@ const EditCourse = () => {
                                 <p className="text-gray-400 mb-4">No chapters yet. Add your first chapter!</p>
                             </div>
                         ) : (
-                            course.chapters?.map((chapter) => (
-                                <div key={chapter.id} className="surface-card rounded-xl p-5">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <h3 className="font-semibold">{chapter.title}</h3>
-                                            <p className="text-sm text-gray-400">{chapter.description}</p>
+                            course.chapters?.map((chapter) => {
+                                const isOpen = !!expandedChapters[chapter.id];
+                                const chapterLectures = lectures.filter(l => l.chapter_id === chapter.id);
+                                const lecturesOpen = isSectionOpen(chapter.id, 'lectures');
+                                const exercisesOpen = isSectionOpen(chapter.id, 'exercises');
+                                const totalItems = chapterLectures.length + (chapter.exercises?.length || 0);
+
+                                return (
+                                <div key={chapter.id} className="surface-card rounded-xl overflow-hidden">
+                                    {/* Chapter header — always visible, click to expand */}
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleChapter(chapter.id)}
+                                        className="w-full flex items-center justify-between p-5 text-left hover:bg-white/5 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <span className="text-gray-400 text-sm transition-transform duration-200" style={{ display: 'inline-block', transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                                            <div className="min-w-0">
+                                                <h3 className="font-semibold text-white">{chapter.title}</h3>
+                                                {chapter.description && <p className="text-sm text-gray-400 truncate">{chapter.description}</p>}
+                                            </div>
+                                            {totalItems > 0 && (
+                                                <span className="text-xs text-gray-500 flex-shrink-0">
+                                                    {totalItems} item{totalItems !== 1 ? 's' : ''}
+                                                </span>
+                                            )}
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => setEditingChapter(chapter)}
-                                                className="text-sm text-[#fef483] hover:text-[#fff9c4]"
+                                        <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                                            <span
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={e => { e.stopPropagation(); setEditingChapter(chapter); }}
+                                                onKeyDown={e => e.key === 'Enter' && (e.stopPropagation(), setEditingChapter(chapter))}
+                                                className="text-sm text-[#fef483] hover:text-[#fff9c4] cursor-pointer"
                                             >
                                                 Edit
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteChapter(chapter.id)}
-                                                className="text-sm text-red-400 hover:text-red-300"
+                                            </span>
+                                            <span
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={e => { e.stopPropagation(); handleDeleteChapter(chapter.id); }}
+                                                onKeyDown={e => e.key === 'Enter' && (e.stopPropagation(), handleDeleteChapter(chapter.id))}
+                                                className="text-sm text-red-400 hover:text-red-300 cursor-pointer"
                                             >
                                                 Delete
-                                            </button>
+                                            </span>
                                         </div>
-                                    </div>
-                                    {/* Chapter Exercises */}
-                                    {chapter.exercises && chapter.exercises.length > 0 && (
-                                        <div className="mt-4 pl-4 border-l-2 border-[#a1609d]/30 space-y-2">
-                                            <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">
-                                                {chapter.exercises.length} Exercise{chapter.exercises.length !== 1 ? 's' : ''}
-                                            </p>
-                                            {chapter.exercises.map((exercise) => (
-                                                <div key={exercise.id} className="flex items-center justify-between py-2 px-3 bg-black/20 rounded-lg">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-sm">{exercise.title}</span>
-                                                        <span className={`badge text-xs ${getDifficultyBadgeClass(exercise.difficulty)}`}>
-                                                            {exercise.difficulty}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <Link
-                                                            to={`/professor/exercise/${exercise.id}`}
-                                                            className="text-xs text-[#fef483] hover:text-[#fff9c4] no-underline"
-                                                        >
-                                                            Edit
-                                                        </Link>
-                                                        <button
-                                                            onClick={() => handleDeleteExercise(exercise.id)}
-                                                            className="text-xs text-red-400 hover:text-red-300"
-                                                        >
-                                                            Delete
-                                                        </button>
-                                                    </div>
+                                    </button>
+
+                                    {/* Expanded content */}
+                                    {isOpen && (
+                                        <div className="px-5 pb-5 space-y-3 border-t border-white/5">
+
+                                            {/* Lectures sub-section */}
+                                            {chapterLectures.length > 0 && (
+                                                <div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleSection(chapter.id, 'lectures')}
+                                                        className="flex items-center gap-2 mt-4 mb-2 text-xs text-gray-400 hover:text-purple-300 uppercase tracking-wider transition-colors"
+                                                    >
+                                                        <span style={{ display: 'inline-block', transform: lecturesOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>▶</span>
+                                                        {chapterLectures.length} Lecture{chapterLectures.length !== 1 ? 's' : ''}
+                                                    </button>
+                                                    {lecturesOpen && (
+                                                        <div className="pl-4 border-l-2 border-purple-500/30 space-y-2">
+                                                            {chapterLectures.map((lecture) => (
+                                                                <div key={lecture.id} className="flex items-center justify-between py-2 px-3 bg-purple-500/5 rounded-lg">
+                                                                    <div className="flex items-center gap-2 min-w-0">
+                                                                        <span className="text-sm truncate">📖 {lecture.title}</span>
+                                                                        <span className="text-xs text-gray-500 flex-shrink-0">
+                                                                            {lecture.page_count} page{lecture.page_count !== 1 ? 's' : ''}
+                                                                            {lecture.media_count > 0 && ` · ${lecture.media_count} media`}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => navigate(`/professor/course/${id}/lecture/${lecture.id}/edit`)}
+                                                                            className="text-xs text-purple-400 hover:text-purple-300"
+                                                                        >
+                                                                            Edit
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleDeleteLecture(lecture.id)}
+                                                                            className="text-xs text-red-400 hover:text-red-300"
+                                                                        >
+                                                                            Delete
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            ))}
+                                            )}
+
+                                            {/* Exercises sub-section */}
+                                            {chapter.exercises && chapter.exercises.length > 0 && (
+                                                <div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleSection(chapter.id, 'exercises')}
+                                                        className="flex items-center gap-2 mt-2 mb-2 text-xs text-gray-400 hover:text-[#a1609d] uppercase tracking-wider transition-colors"
+                                                    >
+                                                        <span style={{ display: 'inline-block', transform: exercisesOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>▶</span>
+                                                        {chapter.exercises.length} Exercise{chapter.exercises.length !== 1 ? 's' : ''}
+                                                    </button>
+                                                    {exercisesOpen && (
+                                                        <div className="pl-4 border-l-2 border-[#a1609d]/30 space-y-2">
+                                                            {chapter.exercises.map((exercise) => (
+                                                                <div key={exercise.id} className="flex items-center justify-between py-2 px-3 bg-black/20 rounded-lg">
+                                                                    <div className="flex items-center gap-2 min-w-0">
+                                                                        <span className="text-sm truncate">{exercise.title}</span>
+                                                                        <span className={`badge text-xs flex-shrink-0 ${getDifficultyBadgeClass(exercise.difficulty)}`}>
+                                                                            {exercise.difficulty}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                                                        <Link
+                                                                            to={`/professor/exercise/${exercise.id}`}
+                                                                            className="text-xs text-[#fef483] hover:text-[#fff9c4] no-underline"
+                                                                        >
+                                                                            Edit
+                                                                        </Link>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleDeleteExercise(exercise.id)}
+                                                                            className="text-xs text-red-400 hover:text-red-300"
+                                                                        >
+                                                                            Delete
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
                                         </div>
                                     )}
                                 </div>
-                            ))
+                                );
+                            })
                         )}
                     </div>
                 )}

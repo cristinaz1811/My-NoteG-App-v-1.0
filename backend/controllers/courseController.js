@@ -627,7 +627,7 @@ const getProfessorCourses = async (req, res) => {
 const updateCourse = async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, difficulty, long_description, learning_objectives, tags, estimated_hours, is_private, class_id, order_index, ai_hints_enabled } = req.body;
+        const { title, description, difficulty, long_description, learning_objectives, tags, estimated_hours, is_private, class_id, order_index, ai_hints_enabled, ai_hint_guidance, ai_hint_mode } = req.body;
         const userId = req.user.id;
 
         // Verify ownership
@@ -661,6 +661,8 @@ const updateCourse = async (req, res) => {
             : prevClassId;
 
         const aiHintsValue = ai_hints_enabled !== undefined ? ai_hints_enabled : course.rows[0].ai_hints_enabled;
+        const aiHintGuidanceValue = ai_hint_guidance !== undefined ? (ai_hint_guidance || null) : course.rows[0].ai_hint_guidance;
+        const aiHintModeValue = ai_hint_mode !== undefined ? (ai_hint_mode || 'none') : (course.rows[0].ai_hint_mode || 'none');
 
         const result = await db.query(`
             UPDATE courses
@@ -676,10 +678,12 @@ const updateCourse = async (req, res) => {
                 class_id = $10,
                 order_index = COALESCE($11, order_index),
                 ai_hints_enabled = $13,
+                ai_hint_guidance = $14,
+                ai_hint_mode = $15,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = $12
             RETURNING *
-        `, [title, description, difficulty, long_description, learning_objectives, tags, estimated_hours, is_private, enrollmentCode, finalClassId, order_index, id, aiHintsValue]);
+        `, [title, description, difficulty, long_description, learning_objectives, tags, estimated_hours, is_private, enrollmentCode, finalClassId, order_index, id, aiHintsValue, aiHintGuidanceValue, aiHintModeValue]);
 
         // Auto-enroll approved class members when course is assigned to a (new) class
         if (finalClassId && finalClassId !== prevClassId) {
