@@ -368,6 +368,26 @@ const MyCourseDetail = () => {
                                                             ⏱ {exercise.time_limit_minutes}m
                                                         </span>
                                                     )}
+                                                    {exercise.is_test && (
+                                                        <span className="text-xs text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">
+                                                            Test
+                                                        </span>
+                                                    )}
+                                                    {!exercise.is_published && (
+                                                        <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded">
+                                                            Unpublished
+                                                        </span>
+                                                    )}
+                                                    {exercise.available_from && new Date() < new Date(exercise.available_from) && (
+                                                        <span className="text-xs text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded">
+                                                            Opens {new Date(exercise.available_from).toLocaleDateString()}
+                                                        </span>
+                                                    )}
+                                                    {exercise.available_until && new Date() > new Date(exercise.available_until) && (
+                                                        <span className="text-xs text-red-400 bg-red-500/10 px-2 py-0.5 rounded">
+                                                            Closed
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>

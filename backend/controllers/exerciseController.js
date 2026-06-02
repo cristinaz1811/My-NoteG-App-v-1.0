@@ -1,5 +1,5 @@
 const db = require('../config/database');
-const { generateHints, generateOptimizationHints, analyzeComplexity } = require('../utils/openaiService');
+const { generateHints, generateSQLHints, generateOptimizationHints, analyzeComplexity } = require('../utils/openaiService');
 const { notifyNewExercise, notifyCourseCompleted, createNotification } = require('../utils/notificationService');
 const { DISTRIBUTED_MODE, cacheGet, cacheSet } = require('../utils/redisClient');
 
@@ -104,13 +104,35 @@ const getExerciseById = async (req, res) => {
                 // Get timed session if exercise has a time limit
                 if (exercise.time_limit_minutes) {
                     const sessionResult = await db.query(
-                        'SELECT * FROM exam_sessions WHERE user_id = $1 AND exercise_id = $2',
+                        'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
                         [req.user.id, id]
                     );
                     timedSession = sessionResult.rows[0] || null;
                 }
             }
         }
+
+        // Compute effective availability (professors always bypass)
+        const isProfessor = req.user && req.user.role === 'professor';
+        const now = new Date();
+        let accessStatus = 'open'; // 'open' | 'not_published' | 'not_yet' | 'expired'
+        if (!isProfessor) {
+            if (!exercise.is_published) {
+                accessStatus = 'not_published';
+            } else if (exercise.available_from && now < new Date(exercise.available_from)) {
+                accessStatus = 'not_yet';
+            } else if (exercise.available_until && now > new Date(exercise.available_until)) {
+                accessStatus = 'expired';
+            }
+        }
+
+        // Fetch course-level ai_hints_enabled to compute effective setting
+        let courseAiHintsEnabled = true;
+        if (courseId) {
+            const courseRow = await db.query('SELECT ai_hints_enabled FROM courses WHERE id = $1', [courseId]);
+            if (courseRow.rows.length > 0) courseAiHintsEnabled = courseRow.rows[0].ai_hints_enabled;
+        }
+        const effectiveAiHintsEnabled = courseAiHintsEnabled && exercise.ai_hints_enabled;
 
         res.json({
             ...exercise,
@@ -122,6 +144,8 @@ const getExerciseById = async (req, res) => {
             isFirstExercise,
             isFirstChapter,
             isEnrolled,
+            accessStatus,
+            ai_hints_enabled: effectiveAiHintsEnabled,
         });
     } catch (error) {
         console.error('Get exercise error:', error);
@@ -131,13 +155,13 @@ const getExerciseById = async (req, res) => {
 
 const createExercise = async (req, res) => {
     try {
-        const { courseId, title, description, difficulty, starterCode, language, testCases, chapter_id, requires_efficiency, time_limit_minutes, is_multi_file, files } = req.body;
+        const { courseId, title, description, difficulty, starterCode, language, testCases, chapter_id, requires_efficiency, time_limit_minutes, is_multi_file, files, ai_hints_enabled, is_test, is_published, available_from, available_until } = req.body;
 
         // Create exercise
         const exerciseResult = await db.query(
-            `INSERT INTO exercises (course_id, title, description, difficulty, starter_code, language, chapter_id, requires_efficiency, time_limit_minutes, is_multi_file) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-            [courseId, title, description, difficulty, is_multi_file ? null : starterCode, language, chapter_id || null, requires_efficiency || false, time_limit_minutes || null, is_multi_file || false]
+            `INSERT INTO exercises (course_id, title, description, difficulty, starter_code, language, chapter_id, requires_efficiency, time_limit_minutes, is_multi_file, ai_hints_enabled, is_test, is_published, available_from, available_until)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
+            [courseId, title, description, difficulty, is_multi_file ? null : starterCode, language, chapter_id || null, requires_efficiency || false, time_limit_minutes || null, is_multi_file || false, ai_hints_enabled !== false, is_test || false, is_published !== false, available_from || null, available_until || null]
         );
 
         const exercise = exerciseResult.rows[0];
@@ -219,7 +243,7 @@ const submitSolution = async (req, res) => {
         // Check if this is a timed exercise and if the timer has expired
         if (exercise.time_limit_minutes) {
             const sessionResult = await db.query(
-                'SELECT * FROM exam_sessions WHERE user_id = $1 AND exercise_id = $2',
+                'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
                 [userId, id]
             );
             const session = sessionResult.rows[0];
@@ -232,7 +256,7 @@ const submitSolution = async (req, res) => {
             if (new Date() > new Date(session.expires_at)) {
                 // Mark session as expired
                 await db.query(
-                    'UPDATE exam_sessions SET time_expired = TRUE WHERE id = $1',
+                    'UPDATE timed_sessions SET time_expired = TRUE WHERE id = $1',
                     [session.id]
                 );
                 return res.status(403).json({ error: 'Time has expired for this exercise. You can no longer submit solutions.', timeExpired: true });
@@ -533,14 +557,14 @@ const getSubmissionDetail = async (req, res) => {
 const updateExercise = async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency, time_limit_minutes, is_multi_file } = req.body;
+        const { title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency, time_limit_minutes, is_multi_file, ai_hints_enabled, is_test, is_published, available_from, available_until } = req.body;
         const userId = req.user.id;
 
         // Verify ownership through course
         const exercise = await db.query(`
-            SELECT e.*, c.created_by 
-            FROM exercises e 
-            JOIN courses c ON e.course_id = c.id 
+            SELECT e.*, c.created_by
+            FROM exercises e
+            JOIN courses c ON e.course_id = c.id
             WHERE e.id = $1
         `, [id]);
 
@@ -551,11 +575,15 @@ const updateExercise = async (req, res) => {
             return res.status(403).json({ error: 'Not authorized' });
         }
 
-        // For time_limit_minutes, allow explicit null to remove the limit
         const timeLimitValue = time_limit_minutes === null ? null : (time_limit_minutes !== undefined ? time_limit_minutes : exercise.rows[0].time_limit_minutes);
+        const aiHintsValue = ai_hints_enabled !== undefined ? ai_hints_enabled : exercise.rows[0].ai_hints_enabled;
+        const isTestValue = is_test !== undefined ? is_test : exercise.rows[0].is_test;
+        const isPublishedValue = is_published !== undefined ? is_published : exercise.rows[0].is_published;
+        const availableFromValue = available_from !== undefined ? (available_from || null) : exercise.rows[0].available_from;
+        const availableUntilValue = available_until !== undefined ? (available_until || null) : exercise.rows[0].available_until;
 
         const result = await db.query(`
-            UPDATE exercises 
+            UPDATE exercises
             SET title = COALESCE($1, title),
                 description = COALESCE($2, description),
                 difficulty = COALESCE($3, difficulty),
@@ -566,10 +594,15 @@ const updateExercise = async (req, res) => {
                 requires_efficiency = COALESCE($8, requires_efficiency),
                 time_limit_minutes = $9,
                 is_multi_file = COALESCE($11, is_multi_file),
+                ai_hints_enabled = $12,
+                is_test = $13,
+                is_published = $14,
+                available_from = $15,
+                available_until = $16,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = $10
             RETURNING *
-        `, [title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency, timeLimitValue, id, is_multi_file]);
+        `, [title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency, timeLimitValue, id, is_multi_file, aiHintsValue, isTestValue, isPublishedValue, availableFromValue, availableUntilValue]);
 
         res.json(result.rows[0]);
     } catch (error) {
@@ -846,10 +879,80 @@ const generateAIHint = async (req, res) => {
         const exerciseResult = await db.query('SELECT * FROM exercises WHERE id = $1', [id]);
         const exercise = exerciseResult.rows[0];
 
+        // Check course-level ai_hints_enabled and resolve prompt strategy
+        let courseAiHints = true;
+        let systemPromptOverride = null;
+        let systemPromptAppend = null;
+        if (exercise.course_id) {
+            const courseRow = await db.query(
+                'SELECT ai_hints_enabled, ai_hint_mode, ai_hint_guidance, title, description, learning_objectives, tags FROM courses WHERE id = $1',
+                [exercise.course_id]
+            );
+            if (courseRow.rows.length > 0) {
+                const course = courseRow.rows[0];
+                courseAiHints = course.ai_hints_enabled;
+                const mode = course.ai_hint_mode || 'none';
+
+                if (mode === 'custom' && course.ai_hint_guidance) {
+                    // Professor's prompt fully replaces the base prompt
+                    systemPromptOverride = course.ai_hint_guidance;
+                } else if (mode === 'course_context') {
+                    // Build context from course data and append to base prompt
+                    const parts = [
+                        `Course: "${course.title}"`,
+                        course.description ? `Description: ${course.description}` : null,
+                        course.learning_objectives?.length ? `Learning objectives: ${course.learning_objectives.join(', ')}` : null,
+                        course.tags?.length ? `Topics covered: ${course.tags.join(', ')}` : null,
+                    ].filter(Boolean);
+
+                    // Include lectures from the same chapter as additional context
+                    if (exercise.chapter_id) {
+                        const lectureRows = await db.query(
+                            `SELECT l.title, l.description, lp.title AS page_title, lp.content, lp.page_number
+                             FROM lectures l
+                             LEFT JOIN lecture_pages lp ON lp.lecture_id = l.id
+                             WHERE l.chapter_id = $1
+                             ORDER BY l.order_index, l.id, lp.page_number`,
+                            [exercise.chapter_id]
+                        );
+
+                        if (lectureRows.rows.length > 0) {
+                            // Group pages by lecture
+                            const lectureMap = new Map();
+                            for (const row of lectureRows.rows) {
+                                if (!lectureMap.has(row.title)) {
+                                    lectureMap.set(row.title, { description: row.description, pages: [] });
+                                }
+                                if (row.page_title) {
+                                    const truncated = row.content ? row.content.replace(/<[^>]*>/g, '').slice(0, 300) : '';
+                                    lectureMap.get(row.title).pages.push(
+                                        `    ${row.page_title}${truncated ? ': ' + truncated : ''}`
+                                    );
+                                }
+                            }
+
+                            const lectureLines = ['', 'Chapter lectures:'];
+                            for (const [title, data] of lectureMap) {
+                                lectureLines.push(`- "${title}"${data.description ? ' — ' + data.description : ''}`);
+                                lectureLines.push(...data.pages);
+                            }
+                            parts.push(...lectureLines);
+                        }
+                    }
+
+                    systemPromptAppend = parts.join('\n');
+                }
+                // mode === 'none': both stay null → base prompt used
+            }
+        }
+        if (!courseAiHints || !exercise.ai_hints_enabled) {
+            return res.status(403).json({ error: 'AI hints are disabled for this exercise.' });
+        }
+
+        const isSQLExercise = exercise.exercise_type === 'sql' || exercise.language === 'sql';
         let hintText;
 
         if (hintMode === 'optimizing') {
-            // Generate optimization hint
             hintText = await generateOptimizationHints({
                 exerciseTitle: exercise.title,
                 exerciseDescription: exercise.description,
@@ -858,14 +961,25 @@ const generateAIHint = async (req, res) => {
                 currentComplexity: currentComplexity || 'unknown',
                 optimalComplexity: optimalComplexity || 'unknown',
                 hintNumber,
+                systemPromptOverride,
+                systemPromptAppend,
+            });
+        } else if (isSQLExercise) {
+            hintText = await generateSQLHints({
+                exerciseTitle: exercise.title,
+                exerciseDescription: exercise.description,
+                seedSQL: exercise.seed_sql || '',
+                code: code || '',
+                failedTests: failedTests || [],
+                hintNumber,
+                systemPromptOverride,
+                systemPromptAppend,
             });
         } else {
-            // Generate solving hint
             const testCasesResult = await db.query(
                 'SELECT input, expected_output FROM test_cases WHERE exercise_id = $1 LIMIT 3',
                 [id]
             );
-
             hintText = await generateHints({
                 exerciseTitle: exercise.title,
                 exerciseDescription: exercise.description,
@@ -874,6 +988,8 @@ const generateAIHint = async (req, res) => {
                 testCases: testCasesResult.rows,
                 failedTests: failedTests || [],
                 hintNumber,
+                systemPromptOverride,
+                systemPromptAppend,
             });
         }
 
@@ -973,7 +1089,7 @@ const startTimedSession = async (req, res) => {
 
         // Check if session already exists
         const existingSession = await db.query(
-            'SELECT * FROM exam_sessions WHERE user_id = $1 AND exercise_id = $2',
+            'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
             [userId, id]
         );
 
@@ -985,7 +1101,7 @@ const startTimedSession = async (req, res) => {
         // Create new session
         const expiresAt = new Date(Date.now() + exercise.time_limit_minutes * 60 * 1000);
         const result = await db.query(
-            `INSERT INTO exam_sessions (user_id, exercise_id, started_at, expires_at)
+            `INSERT INTO timed_sessions (user_id, exercise_id, started_at, expires_at)
              VALUES ($1, $2, CURRENT_TIMESTAMP, $3)
              RETURNING *`,
             [userId, id, expiresAt]
@@ -1005,7 +1121,7 @@ const getTimedSession = async (req, res) => {
         const userId = req.user.id;
 
         const result = await db.query(
-            'SELECT * FROM exam_sessions WHERE user_id = $1 AND exercise_id = $2',
+            'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
             [userId, id]
         );
 
@@ -1019,7 +1135,7 @@ const getTimedSession = async (req, res) => {
 
         if (expired && !session.time_expired) {
             await db.query(
-                'UPDATE exam_sessions SET time_expired = TRUE WHERE id = $1',
+                'UPDATE timed_sessions SET time_expired = TRUE WHERE id = $1',
                 [session.id]
             );
             session.time_expired = true;
@@ -1043,7 +1159,7 @@ const recordViolation = async (req, res) => {
 
         // Increment violation counter (only on active, unlocked sessions)
         const result = await db.query(`
-            UPDATE exam_sessions
+            UPDATE timed_sessions
             SET tab_switches = COALESCE(tab_switches, 0) + 1,
                 last_violation_at = CURRENT_TIMESTAMP
             WHERE user_id = $1 AND exercise_id = $2
@@ -1054,7 +1170,7 @@ const recordViolation = async (req, res) => {
         if (result.rows.length === 0) {
             // Session is already locked or expired — return current state
             const cur = await db.query(
-                'SELECT tab_switches, locked_by_flag FROM exam_sessions WHERE user_id = $1 AND exercise_id = $2',
+                'SELECT tab_switches, locked_by_flag FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
                 [userId, id]
             );
             return res.json({
@@ -1069,7 +1185,7 @@ const recordViolation = async (req, res) => {
         if (tab_switches >= VIOLATION_LOCKOUT_THRESHOLD) {
             // Lock the session
             await db.query(`
-                UPDATE exam_sessions
+                UPDATE timed_sessions
                 SET locked_by_flag = TRUE, locked_at = CURRENT_TIMESTAMP
                 WHERE id = $1
             `, [sessionId]);
@@ -1126,7 +1242,7 @@ const unlockSession = async (req, res) => {
         if (exRow.rows[0].created_by !== professorId) return res.status(403).json({ error: 'Not authorized' });
 
         const result = await db.query(`
-            UPDATE exam_sessions
+            UPDATE timed_sessions
             SET locked_by_flag = FALSE,
                 tab_switches   = 0,
                 unlocked_by    = $3,

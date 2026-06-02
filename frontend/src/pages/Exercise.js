@@ -564,6 +564,27 @@ const Exercise = () => {
                 </div>
             </div>
         );
+
+    }
+
+    // Locked / not-yet-available screen
+    if (exercise.accessStatus && exercise.accessStatus !== 'open') {
+        const messages = {
+            not_published: { icon: '🔒', title: 'Not Available', body: 'This exercise has not been published yet.' },
+            not_yet: { icon: '⏰', title: 'Not Open Yet', body: exercise.available_from ? `This exercise opens on ${new Date(exercise.available_from).toLocaleString()}.` : 'This exercise is not open yet.' },
+            expired: { icon: '🏁', title: 'Closed', body: exercise.available_until ? `This exercise closed on ${new Date(exercise.available_until).toLocaleString()}.` : 'This exercise is no longer available.' },
+        };
+        const m = messages[exercise.accessStatus];
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-center animate-fade-in-up max-w-sm">
+                    <div className="text-5xl mb-4">{m.icon}</div>
+                    <h2 className="text-2xl font-bold mb-2">{m.title}</h2>
+                    <p className="text-gray-400 mb-6 text-sm">{m.body}</p>
+                    <button onClick={() => navigate(-1)} className="btn-primary">Go Back</button>
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -815,6 +836,7 @@ const Exercise = () => {
                         >
                             Help
                         </button>
+                        {exercise?.ai_hints_enabled !== false && (
                         <button
                             onClick={() => { setShowAIPanel(!showAIPanel); if (!showAIPanel) setShowHistoryPanel(false); }}
                             className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
@@ -833,6 +855,7 @@ const Exercise = () => {
                             </svg>
                             AI
                         </button>
+                        )}
                         <button
                             onClick={exercise?.exercise_type === 'sql' ? () => sqlValidateRef.current?.() : handleSubmit}
                             disabled={submitting || timerExpired}
