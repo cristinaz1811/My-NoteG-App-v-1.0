@@ -13,6 +13,7 @@ const getAllCourses = async (req, res) => {
     try {
         const userId = req.user?.id || null;
         const userRole = req.user?.role || null;
+        const facultyId = req.user?.faculty_id || null;
 
         const cacheKey = userId ? `courses:user:${userId}` : 'courses:public';
         const cached = await cacheGet(cacheKey);
@@ -35,9 +36,30 @@ const getAllCourses = async (req, res) => {
                 GROUP BY c.id, u.username
                 ORDER BY c.created_at DESC
             `, [userId]);
-        } else {
-            // Students see standalone public courses only.
+        } else if (userRole === 'student' && userId && facultyId) {
+            // Students see standalone public courses from their faculty only.
             // Courses tied to a class are accessed through the class/year system.
+            result = await db.query(`
+                SELECT c.*, u.username as creator_name,
+                       COUNT(DISTINCT e.id) as exercise_count,
+                       COUNT(DISTINCT ch.id) as chapter_count,
+                       f.id as faculty_id, f.name as faculty_name
+                FROM courses c
+                LEFT JOIN users u ON c.created_by = u.id
+                LEFT JOIN faculties f ON u.faculty_id = f.id
+                LEFT JOIN exercises e ON c.id = e.course_id
+                LEFT JOIN chapters ch ON c.id = ch.course_id
+                WHERE c.class_id IS NULL
+                  AND u.faculty_id = $2
+                  AND (
+                      c.is_private = false
+                      OR EXISTS (SELECT 1 FROM enrollments en WHERE en.course_id = c.id AND en.user_id = $1)
+                  )
+                GROUP BY c.id, u.username, f.id, f.name
+                ORDER BY c.created_at DESC
+            `, [userId, facultyId]);
+        } else {
+            // Unauthenticated users see public courses (no faculty restriction).
             result = await db.query(`
                 SELECT c.*, u.username as creator_name,
                        COUNT(DISTINCT e.id) as exercise_count,
@@ -47,13 +69,10 @@ const getAllCourses = async (req, res) => {
                 LEFT JOIN exercises e ON c.id = e.course_id
                 LEFT JOIN chapters ch ON c.id = ch.course_id
                 WHERE c.class_id IS NULL
-                  AND (
-                      c.is_private = false
-                      OR EXISTS (SELECT 1 FROM enrollments en WHERE en.course_id = c.id AND en.user_id = $1)
-                  )
+                  AND c.is_private = false
                 GROUP BY c.id, u.username
                 ORDER BY c.created_at DESC
-            `, [userId]);
+            `);
         }
 
         await cacheSet(cacheKey, result.rows, 120);
@@ -67,18 +86,40 @@ const getAllCourses = async (req, res) => {
 const getCourseById = async (req, res) => {
     try {
         const { id } = req.params;
+        const userId = req.user?.id || null;
+        const userRole = req.user?.role || null;
+        const facultyId = req.user?.faculty_id || null;
 
         const cacheKey = `course:${id}`;
         const cached = await cacheGet(cacheKey);
-        if (cached) return res.json(cached);
+        if (cached) {
+            // Check access before returning cached data
+            const course = cached;
+            const creatorFacultyId = course.creator_faculty_id;
 
-        // Get course with all details including class/year
+            // Students can only access courses from their faculty (unless enrolled)
+            if (userRole === 'student' && facultyId && creatorFacultyId && creatorFacultyId !== facultyId) {
+                // Check if user is enrolled
+                const enrollment = await db.query(
+                    'SELECT id FROM enrollments WHERE user_id = $1 AND course_id = $2',
+                    [userId, id]
+                );
+                if (enrollment.rows.length === 0) {
+                    return res.status(403).json({ error: 'Access denied. This course is not available for your faculty.' });
+                }
+            }
+            return res.json(cached);
+        }
+
+        // Get course with all details including class/year and creator's faculty
         const courseResult = await db.query(
-            `SELECT c.*, u.username as creator_name,
+            `SELECT c.*, u.username as creator_name, u.faculty_id as creator_faculty_id,
                     cl.name AS class_name, cl.id AS class_id,
-                    cy.name AS year_name, cy.id AS year_id
+                    cy.name AS year_name, cy.id AS year_id,
+                    f.name AS creator_faculty_name
              FROM courses c
              LEFT JOIN users u ON c.created_by = u.id
+             LEFT JOIN faculties f ON u.faculty_id = f.id
              LEFT JOIN classes cl ON c.class_id = cl.id
              LEFT JOIN college_years cy ON cl.year_id = cy.id
              WHERE c.id = $1`,
@@ -87,6 +128,21 @@ const getCourseById = async (req, res) => {
 
         if (courseResult.rows.length === 0) {
             return res.status(404).json({ error: 'Course not found' });
+        }
+
+        const course = courseResult.rows[0];
+        const creatorFacultyId = course.creator_faculty_id;
+
+        // Check access control for students
+        if (userRole === 'student' && facultyId && creatorFacultyId && creatorFacultyId !== facultyId) {
+            // Check if student is enrolled in this course
+            const enrollment = await db.query(
+                'SELECT id FROM enrollments WHERE user_id = $1 AND course_id = $2',
+                [userId, id]
+            );
+            if (enrollment.rows.length === 0) {
+                return res.status(403).json({ error: 'Access denied. This course is not available for your faculty.' });
+            }
         }
 
         // Get chapters with their exercises
@@ -143,7 +199,7 @@ const getCourseById = async (req, res) => {
         `, [id]);
 
         const courseData = {
-            ...courseResult.rows[0],
+            ...course,
             chapters: chaptersResult.rows,
             unassignedExercises: unassignedExercises.rows,
             exercises: allExercises.rows,

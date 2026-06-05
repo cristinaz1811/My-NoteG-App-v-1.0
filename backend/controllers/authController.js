@@ -5,6 +5,7 @@ const db = require('../config/database');
 const { enqueueEmail } = require('../utils/queueService');
 const { blacklistToken, DISTRIBUTED_MODE } = require('../utils/redisClient');
 const swot = require('swot-node');
+const { getFacultyByEmailDomain } = require('../utils/facultyService');
 
 // Validate that an email is from an academic institution
 const validateAcademicEmail = async (email) => {
@@ -39,6 +40,9 @@ const register = async (req, res) => {
             return res.status(400).json({ error: 'Only academic email addresses are allowed. Please use your university email to register.' });
         }
 
+        // Get faculty from email domain
+        const faculty = await getFacultyByEmailDomain(email);
+
         // Check if user already exists
         const existingUser = await db.query(
             'SELECT * FROM users WHERE email = $1 OR username = $2',
@@ -52,17 +56,17 @@ const register = async (req, res) => {
         // Hash password
         const saltRounds = 10;
         const passwordHash = await bcrypt.hash(password, saltRounds);
-        
+
         // Generate verification token
         const verificationToken = generateToken();
         const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
         // Create user with role and verification token
         const result = await db.query(
-            `INSERT INTO users (username, email, password_hash, role, email_verified, verification_token, verification_token_expires) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7) 
-             RETURNING id, username, email, role, email_verified`,
-            [username, email, passwordHash, role, false, verificationToken, verificationExpires]
+            `INSERT INTO users (username, email, password_hash, role, email_verified, verification_token, verification_token_expires, faculty_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             RETURNING id, username, email, role, email_verified, faculty_id`,
+            [username, email, passwordHash, role, false, verificationToken, verificationExpires, faculty?.id || null]
         );
 
         const user = result.rows[0];
@@ -133,9 +137,21 @@ const login = async (req, res) => {
             });
         }
 
+        // Get faculty information
+        let facultyName = null;
+        if (user.faculty_id) {
+            const facultyResult = await db.query(
+                'SELECT name FROM faculties WHERE id = $1',
+                [user.faculty_id]
+            );
+            if (facultyResult.rows.length > 0) {
+                facultyName = facultyResult.rows[0].name;
+            }
+        }
+
         // Generate token
         const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role },
+            { id: user.id, username: user.username, role: user.role, faculty_id: user.faculty_id },
             process.env.JWT_SECRET,
             { expiresIn: '7d' }
         );
@@ -148,6 +164,8 @@ const login = async (req, res) => {
                 email: user.email,
                 role: user.role,
                 avatar_url: user.avatar_url || null,
+                faculty_id: user.faculty_id,
+                faculty_name: facultyName,
             },
             token,
         });
@@ -160,7 +178,11 @@ const login = async (req, res) => {
 const getProfile = async (req, res) => {
     try {
         const result = await db.query(
-            'SELECT id, username, email, role, created_at, email_verified, avatar_url FROM users WHERE id = $1',
+            `SELECT u.id, u.username, u.email, u.role, u.created_at, u.email_verified, u.avatar_url, u.faculty_id,
+                    f.name as faculty_name
+             FROM users u
+             LEFT JOIN faculties f ON u.faculty_id = f.id
+             WHERE u.id = $1`,
             [req.user.id]
         );
 
@@ -470,11 +492,14 @@ const googleAuth = async (req, res) => {
                 return res.status(400).json({ error: 'Only academic email addresses are allowed. Please use a Google account linked to your university email.' });
             }
 
+            // Get faculty from email domain
+            const facultyForGoogle = await getFacultyByEmailDomain(email);
+
             // New user - they need to choose a username
-            
+
             // Generate a temporary token with Google info for username selection
             const tempToken = jwt.sign(
-                { googleId, email, name, role, isTemp: true },
+                { googleId, email, name, role, faculty_id: facultyForGoogle?.id || null, isTemp: true },
                 process.env.JWT_SECRET,
                 { expiresIn: '15m' } // Short expiry for security
             );
@@ -483,7 +508,9 @@ const googleAuth = async (req, res) => {
                 needsUsername: true,
                 tempToken,
                 suggestedUsername: name.replace(/\s+/g, '_').toLowerCase(),
-                email
+                email,
+                faculty_id: facultyForGoogle?.id || null,
+                faculty_name: facultyForGoogle?.name || null
             });
         } else {
             user = result.rows[0];
@@ -558,7 +585,7 @@ const completeGoogleSignup = async (req, res) => {
             return res.status(401).json({ error: 'Invalid token type' });
         }
 
-        const { googleId, email, role } = decoded;
+        const { googleId, email, role, faculty_id } = decoded;
 
         // Check if username is taken
         const existingUser = await db.query(
@@ -580,30 +607,42 @@ const completeGoogleSignup = async (req, res) => {
             // User already exists, just log them in
             const user = existingGoogleUser.rows[0];
             const token = jwt.sign(
-                { id: user.id, username: user.username, role: user.role },
+                { id: user.id, username: user.username, role: user.role, faculty_id: user.faculty_id },
                 process.env.JWT_SECRET,
                 { expiresIn: '7d' }
             );
             return res.json({
                 message: 'Login successful',
-                user: { id: user.id, username: user.username, email: user.email, role: user.role },
+                user: { id: user.id, username: user.username, email: user.email, role: user.role, faculty_id: user.faculty_id },
                 token
             });
         }
 
         // Create the user with chosen username
         const result = await db.query(
-            `INSERT INTO users (username, email, google_id, role, email_verified) 
-             VALUES ($1, $2, $3, $4, $5) 
-             RETURNING id, username, email, role, email_verified`,
-            [username, email, googleId, role, true]
+            `INSERT INTO users (username, email, google_id, role, email_verified, faculty_id)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING id, username, email, role, email_verified, faculty_id`,
+            [username, email, googleId, role, true, faculty_id || null]
         );
 
         const user = result.rows[0];
 
+        // Get faculty information
+        let facultyName = null;
+        if (user.faculty_id) {
+            const facultyResult = await db.query(
+                'SELECT name FROM faculties WHERE id = $1',
+                [user.faculty_id]
+            );
+            if (facultyResult.rows.length > 0) {
+                facultyName = facultyResult.rows[0].name;
+            }
+        }
+
         // Generate JWT token
         const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role },
+            { id: user.id, username: user.username, role: user.role, faculty_id: user.faculty_id },
             process.env.JWT_SECRET,
             { expiresIn: '7d' }
         );
@@ -614,7 +653,9 @@ const completeGoogleSignup = async (req, res) => {
                 id: user.id,
                 username: user.username,
                 email: user.email,
-                role: user.role
+                role: user.role,
+                faculty_id: user.faculty_id,
+                faculty_name: facultyName
             },
             token
         });
