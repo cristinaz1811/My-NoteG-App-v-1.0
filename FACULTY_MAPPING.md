@@ -31,13 +31,11 @@ The `users` table now includes:
 ### 1. Run the Migration
 
 ```bash
-npm run migrate
+cd backend
+node run-all-migrations.js
 ```
 
-Or manually:
-```bash
-psql -h $DB_HOST -U $DB_USER -d $DB_NAME < database/migrations/021_add_faculties_and_email_mapping.sql
-```
+This will run all SQL migrations in `database/migrations/` in order.
 
 ### 2. Seed Initial Faculty Data
 
