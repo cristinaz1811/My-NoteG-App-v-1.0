@@ -1,0 +1,128 @@
+.chapter-learning-path {
+    margin-bottom: 24px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+}
+
+.chapter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    user-select: none;
+}
+
+.chapter-header:hover {
+    background: #f0f1f3;
+}
+
+.chapter-header-left {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    flex: 1;
+    min-width: 0;
+}
+
+.chapter-header-left svg {
+    flex-shrink: 0;
+    color: #666;
+    margin-top: 2px;
+}
+
+.chapter-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.chapter-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a1a1a;
+    word-break: break-word;
+}
+
+.chapter-description {
+    margin: 4px 0 0 0;
+    font-size: 13px;
+    color: #666;
+    word-break: break-word;
+}
+
+.chapter-progress {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    flex-shrink: 0;
+    margin-left: 16px;
+}
+
+.progress-text {
+    font-size: 12px;
+    color: #666;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.progress-bar {
+    width: 120px;
+    height: 6px;
+    background: #e0e0e0;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4caf50 0%, #45a049 100%);
+    transition: width 0.3s ease;
+}
+
+.chapter-items {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .chapter-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .chapter-progress {
+        align-items: flex-start;
+        width: 100%;
+        margin: 12px 0 0 28px;
+    }
+
+    .progress-bar {
+        width: 100%;
+        max-width: 200px;
+    }
+}
+
+@media (max-width: 480px) {
+    .chapter-header {
+        padding: 16px;
+    }
+
+    .chapter-title {
+        font-size: 14px;
+    }
+
+    .chapter-items {
+        padding: 12px;
+        gap: 8px;
+    }
+}

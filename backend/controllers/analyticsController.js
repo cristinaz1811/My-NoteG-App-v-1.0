@@ -15,7 +15,7 @@ const getOverview = async (req, res) => {
                 (SELECT COUNT(*) FROM user_progress WHERE user_id = $1 AND completed = true) AS exercises_completed,
                 (SELECT COUNT(*) FROM submissions WHERE user_id = $1) AS total_submissions,
                 (SELECT COALESCE(AVG(best_score), 0) FROM user_progress WHERE user_id = $1 AND best_score > 0) AS average_score,
-                (SELECT COALESCE(SUM(total_time_spent), 0) FROM enrollments WHERE user_id = $1) AS total_time_spent,
+                (SELECT COALESCE(SUM(duration), 0) FROM course_time_sessions WHERE user_id = $1) AS total_time_spent,
                 (SELECT COUNT(DISTINCT exercise_id) FROM submissions WHERE user_id = $1 AND status = 'passed') AS exercises_passed
         `, [userId]);
 
@@ -69,13 +69,19 @@ const getCoursePerformance = async (req, res) => {
                 c.title AS course_title,
                 c.difficulty,
                 e.progress,
-                e.total_time_spent,
+                COALESCE(cts.total_time_spent, 0) AS total_time_spent,
                 COALESCE(stats.exercises_total, 0) AS exercises_total,
                 COALESCE(stats.exercises_completed, 0) AS exercises_completed,
                 COALESCE(stats.avg_score, 0) AS avg_score,
                 COALESCE(stats.total_attempts, 0) AS total_attempts
             FROM enrollments e
             JOIN courses c ON e.course_id = c.id
+            LEFT JOIN (
+                SELECT course_id, COALESCE(SUM(duration), 0) AS total_time_spent
+                FROM course_time_sessions
+                WHERE user_id = $1
+                GROUP BY course_id
+            ) cts ON cts.course_id = c.id
             LEFT JOIN LATERAL (
                 SELECT
                     COUNT(DISTINCT ex.id) AS exercises_total,
@@ -203,11 +209,14 @@ const getTimePerCourse = async (req, res) => {
             SELECT
                 c.id AS course_id,
                 c.title AS course_title,
-                COALESCE(e.total_time_spent, 0) AS total_time_spent
+                COALESCE(SUM(cts.duration), 0) AS total_time_spent
             FROM enrollments e
             JOIN courses c ON e.course_id = c.id
-            WHERE e.user_id = $1 AND e.total_time_spent > 0
-            ORDER BY e.total_time_spent DESC
+            LEFT JOIN course_time_sessions cts ON cts.user_id = e.user_id AND cts.course_id = e.course_id
+            WHERE e.user_id = $1
+            GROUP BY c.id, c.title
+            HAVING COALESCE(SUM(cts.duration), 0) > 0
+            ORDER BY total_time_spent DESC
         `, [userId]);
 
         res.json(result.rows);
@@ -233,7 +242,7 @@ const getAIFeedback = async (req, res) => {
                     (SELECT COUNT(*) FROM user_progress WHERE user_id = $1 AND completed = true) AS exercises_completed,
                     (SELECT COUNT(*) FROM submissions WHERE user_id = $1) AS total_submissions,
                     (SELECT COALESCE(AVG(best_score), 0) FROM user_progress WHERE user_id = $1 AND best_score > 0) AS average_score,
-                    (SELECT COALESCE(SUM(total_time_spent), 0) FROM enrollments WHERE user_id = $1) AS total_time_spent
+                    (SELECT COALESCE(SUM(duration), 0) FROM course_time_sessions WHERE user_id = $1) AS total_time_spent
             `, [userId]),
             db.query(`
                 SELECT c.title, c.difficulty,

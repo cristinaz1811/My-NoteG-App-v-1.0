@@ -8,6 +8,25 @@ const BASE_HINTS_SYSTEM = 'You write short progressive hints that guide thinking
 const BASE_OPTIMIZATION_SYSTEM = 'You write short progressive optimization hints that guide thinking without revealing the answer. Style: like LeetCode hints. Hint 1 spots the bottleneck, hint 2 identifies the redundancy, hint 3 nudges toward the fix. Never name the optimal solution in hints 1 or 2.';
 const BASE_SQL_SYSTEM = "You write short progressive SQL hints that guide the student's thinking without writing any SQL. Hint 1 points to relevant tables, hint 2 identifies the missing or incorrect clause/operation, hint 3 describes the query structure needed. Never write actual SQL.";
 
+// Default hint levels for different exercise types
+const DEFAULT_HINT_LEVELS = {
+    1: 'Describe the brute-force / naive way to solve this problem and acknowledge it works but is slow. Do NOT name the optimal technique. 1-2 sentences max.',
+    2: 'Identify the specific bottleneck in the brute-force approach — what operation is being repeated unnecessarily? Ask a leading question about how to speed that up. Do NOT name the optimal data structure or technique. 1-2 sentences max.',
+    3: 'Nudge toward the right data structure or technique with a leading question (e.g. "what if you could look up values in constant time?"). Still do NOT give the full algorithm. 1-2 sentences max.',
+};
+
+const DEFAULT_OPTIMIZATION_LEVELS = {
+    1: 'Identify what makes the current solution slow — which part of the code is doing redundant work? Ask a leading question. Do NOT name the optimal technique. 1-2 sentences max.',
+    2: 'Point out the specific repeated operation and ask whether there is a way to avoid re-computing it. Do NOT name the data structure. 1-2 sentences max.',
+    3: 'Nudge toward the right data structure or technique with a leading question (e.g. "what if you could remember previously seen values?"). 1-2 sentences max.',
+};
+
+const DEFAULT_SQL_LEVELS = {
+    1: 'Identify which tables and relationships the student needs to work with. Mention the relevant columns by name if helpful. Do NOT suggest any clause or operation yet. 1-2 sentences max.',
+    2: 'Identify the SQL clause or operation (JOIN, GROUP BY, subquery, aggregate, etc.) that is needed but missing or wrong in the student\'s query. Ask a leading question. Do NOT write any SQL. 1-2 sentences max.',
+    3: 'Describe the overall shape of the correct query (e.g. "you need a subquery in the WHERE clause that filters by…"). Still do NOT write actual SQL. 1-2 sentences max.',
+};
+
 const buildSystemPrompt = (basePrompt, systemPromptOverride, systemPromptAppend) => {
     if (systemPromptOverride) return systemPromptOverride;
     if (systemPromptAppend) return `${basePrompt}\n\nCourse context:\n${systemPromptAppend}`;
@@ -17,13 +36,19 @@ const buildSystemPrompt = (basePrompt, systemPromptOverride, systemPromptAppend)
 /**
  * Generate progressive hints for an exercise based on the user's failing code.
  * Returns up to 3 hints, from vague to more specific.
+ * @param {Object} params
+ * @param {string} params.exerciseTitle
+ * @param {string} params.exerciseDescription
+ * @param {string} params.language
+ * @param {string} params.code
+ * @param {Array} params.failedTests
+ * @param {number} params.hintNumber
+ * @param {string} [params.systemPromptOverride]
+ * @param {string} [params.systemPromptAppend]
+ * @param {Object} [params.customHintLevels] - Custom hint levels (1, 2, 3 keys). If not provided, uses DEFAULT_HINT_LEVELS.
  */
-const generateHints = async ({ exerciseTitle, exerciseDescription, language, code, _testCases, failedTests, hintNumber, systemPromptOverride, systemPromptAppend }) => {
-    const hintLevels = {
-        1: 'Describe the brute-force / naive way to solve this problem and acknowledge it works but is slow. Do NOT name the optimal technique. 1-2 sentences max.',
-        2: 'Identify the specific bottleneck in the brute-force approach — what operation is being repeated unnecessarily? Ask a leading question about how to speed that up. Do NOT name the optimal data structure or technique. 1-2 sentences max.',
-        3: 'Nudge toward the right data structure or technique with a leading question (e.g. "what if you could look up values in constant time?"). Still do NOT give the full algorithm. 1-2 sentences max.',
-    };
+const generateHints = async ({ exerciseTitle, exerciseDescription, language, code, _testCases, failedTests, hintNumber, systemPromptOverride, systemPromptAppend, customHintLevels }) => {
+    const hintLevels = customHintLevels || DEFAULT_HINT_LEVELS;
 
     const prompt = `Exercise: "${exerciseTitle}"
 Description: ${exerciseDescription}
@@ -111,13 +136,20 @@ Respond in EXACTLY this JSON format (raw JSON only, no markdown):
 
 /**
  * Generate optimization hints for a working but suboptimal solution.
+ * @param {Object} params
+ * @param {string} params.exerciseTitle
+ * @param {string} params.exerciseDescription
+ * @param {string} params.language
+ * @param {string} params.code
+ * @param {string} params.currentComplexity
+ * @param {string} params.optimalComplexity
+ * @param {number} params.hintNumber
+ * @param {string} [params.systemPromptOverride]
+ * @param {string} [params.systemPromptAppend]
+ * @param {Object} [params.customHintLevels] - Custom hint levels (1, 2, 3 keys). If not provided, uses DEFAULT_OPTIMIZATION_LEVELS.
  */
-const generateOptimizationHints = async ({ exerciseTitle, exerciseDescription, language, code, currentComplexity, optimalComplexity, hintNumber, systemPromptOverride, systemPromptAppend }) => {
-    const hintLevels = {
-        1: 'Identify what makes the current solution slow — which part of the code is doing redundant work? Ask a leading question. Do NOT name the optimal technique. 1-2 sentences max.',
-        2: 'Point out the specific repeated operation and ask whether there is a way to avoid re-computing it. Do NOT name the data structure. 1-2 sentences max.',
-        3: 'Nudge toward the right data structure or technique with a leading question (e.g. "what if you could remember previously seen values?"). 1-2 sentences max.',
-    };
+const generateOptimizationHints = async ({ exerciseTitle, exerciseDescription, language, code, currentComplexity, optimalComplexity, hintNumber, systemPromptOverride, systemPromptAppend, customHintLevels }) => {
+    const hintLevels = customHintLevels || DEFAULT_OPTIMIZATION_LEVELS;
 
     const prompt = `Exercise: "${exerciseTitle}"
 Description: ${exerciseDescription}
@@ -157,13 +189,19 @@ CRITICAL RULES:
  * Hint 1 → which tables/relationships to consider.
  * Hint 2 → which SQL clause or operation is needed.
  * Hint 3 → structural nudge toward the correct query shape.
+ * @param {Object} params
+ * @param {string} params.exerciseTitle
+ * @param {string} params.exerciseDescription
+ * @param {string} params.seedSQL
+ * @param {string} params.code
+ * @param {Array} params.failedTests
+ * @param {number} params.hintNumber
+ * @param {string} [params.systemPromptOverride]
+ * @param {string} [params.systemPromptAppend]
+ * @param {Object} [params.customHintLevels] - Custom hint levels (1, 2, 3 keys). If not provided, uses DEFAULT_SQL_LEVELS.
  */
-const generateSQLHints = async ({ exerciseTitle, exerciseDescription, seedSQL, code, failedTests, hintNumber, systemPromptOverride, systemPromptAppend }) => {
-    const hintLevels = {
-        1: 'Identify which tables and relationships the student needs to work with. Mention the relevant columns by name if helpful. Do NOT suggest any clause or operation yet. 1-2 sentences max.',
-        2: 'Identify the SQL clause or operation (JOIN, GROUP BY, subquery, aggregate, etc.) that is needed but missing or wrong in the student\'s query. Ask a leading question. Do NOT write any SQL. 1-2 sentences max.',
-        3: 'Describe the overall shape of the correct query (e.g. "you need a subquery in the WHERE clause that filters by…"). Still do NOT write actual SQL. 1-2 sentences max.',
-    };
+const generateSQLHints = async ({ exerciseTitle, exerciseDescription, seedSQL, code, failedTests, hintNumber, systemPromptOverride, systemPromptAppend, customHintLevels }) => {
+    const hintLevels = customHintLevels || DEFAULT_SQL_LEVELS;
 
     const schemaBlock = seedSQL
         ? `Database schema (seed SQL):\n\`\`\`sql\n${seedSQL}\n\`\`\``
