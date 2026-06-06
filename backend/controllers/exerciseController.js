@@ -104,7 +104,7 @@ const getExerciseById = async (req, res) => {
                 // Get timed session if exercise has a time limit
                 if (exercise.time_limit_minutes) {
                     const sessionResult = await db.query(
-                        'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
+                        'SELECT * FROM exam_sessions WHERE user_id = $1 AND exercise_id = $2',
                         [req.user.id, id]
                     );
                     timedSession = sessionResult.rows[0] || null;
@@ -155,13 +155,13 @@ const getExerciseById = async (req, res) => {
 
 const createExercise = async (req, res) => {
     try {
-        const { courseId, title, description, difficulty, starterCode, language, testCases, chapter_id, requires_efficiency, time_limit_minutes, is_multi_file, files, ai_hints_enabled, is_test, is_published, available_from, available_until } = req.body;
+        const { courseId, title, description, difficulty, starterCode, language, testCases, chapter_id, requires_efficiency, time_limit_minutes, is_multi_file, files, ai_hints_enabled, is_test, is_published, available_from, available_until, custom_hint_levels } = req.body;
 
         // Create exercise
         const exerciseResult = await db.query(
-            `INSERT INTO exercises (course_id, title, description, difficulty, starter_code, language, chapter_id, requires_efficiency, time_limit_minutes, is_multi_file, ai_hints_enabled, is_test, is_published, available_from, available_until)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
-            [courseId, title, description, difficulty, is_multi_file ? null : starterCode, language, chapter_id || null, requires_efficiency || false, time_limit_minutes || null, is_multi_file || false, ai_hints_enabled !== false, is_test || false, is_published !== false, available_from || null, available_until || null]
+            `INSERT INTO exercises (course_id, title, description, difficulty, starter_code, language, chapter_id, requires_efficiency, time_limit_minutes, is_multi_file, ai_hints_enabled, is_test, is_published, available_from, available_until, custom_hint_levels)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
+            [courseId, title, description, difficulty, is_multi_file ? null : starterCode, language, chapter_id || null, requires_efficiency || false, time_limit_minutes || null, is_multi_file || false, ai_hints_enabled !== false, is_test || false, is_published !== false, available_from || null, available_until || null, custom_hint_levels || null]
         );
 
         const exercise = exerciseResult.rows[0];
@@ -243,7 +243,7 @@ const submitSolution = async (req, res) => {
         // Check if this is a timed exercise and if the timer has expired
         if (exercise.time_limit_minutes) {
             const sessionResult = await db.query(
-                'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
+                'SELECT * FROM exam_sessions WHERE user_id = $1 AND exercise_id = $2',
                 [userId, id]
             );
             const session = sessionResult.rows[0];
@@ -256,7 +256,7 @@ const submitSolution = async (req, res) => {
             if (new Date() > new Date(session.expires_at)) {
                 // Mark session as expired
                 await db.query(
-                    'UPDATE timed_sessions SET time_expired = TRUE WHERE id = $1',
+                    'UPDATE exam_sessions SET time_expired = TRUE WHERE id = $1',
                     [session.id]
                 );
                 return res.status(403).json({ error: 'Time has expired for this exercise. You can no longer submit solutions.', timeExpired: true });
@@ -557,7 +557,7 @@ const getSubmissionDetail = async (req, res) => {
 const updateExercise = async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency, time_limit_minutes, is_multi_file, ai_hints_enabled, is_test, is_published, available_from, available_until } = req.body;
+        const { title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency, time_limit_minutes, is_multi_file, ai_hints_enabled, is_test, is_published, available_from, available_until, custom_hint_levels } = req.body;
         const userId = req.user.id;
 
         // Verify ownership through course
@@ -581,6 +581,7 @@ const updateExercise = async (req, res) => {
         const isPublishedValue = is_published !== undefined ? is_published : exercise.rows[0].is_published;
         const availableFromValue = available_from !== undefined ? (available_from || null) : exercise.rows[0].available_from;
         const availableUntilValue = available_until !== undefined ? (available_until || null) : exercise.rows[0].available_until;
+        const customHintLevelsValue = custom_hint_levels !== undefined ? custom_hint_levels : exercise.rows[0].custom_hint_levels;
 
         const result = await db.query(`
             UPDATE exercises
@@ -599,10 +600,11 @@ const updateExercise = async (req, res) => {
                 is_published = $14,
                 available_from = $15,
                 available_until = $16,
+                custom_hint_levels = $17,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = $10
             RETURNING *
-        `, [title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency, timeLimitValue, id, is_multi_file, aiHintsValue, isTestValue, isPublishedValue, availableFromValue, availableUntilValue]);
+        `, [title, description, difficulty, starter_code, language, chapter_id, order_index, requires_efficiency, timeLimitValue, id, is_multi_file, aiHintsValue, isTestValue, isPublishedValue, availableFromValue, availableUntilValue, customHintLevelsValue]);
 
         res.json(result.rows[0]);
     } catch (error) {
@@ -879,75 +881,81 @@ const generateAIHint = async (req, res) => {
         const exerciseResult = await db.query('SELECT * FROM exercises WHERE id = $1', [id]);
         const exercise = exerciseResult.rows[0];
 
-        // Check course-level ai_hints_enabled and resolve prompt strategy
+        // Check course-level ai_hints_enabled and fetch custom hint levels
         let courseAiHints = true;
         let systemPromptOverride = null;
         let systemPromptAppend = null;
+        let courseCustomHintLevels = null;
         if (exercise.course_id) {
             const courseRow = await db.query(
-                'SELECT ai_hints_enabled, ai_hint_mode, ai_hint_guidance, title, description, learning_objectives, tags FROM courses WHERE id = $1',
+                'SELECT ai_hints_enabled, title, description, learning_objectives, tags, custom_hint_levels FROM courses WHERE id = $1',
                 [exercise.course_id]
             );
             if (courseRow.rows.length > 0) {
                 const course = courseRow.rows[0];
                 courseAiHints = course.ai_hints_enabled;
-                const mode = course.ai_hint_mode || 'none';
+                courseCustomHintLevels = course.custom_hint_levels;
 
-                if (mode === 'custom' && course.ai_hint_guidance) {
-                    // Professor's prompt fully replaces the base prompt
-                    systemPromptOverride = course.ai_hint_guidance;
-                } else if (mode === 'course_context') {
-                    // Build context from course data and append to base prompt
-                    const parts = [
-                        `Course: "${course.title}"`,
-                        course.description ? `Description: ${course.description}` : null,
-                        course.learning_objectives?.length ? `Learning objectives: ${course.learning_objectives.join(', ')}` : null,
-                        course.tags?.length ? `Topics covered: ${course.tags.join(', ')}` : null,
-                    ].filter(Boolean);
+                // Build context from course data and append to base prompt
+                const parts = [
+                    `Course: "${course.title}"`,
+                    course.description ? `Description: ${course.description}` : null,
+                    course.learning_objectives?.length ? `Learning objectives: ${course.learning_objectives.join(', ')}` : null,
+                    course.tags?.length ? `Topics covered: ${course.tags.join(', ')}` : null,
+                ].filter(Boolean);
 
-                    // Include lectures from the same chapter as additional context
-                    if (exercise.chapter_id) {
-                        const lectureRows = await db.query(
-                            `SELECT l.title, l.description, lp.title AS page_title, lp.content, lp.page_number
-                             FROM lectures l
-                             LEFT JOIN lecture_pages lp ON lp.lecture_id = l.id
-                             WHERE l.chapter_id = $1
-                             ORDER BY l.order_index, l.id, lp.page_number`,
-                            [exercise.chapter_id]
-                        );
+                // Include lectures from the same chapter as additional context
+                if (exercise.chapter_id) {
+                    const lectureRows = await db.query(
+                        `SELECT l.title, l.description, lp.title AS page_title, lp.content, lp.page_number
+                         FROM lectures l
+                         LEFT JOIN lecture_pages lp ON lp.lecture_id = l.id
+                         WHERE l.chapter_id = $1
+                         ORDER BY l.order_index, l.id, lp.page_number`,
+                        [exercise.chapter_id]
+                    );
 
-                        if (lectureRows.rows.length > 0) {
-                            // Group pages by lecture
-                            const lectureMap = new Map();
-                            for (const row of lectureRows.rows) {
-                                if (!lectureMap.has(row.title)) {
-                                    lectureMap.set(row.title, { description: row.description, pages: [] });
-                                }
-                                if (row.page_title) {
-                                    const truncated = row.content ? row.content.replace(/<[^>]*>/g, '').slice(0, 300) : '';
-                                    lectureMap.get(row.title).pages.push(
-                                        `    ${row.page_title}${truncated ? ': ' + truncated : ''}`
-                                    );
-                                }
+                    if (lectureRows.rows.length > 0) {
+                        // Group pages by lecture
+                        const lectureMap = new Map();
+                        for (const row of lectureRows.rows) {
+                            if (!lectureMap.has(row.title)) {
+                                lectureMap.set(row.title, { description: row.description, pages: [] });
                             }
-
-                            const lectureLines = ['', 'Chapter lectures:'];
-                            for (const [title, data] of lectureMap) {
-                                lectureLines.push(`- "${title}"${data.description ? ' — ' + data.description : ''}`);
-                                lectureLines.push(...data.pages);
+                            if (row.page_title) {
+                                const cleanedContent = row.content ? row.content.replace(/<[^>]*>/g, '') : '';
+                                lectureMap.get(row.title).pages.push(
+                                    `    ${row.page_title}${cleanedContent ? ': ' + cleanedContent : ''}`
+                                );
                             }
-                            parts.push(...lectureLines);
                         }
-                    }
 
-                    systemPromptAppend = parts.join('\n');
+                        const lectureLines = ['', 'Chapter lectures:'];
+                        for (const [title, data] of lectureMap) {
+                            lectureLines.push(`- "${title}"${data.description ? ' — ' + data.description : ''}`);
+                            lectureLines.push(...data.pages);
+                        }
+                        parts.push(...lectureLines);
+                    }
                 }
-                // mode === 'none': both stay null → base prompt used
+
+                systemPromptAppend = parts.join('\n');
             }
         }
         if (!courseAiHints || !exercise.ai_hints_enabled) {
             return res.status(403).json({ error: 'AI hints are disabled for this exercise.' });
         }
+
+        // Determine which custom hint levels to use (hierarchical: exercise > course > defaults)
+        let customHintLevels = null;
+        if (exercise.custom_hint_levels) {
+            // Exercise-level custom hint levels take precedence
+            customHintLevels = exercise.custom_hint_levels;
+        } else if (courseCustomHintLevels) {
+            // Fall back to course-level custom hint levels
+            customHintLevels = courseCustomHintLevels;
+        }
+        // If neither exists, customHintLevels stays null and the hint generation functions will use defaults
 
         const isSQLExercise = exercise.exercise_type === 'sql' || exercise.language === 'sql';
         let hintText;
@@ -963,6 +971,7 @@ const generateAIHint = async (req, res) => {
                 hintNumber,
                 systemPromptOverride,
                 systemPromptAppend,
+                customHintLevels,
             });
         } else if (isSQLExercise) {
             hintText = await generateSQLHints({
@@ -974,6 +983,7 @@ const generateAIHint = async (req, res) => {
                 hintNumber,
                 systemPromptOverride,
                 systemPromptAppend,
+                customHintLevels,
             });
         } else {
             const testCasesResult = await db.query(
@@ -990,6 +1000,7 @@ const generateAIHint = async (req, res) => {
                 hintNumber,
                 systemPromptOverride,
                 systemPromptAppend,
+                customHintLevels,
             });
         }
 
@@ -1089,7 +1100,7 @@ const startTimedSession = async (req, res) => {
 
         // Check if session already exists
         const existingSession = await db.query(
-            'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
+            'SELECT * FROM exam_sessions WHERE user_id = $1 AND exercise_id = $2',
             [userId, id]
         );
 
@@ -1101,7 +1112,7 @@ const startTimedSession = async (req, res) => {
         // Create new session
         const expiresAt = new Date(Date.now() + exercise.time_limit_minutes * 60 * 1000);
         const result = await db.query(
-            `INSERT INTO timed_sessions (user_id, exercise_id, started_at, expires_at)
+            `INSERT INTO exam_sessions (user_id, exercise_id, started_at, expires_at)
              VALUES ($1, $2, CURRENT_TIMESTAMP, $3)
              RETURNING *`,
             [userId, id, expiresAt]
@@ -1121,7 +1132,7 @@ const getTimedSession = async (req, res) => {
         const userId = req.user.id;
 
         const result = await db.query(
-            'SELECT * FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
+            'SELECT * FROM exam_sessions WHERE user_id = $1 AND exercise_id = $2',
             [userId, id]
         );
 
@@ -1135,7 +1146,7 @@ const getTimedSession = async (req, res) => {
 
         if (expired && !session.time_expired) {
             await db.query(
-                'UPDATE timed_sessions SET time_expired = TRUE WHERE id = $1',
+                'UPDATE exam_sessions SET time_expired = TRUE WHERE id = $1',
                 [session.id]
             );
             session.time_expired = true;
@@ -1159,7 +1170,7 @@ const recordViolation = async (req, res) => {
 
         // Increment violation counter (only on active, unlocked sessions)
         const result = await db.query(`
-            UPDATE timed_sessions
+            UPDATE exam_sessions
             SET tab_switches = COALESCE(tab_switches, 0) + 1,
                 last_violation_at = CURRENT_TIMESTAMP
             WHERE user_id = $1 AND exercise_id = $2
@@ -1170,7 +1181,7 @@ const recordViolation = async (req, res) => {
         if (result.rows.length === 0) {
             // Session is already locked or expired — return current state
             const cur = await db.query(
-                'SELECT tab_switches, locked_by_flag FROM timed_sessions WHERE user_id = $1 AND exercise_id = $2',
+                'SELECT tab_switches, locked_by_flag FROM exam_sessions WHERE user_id = $1 AND exercise_id = $2',
                 [userId, id]
             );
             return res.json({
@@ -1185,7 +1196,7 @@ const recordViolation = async (req, res) => {
         if (tab_switches >= VIOLATION_LOCKOUT_THRESHOLD) {
             // Lock the session
             await db.query(`
-                UPDATE timed_sessions
+                UPDATE exam_sessions
                 SET locked_by_flag = TRUE, locked_at = CURRENT_TIMESTAMP
                 WHERE id = $1
             `, [sessionId]);
@@ -1242,7 +1253,7 @@ const unlockSession = async (req, res) => {
         if (exRow.rows[0].created_by !== professorId) return res.status(403).json({ error: 'Not authorized' });
 
         const result = await db.query(`
-            UPDATE timed_sessions
+            UPDATE exam_sessions
             SET locked_by_flag = FALSE,
                 tab_switches   = 0,
                 unlocked_by    = $3,

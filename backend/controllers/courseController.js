@@ -336,7 +336,7 @@ const unenrollFromCourse = async (req, res) => {
             [userId, courseId]
         );
         await db.query(
-            'DELETE FROM time_sessions WHERE user_id = $1 AND course_id = $2',
+            'DELETE FROM course_time_sessions WHERE user_id = $1 AND course_id = $2',
             [userId, courseId]
         );
         // Finally, delete the enrollment itself
@@ -358,14 +358,14 @@ const getUserCourses = async (req, res) => {
         const userId = req.user.id;
 
         const result = await db.query(`
-            SELECT 
+            SELECT
                 c.id,
                 c.title,
                 c.description,
                 c.difficulty,
                 e.progress,
                 e.enrolled_at,
-                COALESCE(e.total_time_spent, 0) as total_time_spent,
+                COALESCE(cts.total_time_spent, 0) as total_time_spent,
                 COUNT(DISTINCT ex.id) as total_exercises,
                 COUNT(DISTINCT CASE WHEN up.completed = true THEN up.exercise_id END) as completed_exercises,
                 COALESCE(sub_stats.total_attempts, 0) as total_attempts,
@@ -375,7 +375,7 @@ const getUserCourses = async (req, res) => {
             LEFT JOIN exercises ex ON c.id = ex.course_id
             LEFT JOIN user_progress up ON ex.id = up.exercise_id AND up.user_id = e.user_id
             LEFT JOIN (
-                SELECT 
+                SELECT
                     ex2.course_id,
                     COUNT(s.id) as total_attempts,
                     ROUND(AVG(s.score)::numeric, 2) as avg_score
@@ -384,8 +384,14 @@ const getUserCourses = async (req, res) => {
                 WHERE s.user_id = $1
                 GROUP BY ex2.course_id
             ) sub_stats ON c.id = sub_stats.course_id
+            LEFT JOIN (
+                SELECT course_id, COALESCE(SUM(duration), 0) as total_time_spent
+                FROM course_time_sessions
+                WHERE user_id = $1
+                GROUP BY course_id
+            ) cts ON c.id = cts.course_id
             WHERE e.user_id = $1
-            GROUP BY c.id, c.title, c.description, c.difficulty, e.progress, e.enrolled_at, e.total_time_spent, sub_stats.total_attempts, sub_stats.avg_score
+            GROUP BY c.id, c.title, c.description, c.difficulty, e.progress, e.enrolled_at, cts.total_time_spent, sub_stats.total_attempts, sub_stats.avg_score
             ORDER BY e.enrolled_at DESC
         `, [userId]);
 
@@ -460,17 +466,17 @@ const getEnrolledCourseDetails = async (req, res) => {
             SELECT
                 DATE(started_at) as date,
                 SUM(duration) as time_spent
-            FROM time_sessions
+            FROM course_time_sessions
             WHERE user_id = $1 AND course_id = $2 AND duration IS NOT NULL AND duration >= 60
             GROUP BY DATE(started_at)
             ORDER BY date DESC
             LIMIT 30
         `, [userId, courseId]);
 
-        // Calculate total time from time_sessions (only sessions >= 60s)
+        // Calculate total time from course_time_sessions (only sessions >= 60s)
         const totalTimeResult = await db.query(`
             SELECT COALESCE(SUM(duration), 0) as total_time
-            FROM time_sessions
+            FROM course_time_sessions
             WHERE user_id = $1 AND course_id = $2 AND duration IS NOT NULL AND duration >= 60
         `, [userId, courseId]);
         const totalTimeSpent = parseInt(totalTimeResult.rows[0].total_time) || 0;
@@ -548,14 +554,14 @@ const startTimeSession = async (req, res) => {
 
         // Delete open sessions that were too short to count (quick bounces)
         await db.query(`
-            DELETE FROM time_sessions
+            DELETE FROM course_time_sessions
             WHERE user_id = $1 AND course_id = $2 AND ended_at IS NULL
               AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::INTEGER < 60
         `, [userId, courseId]);
 
         // Properly close any remaining open sessions
         await db.query(`
-            UPDATE time_sessions
+            UPDATE course_time_sessions
             SET ended_at = CURRENT_TIMESTAMP,
                 duration = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::INTEGER
             WHERE user_id = $1 AND course_id = $2 AND ended_at IS NULL
@@ -563,7 +569,7 @@ const startTimeSession = async (req, res) => {
 
         // Start new session
         const result = await db.query(
-            'INSERT INTO time_sessions (user_id, course_id) VALUES ($1, $2) RETURNING *',
+            'INSERT INTO course_time_sessions (user_id, course_id) VALUES ($1, $2) RETURNING *',
             [userId, courseId]
         );
 
@@ -588,7 +594,7 @@ const endTimeSession = async (req, res) => {
 
         // End the session and calculate duration
         const result = await db.query(`
-            UPDATE time_sessions
+            UPDATE course_time_sessions
             SET ended_at = CURRENT_TIMESTAMP,
                 duration = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - started_at))::INTEGER
             WHERE user_id = $1 AND course_id = $2 AND ended_at IS NULL
@@ -600,14 +606,7 @@ const endTimeSession = async (req, res) => {
 
             if (duration < 60) {
                 // Delete the session — it's just a bounce, not real study time
-                await db.query('DELETE FROM time_sessions WHERE id = $1', [result.rows[0].id]);
-            } else {
-                // Update total time in enrollments
-                await db.query(`
-                    UPDATE enrollments
-                    SET total_time_spent = total_time_spent + $3
-                    WHERE user_id = $1 AND course_id = $2
-                `, [userId, courseId, duration]);
+                await db.query('DELETE FROM course_time_sessions WHERE id = $1', [result.rows[0].id]);
             }
         }
 
@@ -632,7 +631,7 @@ const updateTimeSession = async (req, res) => {
 
         // Check for active session
         const session = await db.query(`
-            SELECT * FROM time_sessions
+            SELECT * FROM course_time_sessions
             WHERE user_id = $1 AND course_id = $2 AND ended_at IS NULL
             ORDER BY started_at DESC LIMIT 1
         `, [userId, courseId]);
@@ -640,7 +639,7 @@ const updateTimeSession = async (req, res) => {
         if (session.rows.length === 0) {
             // No active session, start one
             const newSession = await db.query(
-                'INSERT INTO time_sessions (user_id, course_id) VALUES ($1, $2) RETURNING *',
+                'INSERT INTO course_time_sessions (user_id, course_id) VALUES ($1, $2) RETURNING *',
                 [userId, courseId]
             );
             return res.json({ session: newSession.rows[0], isNew: true });
@@ -683,7 +682,7 @@ const getProfessorCourses = async (req, res) => {
 const updateCourse = async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, difficulty, long_description, learning_objectives, tags, estimated_hours, is_private, class_id, order_index, ai_hints_enabled, ai_hint_guidance, ai_hint_mode } = req.body;
+        const { title, description, difficulty, long_description, learning_objectives, tags, estimated_hours, is_private, class_id, order_index, ai_hints_enabled, ai_hint_guidance, ai_hint_mode, custom_hint_levels } = req.body;
         const userId = req.user.id;
 
         // Verify ownership
@@ -719,6 +718,7 @@ const updateCourse = async (req, res) => {
         const aiHintsValue = ai_hints_enabled !== undefined ? ai_hints_enabled : course.rows[0].ai_hints_enabled;
         const aiHintGuidanceValue = ai_hint_guidance !== undefined ? (ai_hint_guidance || null) : course.rows[0].ai_hint_guidance;
         const aiHintModeValue = ai_hint_mode !== undefined ? (ai_hint_mode || 'none') : (course.rows[0].ai_hint_mode || 'none');
+        const customHintLevelsValue = custom_hint_levels !== undefined ? custom_hint_levels : course.rows[0].custom_hint_levels;
 
         const result = await db.query(`
             UPDATE courses
@@ -736,10 +736,11 @@ const updateCourse = async (req, res) => {
                 ai_hints_enabled = $13,
                 ai_hint_guidance = $14,
                 ai_hint_mode = $15,
+                custom_hint_levels = $16,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = $12
             RETURNING *
-        `, [title, description, difficulty, long_description, learning_objectives, tags, estimated_hours, is_private, enrollmentCode, finalClassId, order_index, id, aiHintsValue, aiHintGuidanceValue, aiHintModeValue]);
+        `, [title, description, difficulty, long_description, learning_objectives, tags, estimated_hours, is_private, enrollmentCode, finalClassId, order_index, id, aiHintsValue, aiHintGuidanceValue, aiHintModeValue, customHintLevelsValue]);
 
         // Auto-enroll approved class members when course is assigned to a (new) class
         if (finalClassId && finalClassId !== prevClassId) {
@@ -773,7 +774,7 @@ const deleteCourse = async (req, res) => {
 
         // Delete records without CASCADE from courses
         await db.query('DELETE FROM enrollments WHERE course_id = $1', [id]);
-        await db.query('DELETE FROM time_sessions WHERE course_id = $1', [id]);
+        await db.query('DELETE FROM course_time_sessions WHERE course_id = $1', [id]);
 
         // chapters, exercises, submissions, user_progress all cascade from courses
         await db.query('DELETE FROM courses WHERE id = $1', [id]);
@@ -936,14 +937,14 @@ const getCourseEnrolledStudents = async (req, res) => {
                 GROUP BY s.user_id
             ) sub_stats ON u.id = sub_stats.user_id
             LEFT JOIN (
-                SELECT 
+                SELECT
                     user_id,
                     COUNT(*) as session_count,
-                    SUM(CASE 
+                    SUM(CASE
                         WHEN duration IS NOT NULL THEN duration
                         ELSE EXTRACT(EPOCH FROM (COALESCE(ended_at, NOW()) - started_at))::integer
                     END) as total_time
-                FROM time_sessions
+                FROM course_time_sessions
                 WHERE course_id = $1 AND started_at IS NOT NULL
                 GROUP BY user_id
             ) time_stats ON u.id = time_stats.user_id
@@ -1019,7 +1020,7 @@ const getStudentCourseDetails = async (req, res) => {
             FROM exercises ex
             LEFT JOIN chapters ch ON ex.chapter_id = ch.id
             LEFT JOIN user_progress up ON ex.id = up.exercise_id AND up.user_id = $1
-            LEFT JOIN timed_sessions ts ON ex.id = ts.exercise_id AND ts.user_id = $1
+            LEFT JOIN exam_sessions ts ON ex.id = ts.exercise_id AND ts.user_id = $1
             WHERE ex.course_id = $2
             ORDER BY ch.order_index, ex.order_index, ex.id
         `, [studentId, courseId]);
@@ -1049,7 +1050,7 @@ const getStudentCourseDetails = async (req, res) => {
                 ts.started_at,
                 ts.ended_at,
                 COALESCE(ts.duration, EXTRACT(EPOCH FROM (COALESCE(ts.ended_at, NOW()) - ts.started_at))::integer) as duration_seconds
-            FROM time_sessions ts
+            FROM course_time_sessions ts
             WHERE ts.user_id = $1 AND ts.course_id = $2 AND ts.started_at IS NOT NULL
               AND COALESCE(ts.duration, EXTRACT(EPOCH FROM (COALESCE(ts.ended_at, NOW()) - ts.started_at))::integer) >= 60
             ORDER BY ts.started_at DESC
@@ -1059,7 +1060,7 @@ const getStudentCourseDetails = async (req, res) => {
         // Calculate total time spent (only sessions >= 60s)
         const totalTimeResult = await db.query(`
             SELECT COALESCE(SUM(duration), 0) as total_time
-            FROM time_sessions
+            FROM course_time_sessions
             WHERE user_id = $1 AND course_id = $2 AND duration IS NOT NULL AND duration >= 60
         `, [studentId, courseId]);
         const calculatedTotalTime = parseInt(totalTimeResult.rows[0]?.total_time || 0);
