@@ -21,6 +21,7 @@ const classRoutes = require('./routes/classes');
 const lectureRoutes = require('./routes/lectures');
 const sqlSessionRoutes = require('./routes/sqlSessions');
 const facultyRoutes = require('./routes/faculties');
+const feedbackRoutes = require('./routes/feedback');
 const { cleanupStaleSessions } = require('./controllers/sqlSessionController');
 const { DISTRIBUTED_MODE, closeRedis } = require('./utils/redisClient');
 
@@ -119,6 +120,7 @@ app.use('/api/classes', classRoutes);
 app.use('/api/lectures', lectureRoutes);
 app.use('/api/sql-sessions', sqlSessionRoutes);
 app.use('/api/faculties', facultyRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

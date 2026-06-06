@@ -135,6 +135,18 @@ export const analyticsService = {
     getAIFeedback: () => api.post('/analytics/ai-feedback'),
 };
 
+// Feedback services
+export const feedbackService = {
+    // Student endpoints
+    getMyAllFeedback: () => api.get('/feedback/my-all'),
+    getCourseFeedback: (courseId) => api.get(`/feedback/course/${courseId}`),
+    // Professor endpoints
+    sendFeedback: (data) => api.post('/feedback/send', data),
+    updateFeedback: (feedbackId, data) => api.put(`/feedback/${feedbackId}`, data),
+    deleteFeedback: (feedbackId) => api.delete(`/feedback/${feedbackId}`),
+    getProfessorFeedback: (courseId) => api.get('/feedback/professor', { params: courseId ? { courseId } : {} }),
+};
+
 // Calendar services
 export const calendarService = {
     getEvents: (params) => api.get('/calendar', { params }),

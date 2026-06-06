@@ -491,6 +491,7 @@ const getEnrolledCourseDetails = async (req, res) => {
         // Get lectures with student progress
         const lecturesResult = await db.query(`
             SELECT l.*,
+                   ch.id AS chapter_id,
                    ch.title AS chapter_title,
                    COUNT(DISTINCT lp.id)::int AS page_count,
                    COUNT(DISTINCT lm.id)::int AS media_count,
@@ -502,13 +503,159 @@ const getEnrolledCourseDetails = async (req, res) => {
             LEFT JOIN lecture_media lm ON lm.lecture_id = l.id
             LEFT JOIN lecture_progress lpr ON lpr.lecture_id = l.id AND lpr.user_id = $1
             WHERE l.course_id = $2
-            GROUP BY l.id, ch.title, lpr.last_page_seen, lpr.completed
+            GROUP BY l.id, ch.id, ch.title, lpr.last_page_seen, lpr.completed
             ORDER BY l.order_index, l.id
         `, [userId, courseId]);
+
+        // Get chapters with their lectures and exercises grouped together
+        const chaptersResult = await db.query(`
+            SELECT ch.id, ch.title, ch.description, ch.order_index
+            FROM chapters ch
+            WHERE ch.course_id = $1
+            ORDER BY ch.order_index
+        `, [courseId]);
+
+        // Build chapters with mixed items (lectures and exercises)
+        const chaptersWithItems = chaptersResult.rows.map(chapter => {
+            // Get lectures for this chapter
+            const lecturesInChapter = lecturesResult.rows.filter(l => l.chapter_id === chapter.id).map(l => ({
+                type: 'lecture',
+                id: l.id,
+                title: l.title,
+                description: l.description,
+                page_count: l.page_count,
+                media_count: l.media_count,
+                order_index: l.order_index,
+                completed: l.lecture_completed,
+                last_page_seen: l.last_page_seen
+            }));
+
+            // Get exercises for this chapter
+            const exercisesInChapter = exercisesResult.rows.filter(e => {
+                // We need chapter_id info for exercises, fetch it separately if needed
+                // For now, we'll filter based on the exercise's chapter association
+                return false; // placeholder, will be filled below
+            });
+
+            return {
+                id: chapter.id,
+                title: chapter.title,
+                description: chapter.description,
+                order_index: chapter.order_index,
+                items: [] // will be filled with merged lectures and exercises
+            };
+        });
+
+        // Get exercises with chapter associations
+        const exercisesWithChapterResult = await db.query(`
+            SELECT
+                ex.id,
+                ex.title,
+                ex.description,
+                ex.difficulty,
+                ex.language,
+                ex.chapter_id,
+                ex.order_index,
+                COALESCE(up.completed, false) as completed,
+                COALESCE(up.best_score, 0) as best_score,
+                COALESCE(up.attempts, 0) as attempts,
+                up.last_attempt_at
+            FROM exercises ex
+            LEFT JOIN user_progress up ON ex.id = up.exercise_id AND up.user_id = $1
+            WHERE ex.course_id = $2
+            ORDER BY ex.order_index, ex.id
+        `, [userId, courseId]);
+
+        // Rebuild chapters with proper mixed items
+        const chaptersWithMixedItems = chaptersResult.rows.map(chapter => {
+            // Get lectures for this chapter, sorted by order_index
+            const lecturesInChapter = lecturesResult.rows
+                .filter(l => l.chapter_id === chapter.id)
+                .map(l => ({
+                    type: 'lecture',
+                    id: l.id,
+                    title: l.title,
+                    description: l.description,
+                    page_count: l.page_count,
+                    media_count: l.media_count,
+                    order_index: l.order_index,
+                    completed: l.lecture_completed,
+                    last_page_seen: l.last_page_seen
+                }))
+                .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+
+            // Get exercises for this chapter, sorted by order_index
+            const exercisesInChapter = exercisesWithChapterResult.rows
+                .filter(e => e.chapter_id === chapter.id)
+                .map(e => ({
+                    type: 'exercise',
+                    id: e.id,
+                    title: e.title,
+                    description: e.description,
+                    difficulty: e.difficulty,
+                    language: e.language,
+                    order_index: e.order_index,
+                    completed: e.completed,
+                    best_score: e.best_score,
+                    attempts: e.attempts
+                }))
+                .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+
+            // Merge lectures and exercises in order_index order
+            const items = [...lecturesInChapter, ...exercisesInChapter]
+                .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+
+            return {
+                id: chapter.id,
+                title: chapter.title,
+                description: chapter.description,
+                order_index: chapter.order_index,
+                items: items
+            };
+        });
+
+        // Get unassigned exercises (exercises without chapter_id)
+        const unassignedExercises = exercisesWithChapterResult.rows
+            .filter(e => e.chapter_id === null)
+            .map(e => ({
+                type: 'exercise',
+                id: e.id,
+                title: e.title,
+                description: e.description,
+                difficulty: e.difficulty,
+                language: e.language,
+                order_index: e.order_index,
+                completed: e.completed,
+                best_score: e.best_score,
+                attempts: e.attempts
+            }))
+            .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+
+        // Get unassigned lectures too (lectures without chapter_id)
+        const unassignedLectures = lecturesResult.rows
+            .filter(l => l.chapter_id === null)
+            .map(l => ({
+                type: 'lecture',
+                id: l.id,
+                title: l.title,
+                description: l.description,
+                page_count: l.page_count,
+                media_count: l.media_count,
+                order_index: l.order_index,
+                completed: l.lecture_completed,
+                last_page_seen: l.last_page_seen
+            }))
+            .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+
+        const unassignedItems = [...unassignedLectures, ...unassignedExercises]
+            .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
 
         res.json({
             course: courseResult.rows[0],
             enrollment: enrollment.rows[0],
+            chapters: chaptersWithMixedItems,
+            unassignedItems: unassignedItems,
+            // Keep flat arrays for backward compatibility
             exercises: exercisesResult.rows,
             submissions: submissionsResult.rows,
             lectures: lecturesResult.rows,

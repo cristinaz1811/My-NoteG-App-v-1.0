@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { Link } from 'react-router-dom';
-import { analyticsService } from '../services/api';
+import { analyticsService, feedbackService } from '../services/api';
 import { AuthContext } from '../context/AuthContext';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -64,10 +64,29 @@ const StudentAnalytics = () => {
     const [recentSubs, setRecentSubs] = useState([]);
     const [timeCourse, setTimeCourse] = useState([]);
     const [aiFeedback, setAiFeedback] = useState(null);
+    const [professorFeedback, setProfessorFeedback] = useState([]);
+    const [selectedCourseForFeedback, setSelectedCourseForFeedback] = useState(null);
 
     const [loading, setLoading] = useState(true);
     const [aiLoading, setAiLoading] = useState(false);
+    const [feedbackLoading, setFeedbackLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('overview');
+
+    /* ── load professor feedback ── */
+    const loadProfessorFeedback = async () => {
+        setFeedbackLoading(true);
+        try {
+            const res = await feedbackService.getMyAllFeedback();
+            setProfessorFeedback(res.data);
+            if (res.data.length > 0 && !selectedCourseForFeedback) {
+                setSelectedCourseForFeedback(res.data[0].course_id);
+            }
+        } catch (err) {
+            console.error('Failed to load feedback', err);
+        } finally {
+            setFeedbackLoading(false);
+        }
+    };
 
     /* ── initial data fetch ── */
     useEffect(() => {
@@ -96,6 +115,7 @@ const StudentAnalytics = () => {
             }
         };
         load();
+        loadProfessorFeedback();
     }, []);
 
     /* ── AI feedback request ── */
@@ -163,7 +183,7 @@ const StudentAnalytics = () => {
         { key: 'overview', label: 'Overview' },
         { key: 'courses',  label: 'Courses' },
         { key: 'activity', label: 'Activity' },
-        { key: 'ai',       label: 'AI Coach' },
+        { key: 'feedback', label: 'Feedback' },
     ];
 
     return (
@@ -475,9 +495,74 @@ const StudentAnalytics = () => {
                 </div>
             )}
 
-            {/* ─────── AI COACH TAB ─────── */}
-            {activeTab === 'ai' && (
+            {/* ─────── FEEDBACK TAB ─────── */}
+            {activeTab === 'feedback' && (
                 <div className="space-y-8 animate-slideUp">
+                    {/* Professor Feedback Section */}
+                    <div className="surface-card rounded-2xl p-6">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl" style={{ background: 'linear-gradient(135deg, rgba(161, 96, 157, 0.2), rgba(52, 211, 153, 0.2))' }}>
+                                💬
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-bold text-white">Professor Feedback</h2>
+                                <p className="text-sm text-gray-400">Feedback from your instructors on your work and progress</p>
+                            </div>
+                        </div>
+
+                        {feedbackLoading ? (
+                            <div className="text-center py-8">
+                                <div className="w-10 h-10 border-2 border-[#a1609d]/30 border-t-[#a1609d] rounded-full animate-spin mx-auto mb-4" />
+                                <p className="text-gray-400">Loading feedback...</p>
+                            </div>
+                        ) : professorFeedback.length === 0 ? (
+                            <div className="text-center py-8">
+                                <p className="text-gray-400">No feedback yet. Your professors will share feedback here as you complete your coursework.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {/* Course selector */}
+                                <div className="mb-6">
+                                    <label className="text-sm text-gray-400 mb-2 block">Select Course</label>
+                                    <select
+                                        value={selectedCourseForFeedback || ''}
+                                        onChange={(e) => setSelectedCourseForFeedback(Number(e.target.value))}
+                                        className="w-full px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white outline-none focus:border-[#a1609d]/50"
+                                    >
+                                        {professorFeedback.map((course) => (
+                                            <option key={course.course_id} value={course.course_id}>
+                                                {course.course_title}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Feedback items for selected course */}
+                                {professorFeedback.find(c => c.course_id === selectedCourseForFeedback)?.feedback.map((fb, i) => (
+                                    <div key={i} className="p-4 rounded-xl border-l-4" style={{
+                                        background: fb.is_positive ? 'rgba(52, 211, 153, 0.05)' : 'rgba(249, 115, 22, 0.05)',
+                                        borderLeftColor: fb.is_positive ? '#34d399' : '#f97316'
+                                    }}>
+                                        <div className="flex items-start justify-between mb-2">
+                                            <div>
+                                                <p className="text-sm font-medium text-gray-400">{fb.professor_name}</p>
+                                                <p className="text-xs text-gray-500">{new Date(fb.created_at).toLocaleDateString()}</p>
+                                            </div>
+                                            <span className="text-xs px-2 py-1 rounded-full" style={{
+                                                background: fb.is_positive ? 'rgba(52, 211, 153, 0.2)' : 'rgba(249, 115, 22, 0.2)',
+                                                color: fb.is_positive ? '#34d399' : '#f97316'
+                                            }}>
+                                                {fb.feedback_category}
+                                            </span>
+                                        </div>
+                                        <p className="text-gray-300 text-sm leading-relaxed">{fb.feedback_text}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* AI Coach Section */}
                     <div className="surface-card rounded-2xl p-6">
                         <div className="flex items-center gap-3 mb-4">
                             <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl" style={{ background: 'linear-gradient(135deg, rgba(161, 96, 157, 0.2), rgba(254, 244, 131, 0.2))' }}>
@@ -485,7 +570,7 @@ const StudentAnalytics = () => {
                             </div>
                             <div>
                                 <h2 className="text-xl font-bold text-white">AI Learning Coach</h2>
-                                <p className="text-sm text-gray-400">Personalised feedback powered by AI analysis of your performance data</p>
+                                <p className="text-sm text-gray-400">Personalized feedback considering your performance and instructor comments</p>
                             </div>
                         </div>
 
