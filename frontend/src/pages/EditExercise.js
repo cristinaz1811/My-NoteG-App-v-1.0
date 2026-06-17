@@ -1,17 +1,92 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React, { useEffect, useState, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
-import { exerciseService, courseService } from '../services/api';
+import { exerciseService } from '../services/api';
+import ExercisePreview from '../components/ExercisePreview';
 
 const EditExercise = () => {
     const { id } = useParams();
+    const navigate = useNavigate();
     const [exercise, setExercise] = useState(null);
     const [testCases, setTestCases] = useState([]);
     const [exerciseFiles, setExerciseFiles] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('details');
     const [saving, setSaving] = useState(false);
-    
+
+    // Panel expansion state
+    const [expandedPanels, setExpandedPanels] = useState({
+        details: false,
+        testCases: false,
+        files: false,
+        hintTester: false
+    });
+
+    // New test case form state
+    const [newTestCase, setNewTestCase] = useState({
+        input: '',
+        expected_output: '',
+        is_hidden: false,
+        weight: 1
+    });
+
+    // New file form state
+    const [newFile, setNewFile] = useState({
+        filename: '',
+        starter_code: '',
+        is_entry_point: false,
+    });
+
+    // AI Hint Tester state
+    const [hintTesterCode, setHintTesterCode] = useState('');
+    const [hintTesterResults, setHintTesterResults] = useState(null);
+    const [generatedHints, setGeneratedHints] = useState({});
+    const [loadingHint, setLoadingHint] = useState(null);
+    const [hintTesterComplexity, setHintTesterComplexity] = useState(null);
+
+    // File editing state
+    const [editingFileId, setEditingFileId] = useState(null);
+    const [fileEditData, setFileEditData] = useState({});
+    const [selectedFileForCode, setSelectedFileForCode] = useState(null);
+
+    // Left panel edit/preview toggle
+    const [leftPanelMode, setLeftPanelMode] = useState('edit'); // 'edit' or 'preview'
+
+    // Resizable panels state
+    const [leftPanelWidth, setLeftPanelWidth] = useState(33); // percentage
+    const [rightPanelWidth, setRightPanelWidth] = useState(33); // percentage
+    const [resizing, setResizing] = useState(null); // 'left' or 'right' or null
+
+    const handleMouseDown = (panel) => {
+        setResizing(panel);
+    };
+
+    const handleMouseUp = () => {
+        setResizing(null);
+    };
+
+    const handleMouseMove = (e) => {
+        if (!resizing) return;
+
+        const container = document.querySelector('[data-layout-container]');
+        if (!container) return;
+
+        const containerWidth = container.clientWidth;
+        const mouseX = e.clientX;
+        const containerLeft = container.getBoundingClientRect().left;
+        const relativeX = mouseX - containerLeft;
+        const percentageX = (relativeX / containerWidth) * 100;
+
+        if (resizing === 'left') {
+            // Resize left panel (min 20%, max 60%)
+            const newLeftWidth = Math.min(Math.max(percentageX, 20), 60);
+            setLeftPanelWidth(newLeftWidth);
+        } else if (resizing === 'right') {
+            // Resize right panel (min 20%, max 60%)
+            const newRightWidth = Math.min(Math.max(100 - percentageX, 20), 60);
+            setRightPanelWidth(newRightWidth);
+        }
+    };
+
     // Form data
     const [formData, setFormData] = useState({
         title: '',
@@ -27,21 +102,6 @@ const EditExercise = () => {
         is_published: true,
         available_from: '',
         available_until: '',
-    });
-
-    // New test case
-    const [newTestCase, setNewTestCase] = useState({
-        input: '',
-        expected_output: '',
-        is_hidden: false,
-        weight: 1
-    });
-
-    // New exercise file
-    const [newFile, setNewFile] = useState({
-        filename: '',
-        starter_code: '',
-        is_entry_point: false,
     });
 
     useEffect(() => {
@@ -68,18 +128,24 @@ const EditExercise = () => {
                 available_until: exerciseRes.data.available_until ? exerciseRes.data.available_until.slice(0, 16) : '',
             });
 
-            // Load test cases
             const testCasesRes = await exerciseService.getTestCases(id);
             setTestCases(testCasesRes.data);
 
-            // Load exercise files if multi-file
             if (exerciseRes.data.is_multi_file) {
                 try {
                     const filesRes = await exerciseService.getExerciseFiles(id);
                     setExerciseFiles(filesRes.data);
+                    // Auto-select the first file or entry point for multi-file exercises
+                    if (filesRes.data.length > 0) {
+                        const entryPointFile = filesRes.data.find(f => f.is_entry_point) || filesRes.data[0];
+                        setSelectedFileForCode(entryPointFile);
+                    }
                 } catch (err) {
                     console.error('Error loading exercise files:', err);
                 }
+            } else {
+                // Clear selected file for single-file exercises
+                setSelectedFileForCode(null);
             }
         } catch (error) {
             console.error('Error loading exercise:', error);
@@ -88,15 +154,32 @@ const EditExercise = () => {
         }
     };
 
+    const saveFileStarterCode = async (file) => {
+        if (!file.id) return; // Skip if file is new and not yet saved
+        try {
+            await exerciseService.updateExerciseFile(file.id, {
+                starter_code: file.starter_code || ''
+            });
+        } catch (error) {
+            console.error('Error saving file starter code:', error);
+        }
+    };
+
     const handleUpdateExercise = async () => {
         setSaving(true);
         try {
+            // Save all file starter codes first
+            if (formData.is_multi_file && exerciseFiles.length > 0) {
+                for (const file of exerciseFiles) {
+                    await saveFileStarterCode(file);
+                }
+            }
+
             const dataToSend = {
                 ...formData,
                 time_limit_minutes: formData.time_limit_minutes === '' ? null : formData.time_limit_minutes
             };
             await exerciseService.updateExercise(id, dataToSend);
-            // Reload to refresh files tab visibility
             loadExercise();
             alert('Exercise updated successfully!');
         } catch (error) {
@@ -113,9 +196,10 @@ const EditExercise = () => {
             return;
         }
         try {
-            await exerciseService.addTestCase(id, newTestCase);
+            const res = await exerciseService.addTestCase(id, newTestCase);
+            // Add test case to local state instead of reloading
+            setTestCases(prev => [...prev, res.data]);
             setNewTestCase({ input: '', expected_output: '', is_hidden: false, weight: 1 });
-            loadExercise();
         } catch (error) {
             console.error('Error adding test case:', error);
             alert(error.response?.data?.error || 'Failed to add test case');
@@ -125,7 +209,10 @@ const EditExercise = () => {
     const handleUpdateTestCase = async (testCaseId, data) => {
         try {
             await exerciseService.updateTestCase(testCaseId, data);
-            loadExercise();
+            // Update local state instead of reloading
+            setTestCases(prev =>
+                prev.map(tc => tc.id === testCaseId ? { ...tc, ...data } : tc)
+            );
         } catch (error) {
             console.error('Error updating test case:', error);
             alert(error.response?.data?.error || 'Failed to update test case');
@@ -136,23 +223,27 @@ const EditExercise = () => {
         if (!window.confirm('Are you sure you want to delete this test case?')) return;
         try {
             await exerciseService.deleteTestCase(testCaseId);
-            loadExercise();
+            // Remove from local state instead of reloading
+            setTestCases(prev => prev.filter(tc => tc.id !== testCaseId));
         } catch (error) {
             console.error('Error deleting test case:', error);
             alert(error.response?.data?.error || 'Failed to delete test case');
         }
     };
 
-    // Multi-file exercise file management
     const handleAddFile = async () => {
         if (!newFile.filename) {
             alert('Filename is required');
             return;
         }
         try {
-            await exerciseService.addExerciseFile(id, newFile);
+            const res = await exerciseService.addExerciseFile(id, newFile);
+            // Add file to local state instead of reloading
+            const newFileWithData = res.data;
+            setExerciseFiles(prev => [...prev, newFileWithData]);
+            // Auto-select the newly added file for editing
+            setSelectedFileForCode(newFileWithData);
             setNewFile({ filename: '', starter_code: '', is_entry_point: false });
-            loadExercise();
         } catch (error) {
             console.error('Error adding file:', error);
             alert(error.response?.data?.error || 'Failed to add file');
@@ -162,7 +253,10 @@ const EditExercise = () => {
     const handleUpdateFile = async (fileId, data) => {
         try {
             await exerciseService.updateExerciseFile(fileId, data);
-            loadExercise();
+            // Update local state instead of reloading
+            setExerciseFiles(prev =>
+                prev.map(f => f.id === fileId ? { ...f, ...data } : f)
+            );
         } catch (error) {
             console.error('Error updating file:', error);
             alert(error.response?.data?.error || 'Failed to update file');
@@ -173,20 +267,108 @@ const EditExercise = () => {
         if (!window.confirm('Are you sure you want to delete this file?')) return;
         try {
             await exerciseService.deleteExerciseFile(fileId);
-            loadExercise();
+            // Remove from local state instead of reloading
+            setExerciseFiles(prev => prev.filter(f => f.id !== fileId));
         } catch (error) {
             console.error('Error deleting file:', error);
             alert(error.response?.data?.error || 'Failed to delete file');
         }
     };
 
-    const getDifficultyBadgeClass = (difficulty) => {
-        switch(difficulty) {
-            case 'easy': return 'badge-beginner';
-            case 'medium': return 'badge-intermediate';
-            case 'hard': return 'badge-advanced';
-            default: return 'badge-beginner';
+    const togglePanel = (panelName) => {
+        setExpandedPanels(prev => ({
+            ...prev,
+            [panelName]: !prev[panelName]
+        }));
+    };
+
+    const handleGenerateHintForTester = async (hintNumber) => {
+        if (!hintTesterCode.trim()) {
+            alert('Please write some test code first');
+            return;
         }
+
+        setLoadingHint(hintNumber);
+        try {
+            // For testing, pass test cases so AI understands the exercise context
+            const response = await exerciseService.generateAIHint(id, {
+                hintNumber,
+                code: hintTesterCode,
+                testCases: testCases,
+                failedTests: [],
+                mode: 'solving',
+                exerciseDescription: formData.description,
+                exerciseTitle: formData.title,
+                currentComplexity: hintTesterComplexity ? `${hintTesterComplexity.timeComplexity} time, ${hintTesterComplexity.spaceComplexity} space` : undefined,
+                optimalComplexity: undefined,
+            });
+
+            setGeneratedHints(prev => ({
+                ...prev,
+                [hintNumber]: response.data.hint
+            }));
+        } catch (error) {
+            console.error('Error generating hint:', error);
+            alert(error.response?.data?.error || 'Failed to generate hint');
+        } finally {
+            setLoadingHint(null);
+        }
+    };
+
+    const handleAnalyzeTestCode = async () => {
+        if (!hintTesterCode.trim()) {
+            alert('Please write some test code first');
+            return;
+        }
+
+        try {
+            const response = await exerciseService.getComplexityAnalysis(id, { code: hintTesterCode });
+            setHintTesterComplexity(response.data);
+        } catch (error) {
+            console.error('Error analyzing code:', error);
+        }
+    };
+
+    const handleResetHints = async () => {
+        try {
+            // Delete cached test hints from database so new ones can be generated
+            await exerciseService.deleteTestHints(id);
+        } catch (error) {
+            console.error('Error deleting hints:', error);
+        }
+        // Clear frontend state
+        setGeneratedHints({});
+        setHintTesterCode('');
+        setHintTesterComplexity(null);
+    };
+
+    const startEditingFile = (file) => {
+        setEditingFileId(file.id);
+        setFileEditData({
+            filename: file.filename,
+            starter_code: file.starter_code || '',
+            is_entry_point: file.is_entry_point || false,
+            display_order: file.display_order || 0,
+        });
+    };
+
+    const saveFileEdit = async () => {
+        try {
+            await exerciseService.updateExerciseFile(editingFileId, fileEditData);
+            setExerciseFiles(prev =>
+                prev.map(f => f.id === editingFileId ? { ...f, ...fileEditData } : f)
+            );
+            setEditingFileId(null);
+            setFileEditData({});
+        } catch (error) {
+            console.error('Error saving file:', error);
+            alert(error.response?.data?.error || 'Failed to save file');
+        }
+    };
+
+    const cancelFileEdit = () => {
+        setEditingFileId(null);
+        setFileEditData({});
     };
 
     if (loading) {
@@ -212,670 +394,569 @@ const EditExercise = () => {
     }
 
     return (
-        <div className="min-h-screen pt-24 pb-8 px-6">
-            <div className="max-w-5xl mx-auto">
-                {/* Back Button */}
-                <button 
-                    onClick={() => window.history.back()}
-                    className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-6"
-                >
-                    <span>←</span> Back to Course
-                </button>
-
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+        <div className="h-screen flex flex-col bg-gray-950">
+            {/* Header */}
+            <header className="flex-shrink-0 bg-gray-900 border-b border-white/5 px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={() => navigate(`/professor/course/${exercise?.course_id}`)}
+                        className="text-gray-400 hover:text-white transition-colors flex items-center gap-2"
+                    >
+                        <span>←</span> Back
+                    </button>
                     <div>
-                        <h1 className="text-2xl font-bold mb-1">{exercise.title}</h1>
-                        <div className="flex items-center gap-2">
-                            <span className={`badge ${getDifficultyBadgeClass(exercise.difficulty)}`}>
-                                {exercise.difficulty}
-                            </span>
-                            <span className="text-sm text-gray-400">{exercise.language}</span>
-                        </div>
+                        <h1 className="text-lg font-bold">{exercise?.title || 'Exercise'}</h1>
+                        <p className="text-xs text-gray-400 mt-0.5">Split View Editor</p>
                     </div>
                 </div>
-
-                {/* Tabs */}
-                <div className="flex gap-4 mb-6 border-b border-white/10">
-                    {['details', 'code', 'test-cases', ...(formData.is_multi_file ? ['files'] : [])].map((tab) => (
-                        <button
-                            key={tab}
-                            onClick={() => setActiveTab(tab)}
-                            className={`px-4 py-3 font-medium transition-colors border-b-2 -mb-px capitalize ${
-                                activeTab === tab 
-                                    ? 'border-[#a1609d] text-[#a1609d]' 
-                                    : 'border-transparent text-gray-400 hover:text-white'
-                            }`}
-                        >
-                            {tab.replace('-', ' ')}
-                        </button>
-                    ))}
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => navigate(`/professor/course/${exercise?.course_id}`)}
+                        className="px-4 py-2 rounded-lg font-medium text-gray-300 border border-white/20 hover:border-white/40 hover:text-white transition-all"
+                    >
+                        Discard Changes
+                    </button>
+                    <button
+                        onClick={handleUpdateExercise}
+                        disabled={saving}
+                        className="px-6 py-2 rounded-lg font-medium text-white disabled:opacity-50 transition-all"
+                        style={{ background: 'linear-gradient(135deg, #a1609d, #b870ad)' }}
+                    >
+                        {saving ? 'Saving...' : 'Save Changes'}
+                    </button>
                 </div>
+            </header>
 
-                {/* Details Tab */}
-                {activeTab === 'details' && (
-                    <div className="surface-card rounded-2xl p-6 space-y-5">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-2">Title</label>
-                            <input
-                                type="text"
-                                value={formData.title}
-                                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                className="w-full"
-                            />
+            {/* Three-Column Layout */}
+            <div
+                className="flex flex-1 overflow-hidden gap-0"
+                data-layout-container
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                style={{ cursor: resizing ? 'col-resize' : 'default' }}
+            >
+                {/* LEFT: Exercise Preview (Editable/Preview Toggle) */}
+                <aside
+                    className="overflow-y-auto bg-gray-950 border-r border-white/5 flex flex-col flex-shrink-0"
+                    style={{ width: `${leftPanelWidth}%` }}
+                >
+                    {/* Toggle Header */}
+                    <div className="flex-shrink-0 bg-gray-800 px-4 py-3 border-b border-white/5 flex items-center justify-between">
+                        <p className="text-sm font-medium text-gray-300">
+                            {leftPanelMode === 'edit' ? '✏️ Editing' : '👁️ Preview (Student View)'}
+                        </p>
+                        <button
+                            onClick={() => setLeftPanelMode(leftPanelMode === 'edit' ? 'preview' : 'edit')}
+                            className="text-xs px-2.5 py-1 rounded border transition-colors"
+                            style={{
+                                borderColor: leftPanelMode === 'edit' ? '#a1609d' : '#666',
+                                color: leftPanelMode === 'edit' ? '#a1609d' : '#888'
+                            }}
+                        >
+                            {leftPanelMode === 'edit' ? 'Preview' : 'Edit'}
+                        </button>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 overflow-y-auto">
+                        <ExercisePreview
+                            formData={formData}
+                            testCases={testCases}
+                            isEditable={leftPanelMode === 'edit'}
+                            onDescriptionChange={(value) => setFormData({ ...formData, description: value })}
+                            onTestCaseAdd={handleAddTestCase}
+                            onTestCaseUpdate={handleUpdateTestCase}
+                            onTestCaseDelete={handleDeleteTestCase}
+                        />
+                    </div>
+                </aside>
+
+                {/* LEFT-CENTER DIVIDER */}
+                <div
+                    className="w-1 bg-white/5 hover:bg-white/20 cursor-col-resize transition-colors flex-shrink-0"
+                    onMouseDown={() => handleMouseDown('left')}
+                />
+
+                {/* CENTER: Code Editor */}
+                <main
+                    className="flex flex-col bg-gray-900 border-r border-white/5 overflow-hidden flex-shrink-0"
+                    style={{ width: `${100 - leftPanelWidth - rightPanelWidth}%` }}
+                >
+                    <div className="flex-shrink-0 bg-gray-800 px-4 py-3 border-b border-white/5">
+                        <div className="flex items-center justify-between mb-2">
+                            <p className="text-sm font-medium text-gray-300">
+                                {formData.is_multi_file && selectedFileForCode
+                                    ? `Starter Code - ${selectedFileForCode.filename}`
+                                    : 'Starter Code'}
+                            </p>
+                            {formData.is_multi_file && (
+                                <span className="text-xs text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded">Multi-file</span>
+                            )}
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-2">Description</label>
-                            <textarea
-                                value={formData.description}
-                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                rows={4}
-                                className="w-full"
-                            />
-                        </div>
-                        <div className="grid sm:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">Difficulty</label>
-                                <select
-                                    value={formData.difficulty}
-                                    onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
-                                    className="w-full"
-                                >
-                                    <option value="easy">Easy</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="hard">Hard</option>
-                                </select>
+                        <p className="text-xs text-gray-500">
+                            {formData.is_multi_file
+                                ? 'Edit each file\'s starter code. Click tabs to switch files.'
+                                : 'This is what students see when they open the exercise'}
+                        </p>
+                    </div>
+
+                    {/* File Tabs (Multi-file exercises) */}
+                    {formData.is_multi_file && exerciseFiles.length > 0 && (
+                        <div className="flex-shrink-0 border-b border-white/5 bg-gray-950 overflow-x-auto">
+                            <div className="flex items-center gap-1 px-2 py-2">
+                                {exerciseFiles.map((file) => (
+                                    <button
+                                        key={file.id}
+                                        onClick={() => {
+                                            // Auto-save current file's code before switching
+                                            if (selectedFileForCode && selectedFileForCode.id !== file.id) {
+                                                saveFileStarterCode(selectedFileForCode);
+                                            }
+                                            setSelectedFileForCode(file);
+                                        }}
+                                        className={`px-3 py-1.5 rounded text-xs font-mono whitespace-nowrap transition-all ${
+                                            selectedFileForCode?.id === file.id
+                                                ? 'bg-[#a1609d] text-white'
+                                                : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-300'
+                                        }`}
+                                    >
+                                        {file.is_entry_point && <span className="text-green-400 mr-1">▶</span>}
+                                        {file.filename}
+                                    </button>
+                                ))}
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">Language</label>
-                                <select
-                                    value={formData.language}
-                                    onChange={(e) => setFormData({ ...formData, language: e.target.value })}
-                                    className="w-full"
-                                >
-                                    <option value="javascript">JavaScript</option>
-                                    <option value="python">Python</option>
-                                    <option value="java">Java</option>
-                                    <option value="cpp">C++</option>
-                                    <option value="csharp">C#</option>
-                                </select>
-                            </div>
                         </div>
-                        <div className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
-                            <input
-                                type="checkbox"
-                                id="edit_is_multi_file"
-                                checked={formData.is_multi_file}
-                                onChange={(e) => setFormData({ ...formData, is_multi_file: e.target.checked })}
-                                className="w-4 h-4 rounded border-gray-600 accent-cyan-500"
-                            />
-                            <div>
-                                <label htmlFor="edit_is_multi_file" className="text-sm font-medium text-gray-300 cursor-pointer flex items-center gap-2">
-                                    📁 Multi-File Exercise
-                                </label>
-                                <p className="text-xs text-gray-500">Students work with multiple files (e.g., class + test file). Manage files in the "Files" tab.</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
-                            <input
-                                type="checkbox"
-                                id="edit_requires_efficiency"
-                                checked={formData.requires_efficiency}
-                                onChange={(e) => setFormData({ ...formData, requires_efficiency: e.target.checked })}
-                                className="w-4 h-4 rounded border-gray-600 accent-[#a1609d]"
-                            />
-                            <div>
-                                <label htmlFor="edit_requires_efficiency" className="text-sm font-medium text-gray-300 cursor-pointer">Require Efficient Solution</label>
-                                <p className="text-xs text-gray-500">Students must achieve optimal time complexity for full marks (80% for correct but inefficient)</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.03] border border-white/10">
-                            <div className="flex-1">
-                                <label className="text-sm font-medium text-gray-300 mb-1 block">⏱ Time Limit (Quiz Mode)</label>
-                                <p className="text-xs text-gray-500 mb-2">Set a countdown timer for exam-like conditions. Leave empty for no time limit.</p>
+                    )}
+
+                    {/* Code Editor */}
+                    <div className="flex-1 overflow-hidden">
+                        <Editor
+                            height="100%"
+                            language={formData.language}
+                            value={formData.is_multi_file && selectedFileForCode
+                                ? selectedFileForCode.starter_code || ''
+                                : formData.starter_code}
+                            onChange={(value) => {
+                                const newValue = value || '';
+                                if (formData.is_multi_file && selectedFileForCode) {
+                                    // Update the selected file's starter code
+                                    setExerciseFiles(prev =>
+                                        prev.map(f => f.id === selectedFileForCode.id
+                                            ? { ...f, starter_code: newValue }
+                                            : f
+                                        )
+                                    );
+                                    // Also update the selectedFileForCode state for immediate UI feedback
+                                    setSelectedFileForCode(prev => prev ? { ...prev, starter_code: newValue } : null);
+                                } else {
+                                    // Update main exercise starter code
+                                    setFormData({ ...formData, starter_code: newValue });
+                                }
+                            }}
+                            theme="vs-dark"
+                            options={{
+                                minimap: { enabled: false },
+                                fontSize: 14,
+                                lineNumbers: 'on',
+                                scrollBeyondLastLine: false,
+                                padding: { top: 16, bottom: 16 },
+                            }}
+                        />
+                    </div>
+                </main>
+
+                {/* CENTER-RIGHT DIVIDER */}
+                <div
+                    className="w-1 bg-white/5 hover:bg-white/20 cursor-col-resize transition-colors flex-shrink-0"
+                    onMouseDown={() => handleMouseDown('right')}
+                />
+
+                {/* RIGHT: Collapsible Settings & Test Cases */}
+                <aside
+                    className="overflow-y-auto bg-gray-950 border-l border-white/5 flex flex-col flex-shrink-0"
+                    style={{ width: `${rightPanelWidth}%` }}
+                >
+                    <div className="p-6 space-y-4">
+                        {/* Details Panel */}
+                        <CollapsiblePanel
+                            title="Exercise Details"
+                            isExpanded={expandedPanels.details}
+                            onToggle={() => togglePanel('details')}
+                        >
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">Title</label>
+                                    <input
+                                        type="text"
+                                        value={formData.title}
+                                        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                                        className="w-full px-3 py-2 bg-gray-800 border border-white/10 rounded text-gray-100 text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">Description</label>
+                                    <textarea
+                                        value={formData.description}
+                                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                        rows={3}
+                                        className="w-full px-3 py-2 bg-gray-800 border border-white/10 rounded text-gray-100 text-sm resize-none"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-300 mb-2">Difficulty</label>
+                                        <select
+                                            value={formData.difficulty}
+                                            onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
+                                            className="w-full px-3 py-2 bg-gray-800 border border-white/10 rounded text-gray-100 text-sm"
+                                        >
+                                            <option value="easy">Easy</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="hard">Hard</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-300 mb-2">Language</label>
+                                        <select
+                                            value={formData.language}
+                                            onChange={(e) => setFormData({ ...formData, language: e.target.value })}
+                                            className="w-full px-3 py-2 bg-gray-800 border border-white/10 rounded text-gray-100 text-sm"
+                                        >
+                                            <option value="javascript">JavaScript</option>
+                                            <option value="python">Python</option>
+                                            <option value="java">Java</option>
+                                            <option value="cpp">C++</option>
+                                            <option value="csharp">C#</option>
+                                        </select>
+                                    </div>
+                                </div>
                                 <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="is_multi_file"
+                                        checked={formData.is_multi_file}
+                                        onChange={(e) => setFormData({ ...formData, is_multi_file: e.target.checked })}
+                                        className="w-4 h-4"
+                                    />
+                                    <label htmlFor="is_multi_file" className="text-sm text-gray-300">Multi-File Exercise</label>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="requires_efficiency"
+                                        checked={formData.requires_efficiency}
+                                        onChange={(e) => setFormData({ ...formData, requires_efficiency: e.target.checked })}
+                                        className="w-4 h-4"
+                                    />
+                                    <label htmlFor="requires_efficiency" className="text-sm text-gray-300">Require Efficient Solution</label>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">Time Limit (minutes)</label>
                                     <input
                                         type="number"
                                         value={formData.time_limit_minutes}
                                         onChange={(e) => setFormData({ ...formData, time_limit_minutes: e.target.value === '' ? '' : parseInt(e.target.value) || '' })}
                                         min="1"
                                         max="300"
-                                        placeholder="e.g. 30"
-                                        className="w-24 text-center"
+                                        placeholder="Leave empty for no limit"
+                                        className="w-full px-3 py-2 bg-gray-800 border border-white/10 rounded text-gray-100 text-sm"
                                     />
-                                    <span className="text-sm text-gray-400">minutes</span>
-                                    {formData.time_limit_minutes && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setFormData({ ...formData, time_limit_minutes: '' })}
-                                            className="text-xs text-red-400 hover:text-red-300 ml-2"
-                                        >
-                                            Remove
-                                        </button>
-                                    )}
                                 </div>
-                            </div>
-                        </div>
-
-                        {/* AI Hints */}
-                        <div className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/10">
-                            <div>
-                                <p className="text-sm font-medium text-gray-300">AI Hints</p>
-                                <p className="text-xs text-gray-500">Allow students to request AI-generated progressive hints on this exercise.</p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setFormData({ ...formData, ai_hints_enabled: !formData.ai_hints_enabled })}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${formData.ai_hints_enabled ? 'bg-[#a1609d]' : 'bg-white/20'}`}
-                            >
-                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${formData.ai_hints_enabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                            </button>
-                        </div>
-
-                        {/* Test / Scheduling */}
-                        <div className="p-3 rounded-lg bg-white/[0.03] border border-white/10 space-y-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm font-medium text-gray-300">Mark as Test</p>
-                                    <p className="text-xs text-gray-500">Identifies this exercise as a graded test (shown with a badge to students).</p>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="ai_hints_enabled"
+                                        checked={formData.ai_hints_enabled}
+                                        onChange={(e) => setFormData({ ...formData, ai_hints_enabled: e.target.checked })}
+                                        className="w-4 h-4"
+                                    />
+                                    <label htmlFor="ai_hints_enabled" className="text-sm text-gray-300">Enable AI Hints</label>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setFormData({ ...formData, is_test: !formData.is_test })}
-                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${formData.is_test ? 'bg-[#a1609d]' : 'bg-white/20'}`}
-                                >
-                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${formData.is_test ? 'translate-x-6' : 'translate-x-1'}`} />
-                                </button>
-                            </div>
-
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm font-medium text-gray-300">Published</p>
-                                    <p className="text-xs text-gray-500">Unpublish to hide the exercise from students immediately, regardless of scheduling.</p>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="is_test"
+                                        checked={formData.is_test}
+                                        onChange={(e) => setFormData({ ...formData, is_test: e.target.checked })}
+                                        className="w-4 h-4"
+                                    />
+                                    <label htmlFor="is_test" className="text-sm text-gray-300">Mark as Test</label>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setFormData({ ...formData, is_published: !formData.is_published })}
-                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${formData.is_published ? 'bg-green-600' : 'bg-white/20'}`}
-                                >
-                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${formData.is_published ? 'translate-x-6' : 'translate-x-1'}`} />
-                                </button>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3 pt-1">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="is_published"
+                                        checked={formData.is_published}
+                                        onChange={(e) => setFormData({ ...formData, is_published: e.target.checked })}
+                                        className="w-4 h-4"
+                                    />
+                                    <label htmlFor="is_published" className="text-sm text-gray-300">Published</label>
+                                </div>
                                 <div>
-                                    <label className="block text-xs text-gray-400 mb-1">Available from</label>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">Available From</label>
                                     <input
                                         type="datetime-local"
                                         value={formData.available_from}
                                         onChange={(e) => setFormData({ ...formData, available_from: e.target.value })}
-                                        className="w-full text-sm"
+                                        className="w-full px-3 py-2 bg-gray-800 border border-white/10 rounded text-gray-100 text-sm"
                                     />
-                                    {formData.available_from && (
-                                        <button type="button" onClick={() => setFormData({ ...formData, available_from: '' })} className="text-xs text-red-400 hover:text-red-300 mt-1">Clear</button>
-                                    )}
                                 </div>
                                 <div>
-                                    <label className="block text-xs text-gray-400 mb-1">Available until</label>
+                                    <label className="block text-sm font-medium text-gray-300 mb-2">Available Until</label>
                                     <input
                                         type="datetime-local"
                                         value={formData.available_until}
                                         onChange={(e) => setFormData({ ...formData, available_until: e.target.value })}
-                                        className="w-full text-sm"
-                                    />
-                                    {formData.available_until && (
-                                        <button type="button" onClick={() => setFormData({ ...formData, available_until: '' })} className="text-xs text-red-400 hover:text-red-300 mt-1">Clear</button>
-                                    )}
-                                </div>
-                            </div>
-                            {(formData.available_from || formData.available_until) && (
-                                <p className="text-xs text-[#fef483] opacity-80">
-                                    Students can access this exercise
-                                    {formData.available_from ? ` from ${new Date(formData.available_from).toLocaleString()}` : ''}
-                                    {formData.available_until ? ` until ${new Date(formData.available_until).toLocaleString()}` : ''}.
-                                </p>
-                            )}
-                        </div>
-
-                        <button
-                            onClick={handleUpdateExercise}
-                            disabled={saving}
-                            className="px-6 py-2 rounded-lg font-medium text-white disabled:opacity-50"
-                            style={{ background: 'linear-gradient(135deg, #a1609d, #b870ad)' }}
-                        >
-                            {saving ? 'Saving...' : 'Save Changes'}
-                        </button>
-                    </div>
-                )}
-
-                {/* Code Tab */}
-                {activeTab === 'code' && (
-                    <div className="surface-card rounded-2xl p-6 space-y-4">
-                        <h3 className="font-semibold">Starter Code</h3>
-                        <p className="text-sm text-gray-400">This is the code students will see when they start the exercise.</p>
-                        <div className="rounded-lg overflow-hidden border border-white/10">
-                            <Editor
-                                height="400px"
-                                language={formData.language}
-                                value={formData.starter_code}
-                                onChange={(value) => setFormData({ ...formData, starter_code: value || '' })}
-                                theme="vs-dark"
-                                options={{
-                                    minimap: { enabled: false },
-                                    fontSize: 14,
-                                    lineNumbers: 'on',
-                                    scrollBeyondLastLine: false,
-                                }}
-                            />
-                        </div>
-                        <button
-                            onClick={handleUpdateExercise}
-                            disabled={saving}
-                            className="px-6 py-2 rounded-lg font-medium text-white disabled:opacity-50"
-                            style={{ background: 'linear-gradient(135deg, #a1609d, #b870ad)' }}
-                        >
-                            {saving ? 'Saving...' : 'Save Starter Code'}
-                        </button>
-                    </div>
-                )}
-
-                {/* Test Cases Tab */}
-                {activeTab === 'test-cases' && (
-                    <div className="space-y-6">
-                        {/* Add Test Case */}
-                        <div className="surface-card rounded-2xl p-6">
-                            <h3 className="font-semibold mb-4">Add Test Case</h3>
-                            <div className="grid sm:grid-cols-2 gap-4 mb-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-300 mb-2">Input</label>
-                                    <textarea
-                                        value={newTestCase.input}
-                                        onChange={(e) => setNewTestCase({ ...newTestCase, input: e.target.value })}
-                                        rows={3}
-                                        className="w-full font-mono text-sm"
-                                        placeholder="e.g., [1, 2, 3]"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-300 mb-2">Expected Output</label>
-                                    <textarea
-                                        value={newTestCase.expected_output}
-                                        onChange={(e) => setNewTestCase({ ...newTestCase, expected_output: e.target.value })}
-                                        rows={3}
-                                        className="w-full font-mono text-sm"
-                                        placeholder="e.g., 6"
+                                        className="w-full px-3 py-2 bg-gray-800 border border-white/10 rounded text-gray-100 text-sm"
                                     />
                                 </div>
                             </div>
-                            <div className="flex items-center gap-6 mb-4">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={newTestCase.is_hidden}
-                                        onChange={(e) => setNewTestCase({ ...newTestCase, is_hidden: e.target.checked })}
-                                        className="w-4 h-4"
-                                    />
-                                    <span className="text-sm text-gray-300">Hidden (not visible to students)</span>
-                                </label>
-                                <div className="flex items-center gap-2">
-                                    <label className="text-sm text-gray-300">Weight:</label>
-                                    <input
-                                        type="number"
-                                        value={newTestCase.weight}
-                                        onChange={(e) => setNewTestCase({ ...newTestCase, weight: parseInt(e.target.value) || 1 })}
-                                        min="1"
-                                        className="w-16 text-center"
-                                    />
-                                </div>
-                            </div>
-                            <button
-                                onClick={handleAddTestCase}
-                                className="px-4 py-2 rounded-lg font-medium text-white"
-                                style={{ background: 'linear-gradient(135deg, #a1609d, #b870ad)' }}
+                        </CollapsiblePanel>
+
+                        {/* Files Panel */}
+                        {formData.is_multi_file && (
+                            <CollapsiblePanel
+                                title={`Files (${exerciseFiles.length})`}
+                                isExpanded={expandedPanels.files}
+                                onToggle={() => togglePanel('files')}
                             >
-                                Add Test Case
-                            </button>
-                        </div>
-
-                        {/* Existing Test Cases */}
-                        <div>
-                            <h3 className="font-semibold mb-4">
-                                Test Cases ({testCases.length})
-                            </h3>
-                            {testCases.length === 0 ? (
-                                <div className="surface-card rounded-2xl p-8 text-center">
-                                    <p className="text-gray-400">No test cases yet. Add your first test case above!</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-3">
-                                    {testCases.map((tc, index) => (
-                                        <TestCaseCard
-                                            key={tc.id}
-                                            testCase={tc}
-                                            index={index}
-                                            onUpdate={(data) => handleUpdateTestCase(tc.id, data)}
-                                            onDelete={() => handleDeleteTestCase(tc.id)}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* Files Tab (Multi-file exercises) */}
-                {activeTab === 'files' && formData.is_multi_file && (
-                    <div className="space-y-6">
-                        {/* Add File */}
-                        <div className="surface-card rounded-2xl p-6">
-                            <h3 className="font-semibold mb-4 flex items-center gap-2">
-                                📁 Add File
-                            </h3>
-                            <div className="space-y-4 mb-4">
-                                <div className="grid sm:grid-cols-2 gap-4">
+                                <div className="space-y-3 text-sm">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-300 mb-2">Filename *</label>
+                                        <label className="block text-xs font-medium text-gray-400 mb-1">Filename</label>
                                         <input
                                             type="text"
                                             value={newFile.filename}
                                             onChange={(e) => setNewFile({ ...newFile, filename: e.target.value })}
-                                            className="w-full font-mono text-sm"
-                                            placeholder={`e.g., Calculator.${formData.language === 'python' ? 'py' : formData.language === 'java' ? 'java' : formData.language === 'cpp' ? 'cpp' : 'js'}`}
+                                            className="w-full px-2 py-1.5 bg-gray-800 border border-white/10 rounded text-gray-100 text-xs"
                                         />
                                     </div>
-                                    <div className="flex items-end">
-                                        <label className="flex items-center gap-2 cursor-pointer pb-2">
-                                            <input
-                                                type="checkbox"
-                                                checked={newFile.is_entry_point}
-                                                onChange={(e) => setNewFile({ ...newFile, is_entry_point: e.target.checked })}
-                                                className="w-4 h-4 accent-green-500"
-                                            />
-                                            <span className="text-sm text-gray-300">Entry point (main file to run)</span>
-                                        </label>
-                                    </div>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={newFile.is_entry_point}
+                                            onChange={(e) => setNewFile({ ...newFile, is_entry_point: e.target.checked })}
+                                            className="w-3 h-3"
+                                        />
+                                        <span className="text-xs">Entry Point</span>
+                                    </label>
+                                    <button
+                                        onClick={handleAddFile}
+                                        className="w-full px-3 py-1.5 rounded text-xs font-medium text-white"
+                                        style={{ background: 'linear-gradient(135deg, #06b6d4, #0891b2)' }}
+                                    >
+                                        + Add File
+                                    </button>
+                                    {exerciseFiles.map((file) => (
+                                        <div key={file.id} className="bg-gray-800/50 rounded border border-white/5">
+                                            {editingFileId === file.id ? (
+                                                // Editing mode
+                                                <div className="p-3 space-y-2 text-xs">
+                                                    <p className="text-xs text-gray-400 mb-3">Edit the starter code in the center column ➜</p>
+                                                    <div>
+                                                        <label className="block text-xs font-medium text-gray-400 mb-1">Filename</label>
+                                                        <input
+                                                            type="text"
+                                                            value={fileEditData.filename}
+                                                            onChange={(e) => setFileEditData({ ...fileEditData, filename: e.target.value })}
+                                                            className="w-full px-2 py-1 bg-gray-700 border border-white/10 rounded text-gray-100 text-xs"
+                                                        />
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div>
+                                                            <label className="block text-xs font-medium text-gray-400 mb-1">Order</label>
+                                                            <input
+                                                                type="number"
+                                                                value={fileEditData.display_order}
+                                                                onChange={(e) => setFileEditData({ ...fileEditData, display_order: parseInt(e.target.value) || 0 })}
+                                                                className="w-full px-2 py-1 bg-gray-700 border border-white/10 rounded text-gray-100 text-xs"
+                                                            />
+                                                        </div>
+                                                        <label className="flex items-center gap-2 cursor-pointer pt-5">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={fileEditData.is_entry_point}
+                                                                onChange={(e) => setFileEditData({ ...fileEditData, is_entry_point: e.target.checked })}
+                                                                className="w-3 h-3"
+                                                            />
+                                                            <span className="text-xs">Entry Point</span>
+                                                        </label>
+                                                    </div>
+                                                    <div className="flex gap-2 pt-1">
+                                                        <button
+                                                            onClick={saveFileEdit}
+                                                            className="flex-1 px-2 py-1 rounded text-xs font-medium text-white bg-green-600 hover:bg-green-700 transition-colors"
+                                                        >
+                                                            ✓ Save
+                                                        </button>
+                                                        <button
+                                                            onClick={cancelFileEdit}
+                                                            className="flex-1 px-2 py-1 rounded text-xs font-medium text-white bg-gray-600 hover:bg-gray-700 transition-colors"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                // View mode
+                                                <div className="p-3 space-y-1">
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <div>
+                                                            <div className="text-gray-300 font-mono font-medium">{file.filename}</div>
+                                                            {file.is_entry_point && (
+                                                                <span className="inline-block text-xs bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded mt-1">▶ Entry Point</span>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex gap-1">
+                                                            <button
+                                                                onClick={() => startEditingFile(file)}
+                                                                className="text-blue-400 hover:text-blue-300 text-xs"
+                                                            >
+                                                                ✎ Edit
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteFile(file.id)}
+                                                                className="text-red-400 hover:text-red-300 text-xs"
+                                                            >
+                                                                ✕
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    {file.starter_code && (
+                                                        <div className="text-xs bg-black/30 p-1.5 rounded border border-white/5 max-h-20 overflow-y-auto">
+                                                            <pre className="font-mono text-gray-400 text-[10px] whitespace-pre-wrap break-words">
+                                                                {file.starter_code.substring(0, 200)}{file.starter_code.length > 200 ? '...' : ''}
+                                                            </pre>
+                                                        </div>
+                                                    )}
+                                                    <div className="text-xs text-gray-500">Order: {file.display_order}</div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-300 mb-2">Starter Code</label>
-                                    <div className="rounded-lg overflow-hidden border border-white/10">
+                            </CollapsiblePanel>
+                        )}
+
+                        {/* AI Hint Tester Panel */}
+                        {formData.ai_hints_enabled && (
+                            <CollapsiblePanel
+                                title="Test AI Hints"
+                                isExpanded={expandedPanels.hintTester}
+                                onToggle={() => togglePanel('hintTester')}
+                            >
+                                <div className="space-y-3 text-sm">
+                                    <p className="text-xs text-gray-400">Write test code below to verify AI hints work correctly</p>
+
+                                    <div className="h-40 overflow-hidden border border-white/10 rounded">
                                         <Editor
-                                            height="200px"
+                                            height="100%"
                                             language={formData.language}
-                                            value={newFile.starter_code}
-                                            onChange={(value) => setNewFile({ ...newFile, starter_code: value || '' })}
+                                            value={hintTesterCode}
+                                            onChange={(value) => setHintTesterCode(value || '')}
                                             theme="vs-dark"
                                             options={{
                                                 minimap: { enabled: false },
-                                                fontSize: 13,
+                                                fontSize: 11,
                                                 lineNumbers: 'on',
                                                 scrollBeyondLastLine: false,
+                                                padding: { top: 8, bottom: 8 },
                                             }}
                                         />
                                     </div>
-                                </div>
-                            </div>
-                            <button
-                                onClick={handleAddFile}
-                                className="px-4 py-2 rounded-lg font-medium text-white"
-                                style={{ background: 'linear-gradient(135deg, #06b6d4, #0891b2)' }}
-                            >
-                                Add File
-                            </button>
-                        </div>
 
-                        {/* Existing Files */}
-                        <div>
-                            <h3 className="font-semibold mb-4">
-                                Exercise Files ({exerciseFiles.length})
-                            </h3>
-                            {exerciseFiles.length === 0 ? (
-                                <div className="surface-card rounded-2xl p-8 text-center">
-                                    <div className="text-4xl mb-3">📂</div>
-                                    <p className="text-gray-400">No files yet. Add your first file above!</p>
-                                    <p className="text-xs text-gray-500 mt-1">Students will see each file as a separate tab in the editor.</p>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={handleAnalyzeTestCode}
+                                            className="flex-1 px-3 py-1.5 rounded text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                                        >
+                                            Analyze Code
+                                        </button>
+                                        {(Object.keys(generatedHints).length > 0 || hintTesterCode.trim()) && (
+                                            <button
+                                                onClick={handleResetHints}
+                                                className="flex-1 px-3 py-1.5 rounded text-xs font-medium text-white bg-gray-700 hover:bg-gray-600 transition-colors"
+                                            >
+                                                 Reset
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {hintTesterComplexity && (
+                                        <div className="bg-blue-500/10 border border-blue-500/30 rounded p-2 text-xs">
+                                            <div className="text-blue-300 font-medium mb-1">Complexity:</div>
+                                            <div className="text-blue-200">
+                                                Time: <span className="font-mono">{hintTesterComplexity.timeComplexity}</span>
+                                            </div>
+                                            <div className="text-blue-200">
+                                                Space: <span className="font-mono">{hintTesterComplexity.spaceComplexity}</span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-2">
+                                        {[1, 2, 3].map((hintNum) => (
+                                            <div key={hintNum}>
+                                                <button
+                                                    onClick={() => handleGenerateHintForTester(hintNum)}
+                                                    disabled={loadingHint === hintNum}
+                                                    className="w-full px-3 py-1.5 rounded text-xs font-medium text-white transition-all flex items-center justify-center gap-2"
+                                                    style={{
+                                                        background: generatedHints[hintNum]
+                                                            ? 'linear-gradient(135deg, #10b981, #059669)'
+                                                            : 'linear-gradient(135deg, #a1609d, #b870ad)'
+                                                    }}
+                                                >
+                                                    {loadingHint === hintNum ? (
+                                                        <>
+                                                            <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                            Generating...
+                                                        </>
+                                                    ) : generatedHints[hintNum] ? (
+                                                        <>✓ Hint {hintNum} Ready</>
+                                                    ) : (
+                                                        <>✦ Generate Hint {hintNum}</>
+                                                    )}
+                                                </button>
+                                                {generatedHints[hintNum] && (
+                                                    <div className="bg-purple-500/10 border border-purple-500/30 rounded p-2.5 mt-1 text-xs leading-relaxed text-gray-300">
+                                                        <div className="text-purple-300 font-medium mb-1.5">Hint {hintNum}:</div>
+                                                        <p className="whitespace-pre-wrap">{generatedHints[hintNum]}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <p className="text-xs text-gray-500 italic">
+                                        💡 These hints are for testing only and won't be saved. Tips: Write code with bugs to get specific hints, or use correct code to verify hints are appropriate.
+                                    </p>
                                 </div>
-                            ) : (
-                                <div className="space-y-3">
-                                    {exerciseFiles.map((file, index) => (
-                                        <ExerciseFileCard
-                                            key={file.id}
-                                            file={file}
-                                            index={index}
-                                            language={formData.language}
-                                            onUpdate={(data) => handleUpdateFile(file.id, data)}
-                                            onDelete={() => handleDeleteFile(file.id)}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                            </CollapsiblePanel>
+                        )}
                     </div>
-                )}
+                </aside>
             </div>
         </div>
     );
 };
 
-// Test Case Card Component
-const TestCaseCard = ({ testCase, index, onUpdate, onDelete }) => {
-    const [editing, setEditing] = useState(false);
-    const [formData, setFormData] = useState({
-        input: testCase.input,
-        expected_output: testCase.expected_output,
-        is_hidden: testCase.is_hidden,
-        weight: testCase.weight
-    });
-
-    const handleSave = () => {
-        onUpdate(formData);
-        setEditing(false);
-    };
-
+// Collapsible Panel Component
+const CollapsiblePanel = ({ title, isExpanded, onToggle, children }) => {
     return (
-        <div className="surface-card rounded-xl p-4">
-            <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-400">Test Case #{index + 1}</span>
-                    {testCase.is_hidden && (
-                        <span className="px-2 py-0.5 rounded text-xs bg-red-400/20 text-red-400">Hidden</span>
-                    )}
-                    <span className="text-xs text-gray-500">Weight: {testCase.weight}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => setEditing(!editing)}
-                        className="text-sm text-[#fef483] hover:text-[#fff9c4]"
-                    >
-                        {editing ? 'Cancel' : 'Edit'}
-                    </button>
-                    <button
-                        onClick={onDelete}
-                        className="text-sm text-red-400 hover:text-red-300"
-                    >
-                        Delete
-                    </button>
-                </div>
-            </div>
-
-            {editing ? (
-                <div className="space-y-3">
-                    <div className="grid sm:grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-xs text-gray-400 mb-1">Input</label>
-                            <textarea
-                                value={formData.input}
-                                onChange={(e) => setFormData({ ...formData, input: e.target.value })}
-                                rows={2}
-                                className="w-full font-mono text-sm"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs text-gray-400 mb-1">Expected Output</label>
-                            <textarea
-                                value={formData.expected_output}
-                                onChange={(e) => setFormData({ ...formData, expected_output: e.target.value })}
-                                rows={2}
-                                className="w-full font-mono text-sm"
-                            />
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <label className="flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                checked={formData.is_hidden}
-                                onChange={(e) => setFormData({ ...formData, is_hidden: e.target.checked })}
-                            />
-                            <span className="text-sm">Hidden</span>
-                        </label>
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm">Weight:</span>
-                            <input
-                                type="number"
-                                value={formData.weight}
-                                onChange={(e) => setFormData({ ...formData, weight: parseInt(e.target.value) || 1 })}
-                                min="1"
-                                className="w-16 text-center text-sm"
-                            />
-                        </div>
-                        <button
-                            onClick={handleSave}
-                            className="ml-auto px-4 py-1.5 rounded-lg text-sm font-medium text-white"
-                            style={{ background: 'linear-gradient(135deg, #a1609d, #b870ad)' }}
-                        >
-                            Save
-                        </button>
-                    </div>
-                </div>
-            ) : (
-                <div className="grid sm:grid-cols-2 gap-3">
-                    <div>
-                        <span className="block text-xs text-gray-400 mb-1">Input</span>
-                        <code className="block text-sm bg-black/30 p-2 rounded font-mono whitespace-pre-wrap">
-                            {testCase.input}
-                        </code>
-                    </div>
-                    <div>
-                        <span className="block text-xs text-gray-400 mb-1">Expected Output</span>
-                        <code className="block text-sm bg-black/30 p-2 rounded font-mono whitespace-pre-wrap">
-                            {testCase.expected_output}
-                        </code>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
-
-// Exercise File Card Component (for multi-file exercises)
-const ExerciseFileCard = ({ file, index, language, onUpdate, onDelete }) => {
-    const [editing, setEditing] = useState(false);
-    const [formData, setFormData] = useState({
-        filename: file.filename,
-        starter_code: file.starter_code,
-        is_entry_point: file.is_entry_point,
-        display_order: file.display_order
-    });
-
-    const handleSave = () => {
-        onUpdate(formData);
-        setEditing(false);
-    };
-
-    return (
-        <div className="surface-card rounded-xl p-4">
-            <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2">
-                    <span className="text-sm font-mono font-medium text-gray-300">{file.filename}</span>
-                    {file.is_entry_point && (
-                        <span className="px-2 py-0.5 rounded text-xs bg-green-400/20 text-green-400">▶ Entry Point</span>
-                    )}
-                    <span className="text-xs text-gray-500">Order: {file.display_order}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => setEditing(!editing)}
-                        className="text-sm text-[#fef483] hover:text-[#fff9c4]"
-                    >
-                        {editing ? 'Cancel' : 'Edit'}
-                    </button>
-                    <button
-                        onClick={onDelete}
-                        className="text-sm text-red-400 hover:text-red-300"
-                    >
-                        Delete
-                    </button>
-                </div>
-            </div>
-
-            {editing ? (
-                <div className="space-y-3">
-                    <div className="grid sm:grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-xs text-gray-400 mb-1">Filename</label>
-                            <input
-                                type="text"
-                                value={formData.filename}
-                                onChange={(e) => setFormData({ ...formData, filename: e.target.value })}
-                                className="w-full font-mono text-sm"
-                            />
-                        </div>
-                        <div className="flex items-center gap-4 pt-4">
-                            <label className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    checked={formData.is_entry_point}
-                                    onChange={(e) => setFormData({ ...formData, is_entry_point: e.target.checked })}
-                                    className="w-4 h-4 accent-green-500"
-                                />
-                                <span className="text-sm">Entry Point</span>
-                            </label>
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm">Order:</span>
-                                <input
-                                    type="number"
-                                    value={formData.display_order}
-                                    onChange={(e) => setFormData({ ...formData, display_order: parseInt(e.target.value) || 0 })}
-                                    min="0"
-                                    className="w-16 text-center text-sm"
-                                />
-                            </div>
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-xs text-gray-400 mb-1">Starter Code</label>
-                        <div className="rounded-lg overflow-hidden border border-white/10">
-                            <Editor
-                                height="200px"
-                                language={language}
-                                value={formData.starter_code}
-                                onChange={(value) => setFormData({ ...formData, starter_code: value || '' })}
-                                theme="vs-dark"
-                                options={{
-                                    minimap: { enabled: false },
-                                    fontSize: 13,
-                                    lineNumbers: 'on',
-                                    scrollBeyondLastLine: false,
-                                }}
-                            />
-                        </div>
-                    </div>
-                    <div className="flex justify-end">
-                        <button
-                            onClick={handleSave}
-                            className="px-4 py-1.5 rounded-lg text-sm font-medium text-white"
-                            style={{ background: 'linear-gradient(135deg, #06b6d4, #0891b2)' }}
-                        >
-                            Save File
-                        </button>
-                    </div>
-                </div>
-            ) : (
-                <div>
-                    <span className="block text-xs text-gray-400 mb-1">Starter Code Preview</span>
-                    <code className="block text-xs bg-black/30 p-3 rounded font-mono whitespace-pre-wrap max-h-32 overflow-y-auto text-gray-400">
-                        {file.starter_code || '(empty)'}
-                    </code>
+        <div className="rounded-lg border border-white/10 overflow-hidden">
+            <button
+                onClick={onToggle}
+                className="w-full px-4 py-3 bg-gray-800/50 hover:bg-gray-800 transition-colors flex items-center justify-between"
+            >
+                <span className="text-sm font-medium text-gray-200">{title}</span>
+                <span className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+                    ▼
+                </span>
+            </button>
+            {isExpanded && (
+                <div className="p-4 border-t border-white/5 bg-gray-950/50">
+                    {children}
                 </div>
             )}
         </div>

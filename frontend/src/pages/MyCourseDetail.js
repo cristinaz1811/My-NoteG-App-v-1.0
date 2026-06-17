@@ -2,6 +2,9 @@ import React, { useEffect, useState, useCallback, useRef, useContext } from 'rea
 import { useParams, useNavigate } from 'react-router-dom';
 import { courseService } from '../services/api';
 import { AuthContext } from '../context/AuthContext';
+import ChapterLearningPath from '../components/ChapterLearningPath';
+import LectureToExercisePrompt from '../components/LectureToExercisePrompt';
+import ExerciseCompletePrompt from '../components/ExerciseCompletePrompt';
 
 const MyCourseDetail = () => {
     const { courseId } = useParams();
@@ -12,6 +15,8 @@ const MyCourseDetail = () => {
     const [liveTime, setLiveTime] = useState(0);
     const [isTracking, setIsTracking] = useState(false);
     const [expandedSubmission, setExpandedSubmission] = useState(null);
+    const [lectureToExercisePrompt, setLectureToExercisePrompt] = useState(null);
+    const [exerciseCompletePrompt, setExerciseCompletePrompt] = useState(null);
     const navigate = useNavigate();
     const heartbeatRef = useRef(null);
     const timerRef = useRef(null);
@@ -34,7 +39,7 @@ const MyCourseDetail = () => {
         }
     }, [courseId, navigate]);
 
-    const isContentTab = activeTab === 'content' || activeTab === 'exercises';
+    const isContentTab = activeTab === 'content';
 
     // Keep ref in sync so the timer interval always uses the latest persisted total
     useEffect(() => {
@@ -196,22 +201,13 @@ const MyCourseDetail = () => {
                                 <p className="text-gray-400 text-sm">{course.description}</p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                            {isTracking && (
-                                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-red-500/10 border border-red-500/30">
-                                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                                    <span className="text-sm text-red-400">Tracking: {formatTime(liveTime, true)}</span>
-                                </div>
-                            )}
-                        </div>
                     </div>
                 </div>
 
                 {/* Tabs */}
                 <div className="flex gap-1 mb-6 bg-white/5 p-1 rounded-xl w-fit">
                     {[
-                        { id: 'content', label: '📖 Content', tracking: true },
-                        { id: 'exercises', label: '💻 Exercises', tracking: true },
+                        { id: 'content', label: '🎓 Learning Path', tracking: true },
                         { id: 'dashboard', label: '📊 Dashboard', tracking: false },
                     ].map((tab) => (
                         <button
@@ -230,189 +226,90 @@ const MyCourseDetail = () => {
 
                 {/* Tab Content */}
                 <div className="min-h-[60vh]">
-                    {/* Content Tab */}
+                    {/* Learning Path Tab */}
                     {activeTab === 'content' && (
                         <div className="space-y-6">
-                            {/* Lectures */}
-                            {lectures?.length > 0 && (
-                                <div className="surface-card rounded-2xl p-6">
-                                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                                        <span>📖</span> Lectures
-                                    </h3>
-                                    <div className="space-y-2">
-                                        {lectures.map((lecture) => {
-                                            const done = lecture.lecture_completed;
-                                            const seen = lecture.last_page_seen || 0;
-                                            const total = lecture.page_count || 0;
-                                            return (
-                                                <div
-                                                    key={lecture.id}
-                                                    onClick={() => navigate(`/lectures/${lecture.id}`)}
-                                                    className={`flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-colors hover:bg-white/5 ${
-                                                        done ? 'border-green-500/40' : 'border-white/10'
-                                                    }`}
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm ${
-                                                            done ? 'bg-green-500/20 text-green-400' : 'bg-white/5 text-gray-400'
-                                                        }`}>
-                                                            {done ? '✓' : '📖'}
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-medium text-gray-200">{lecture.title}</p>
-                                                            <p className="text-xs text-gray-500">
-                                                                {lecture.chapter_title && `${lecture.chapter_title} · `}
-                                                                {total > 0 ? `${seen}/${total} pages` : 'No pages yet'}
-                                                                {lecture.media_count > 0 && ` · ${lecture.media_count} media`}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <span className="text-gray-500 text-sm">→</span>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
+                            {/* Chapters with mixed lectures and exercises */}
+                            {data.chapters && data.chapters.length > 0 ? (
+                                <>
+                                    {data.chapters.map((chapter) => (
+                                        <ChapterLearningPath
+                                            key={chapter.id}
+                                            chapter={chapter}
+                                            onItemClick={(item) => {
+                                                if (item.type === 'lecture') {
+                                                    navigate(`/lectures/${item.id}`);
+                                                } else {
+                                                    navigate(`/exercises/${item.id}`);
+                                                }
+                                            }}
+                                        />
+                                    ))}
+
+                                    {/* Unassigned items */}
+                                    {data.unassignedItems && data.unassignedItems.length > 0 && (
+                                        <ChapterLearningPath
+                                            chapter={{
+                                                id: 'unassigned',
+                                                title: 'Additional Content',
+                                                description: 'Exercises and lectures not assigned to a chapter',
+                                                order_index: 999,
+                                                items: data.unassignedItems
+                                            }}
+                                            onItemClick={(item) => {
+                                                if (item.type === 'lecture') {
+                                                    navigate(`/lectures/${item.id}`);
+                                                } else {
+                                                    navigate(`/exercises/${item.id}`);
+                                                }
+                                            }}
+                                        />
+                                    )}
+                                </>
+                            ) : (
+                                <div className="surface-card rounded-2xl p-12 text-center">
+                                    <div className="text-5xl mb-4">📚</div>
+                                    <h3 className="text-xl font-semibold mb-2">No content yet</h3>
+                                    <p className="text-gray-400">
+                                        Your instructor hasn't added any chapters, lectures, or exercises yet.
+                                    </p>
                                 </div>
                             )}
 
-                            <div className="grid md:grid-cols-2 gap-6">
-                                <div className="surface-card rounded-2xl p-6">
-                                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                                        <span>📚</span> Learning Objectives
-                                    </h3>
-                                    <ul className="space-y-3">
-                                        {course.learning_objectives?.length > 0
-                                            ? course.learning_objectives.map((obj, i) => (
-                                                <li key={i} className="flex items-start gap-3 text-gray-300">
-                                                    <span className="text-[#fef483] mt-1">✓</span>
-                                                    {obj}
-                                                </li>
-                                            ))
-                                            : (
-                                                <>
-                                                    <li className="flex items-start gap-3 text-gray-300">
-                                                        <span className="text-[#fef483] mt-1">✓</span>
-                                                        Master {course.title} fundamentals
-                                                    </li>
-                                                    <li className="flex items-start gap-3 text-gray-300">
-                                                        <span className="text-[#fef483] mt-1">✓</span>
-                                                        Complete {stats.totalExercises} hands-on exercises
-                                                    </li>
-                                                </>
-                                            )
-                                        }
-                                    </ul>
-                                </div>
-
-                                <div className="surface-card rounded-2xl p-6">
-                                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                                        <span>⏱️</span> Time Progress
-                                    </h3>
-                                    <div className="text-center">
-                                        <div className="text-4xl font-bold gradient-text mb-2">
-                                            {formatTime(liveTime, true)}
-                                        </div>
-                                        <p className="text-gray-400 text-sm mb-6">Time spent learning</p>
-                                        <div className="text-sm text-gray-500">
-                                            Estimated: ~{course.estimated_hours || Math.max(1, Math.ceil(stats.totalExercises * 0.5))} hours
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
+                            {/* Learning Objectives */}
                             <div className="surface-card rounded-2xl p-6">
-                                <h3 className="text-lg font-semibold mb-4">Ready to practice?</h3>
-                                <p className="text-gray-400 mb-4">
-                                    Head over to the exercises tab to start solving problems and building your skills.
-                                </p>
-                                <button onClick={() => setActiveTab('exercises')} className="btn-primary">
-                                    Go to Exercises →
-                                </button>
+                                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                    <span>📚</span> Learning Objectives
+                                </h3>
+                                <ul className="space-y-3">
+                                    {course.learning_objectives?.length > 0
+                                        ? course.learning_objectives.map((obj, i) => (
+                                            <li key={i} className="flex items-start gap-3 text-gray-300">
+                                                <span className="text-[#fef483] mt-1">✓</span>
+                                                {obj}
+                                            </li>
+                                        ))
+                                        : (
+                                            <>
+                                                <li className="flex items-start gap-3 text-gray-300">
+                                                    <span className="text-[#fef483] mt-1">✓</span>
+                                                    Master {course.title} fundamentals
+                                                </li>
+                                                <li className="flex items-start gap-3 text-gray-300">
+                                                    <span className="text-[#fef483] mt-1">✓</span>
+                                                    Complete {stats.totalExercises} hands-on exercises
+                                                </li>
+                                            </>
+                                        )
+                                    }
+                                </ul>
                             </div>
-                        </div>
-                    )}
-
-                    {/* Exercises Tab */}
-                    {activeTab === 'exercises' && (
-                        <div className="space-y-3">
-                            {exercises.map((exercise) => (
-                                <div 
-                                    key={exercise.id}
-                                    onClick={() => navigate(`/exercises/${exercise.id}`)}
-                                    className={`surface-card rounded-xl p-5 cursor-pointer card-hover group ${
-                                        exercise.completed ? 'border-l-4 border-l-green-500' : ''
-                                    }`}
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-4">
-                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                                                exercise.completed 
-                                                    ? 'bg-green-500/20 text-green-400' 
-                                                    : 'bg-white/5 text-gray-400'
-                                            }`}>
-                                                {exercise.completed ? '✓' : '○'}
-                                            </div>
-                                            <div>
-                                                <h4 className="font-medium group-hover:text-[#fef483] transition-colors">
-                                                    {exercise.title}
-                                                </h4>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <span className={`badge text-xs ${getDifficultyBadgeClass(exercise.difficulty)}`}>
-                                                        {exercise.difficulty}
-                                                    </span>
-                                                    <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded">
-                                                        {exercise.language}
-                                                    </span>
-                                                    {exercise.time_limit_minutes && (
-                                                        <span className="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded flex items-center gap-1">
-                                                            ⏱ {exercise.time_limit_minutes}m
-                                                        </span>
-                                                    )}
-                                                    {exercise.is_test && (
-                                                        <span className="text-xs text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">
-                                                            Test
-                                                        </span>
-                                                    )}
-                                                    {!exercise.is_published && (
-                                                        <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded">
-                                                            Unpublished
-                                                        </span>
-                                                    )}
-                                                    {exercise.available_from && new Date() < new Date(exercise.available_from) && (
-                                                        <span className="text-xs text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded">
-                                                            Opens {new Date(exercise.available_from).toLocaleDateString()}
-                                                        </span>
-                                                    )}
-                                                    {exercise.available_until && new Date() > new Date(exercise.available_until) && (
-                                                        <span className="text-xs text-red-400 bg-red-500/10 px-2 py-0.5 rounded">
-                                                            Closed
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-sm text-gray-400">
-                                                Best: <span className="text-[#fef483] font-medium">{exercise.best_score}%</span>
-                                            </div>
-                                            <div className="text-xs text-gray-500">
-                                                {exercise.attempts} attempts
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
                         </div>
                     )}
 
                     {/* Dashboard Tab */}
                     {activeTab === 'dashboard' && (
                         <div className="space-y-6">
-                            {/* Notice */}
-                            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
-                                <span className="text-amber-400">⏸️</span>
-                                <span className="text-sm text-amber-400">Time tracking is paused while viewing statistics</span>
-                            </div>
 
                             {/* Stats Grid */}
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -561,6 +458,38 @@ const MyCourseDetail = () => {
                         </div>
                     )}
                 </div>
+
+                {/* Navigation Prompts */}
+                {lectureToExercisePrompt && (
+                    <LectureToExercisePrompt
+                        nextExercise={lectureToExercisePrompt}
+                        onStart={() => {
+                            navigate(`/exercises/${lectureToExercisePrompt.id}`);
+                            setLectureToExercisePrompt(null);
+                        }}
+                        onSkip={() => setLectureToExercisePrompt(null)}
+                        onClose={() => setLectureToExercisePrompt(null)}
+                    />
+                )}
+
+                {exerciseCompletePrompt && (
+                    <ExerciseCompletePrompt
+                        score={exerciseCompletePrompt.score}
+                        nextItem={exerciseCompletePrompt.nextItem}
+                        isChapterComplete={exerciseCompletePrompt.isChapterComplete}
+                        onContinue={() => {
+                            if (exerciseCompletePrompt.nextItem) {
+                                if (exerciseCompletePrompt.nextItem.type === 'lecture') {
+                                    navigate(`/lectures/${exerciseCompletePrompt.nextItem.id}`);
+                                } else {
+                                    navigate(`/exercises/${exerciseCompletePrompt.nextItem.id}`);
+                                }
+                            }
+                            setExerciseCompletePrompt(null);
+                        }}
+                        onClose={() => setExerciseCompletePrompt(null)}
+                    />
+                )}
             </div>
         </div>
     );

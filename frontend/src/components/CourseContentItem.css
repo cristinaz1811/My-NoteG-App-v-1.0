@@ -3,8 +3,8 @@
     align-items: center;
     gap: 16px;
     padding: 16px;
-    background: #fff;
-    border: 1px solid #e8e8e8;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -12,24 +12,24 @@
 }
 
 .course-content-item:hover {
-    border-color: #4caf50;
+    border-color: rgba(76, 175, 80, 0.5);
     box-shadow: 0 2px 8px rgba(76, 175, 80, 0.1);
-    background: #f9fdf7;
+    background: rgba(76, 175, 80, 0.05);
 }
 
 .course-content-item.completed {
-    background: #f1f8f3;
-    border-color: #c8e6c9;
+    background: rgba(76, 175, 80, 0.08);
+    border-color: rgba(76, 175, 80, 0.3);
 }
 
 .course-content-item.lecture-item .item-icon {
-    color: #2196f3;
-    background: #e3f2fd;
+    color: #64b5f6;
+    background: rgba(100, 181, 246, 0.1);
 }
 
 .course-content-item.exercise-item .item-icon {
-    color: #ff9800;
-    background: #fff3e0;
+    color: #ffb74d;
+    background: rgba(255, 183, 77, 0.1);
 }
 
 .item-icon {
@@ -65,14 +65,14 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: #999;
+    color: #666;
 }
 
 .item-title {
     margin: 0;
     font-size: 14px;
     font-weight: 600;
-    color: #1a1a1a;
+    color: #e0e0e0;
     word-break: break-word;
     flex: 1;
 }
@@ -105,7 +105,7 @@
 .item-meta {
     margin-top: 6px;
     font-size: 12px;
-    color: #666;
+    color: #999;
     display: flex;
     gap: 12px;
     flex-wrap: wrap;
@@ -123,6 +123,7 @@
     align-items: center;
     gap: 12px;
     flex-shrink: 0;
+    margin-left: 8px;
 }
 
 .completion-indicator {
@@ -136,38 +137,9 @@
 }
 
 .incomplete-icon {
-    color: #bbb;
+    color: #666;
 }
 
-.item-button {
-    padding: 6px 16px;
-    background: #4caf50;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-}
-
-.item-button:hover {
-    background: #45a049;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.course-content-item.completed .item-button {
-    background: #bbb;
-    cursor: default;
-}
-
-.course-content-item.completed .item-button:hover {
-    background: #bbb;
-    transform: none;
-    box-shadow: none;
-}
 
 /* Responsive design */
 @media (max-width: 640px) {

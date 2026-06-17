@@ -1,9 +1,10 @@
 .chapter-learning-path {
     margin-bottom: 24px;
-    border: 1px solid #e0e0e0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
     overflow: hidden;
-    background: #fff;
+    background: rgba(255, 255, 255, 0.02);
+    backdrop-filter: blur(10px);
 }
 
 .chapter-header {
@@ -11,15 +12,15 @@
     justify-content: space-between;
     align-items: center;
     padding: 20px;
-    background: #f8f9fa;
-    border-bottom: 1px solid #e0e0e0;
+    background: rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     cursor: pointer;
     transition: background-color 0.2s;
     user-select: none;
 }
 
 .chapter-header:hover {
-    background: #f0f1f3;
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .chapter-header-left {
@@ -32,8 +33,21 @@
 
 .chapter-header-left svg {
     flex-shrink: 0;
-    color: #666;
+    color: #999;
     margin-top: 2px;
+}
+
+.chapter-header-left span {
+    color: #999;
+}
+
+.chapter-header-left .chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: #999;
+    transition: transform 0.2s ease;
 }
 
 .chapter-info {
@@ -45,46 +59,17 @@
     margin: 0;
     font-size: 16px;
     font-weight: 600;
-    color: #1a1a1a;
+    color: #e0e0e0;
     word-break: break-word;
 }
 
 .chapter-description {
     margin: 4px 0 0 0;
     font-size: 13px;
-    color: #666;
+    color: #999;
     word-break: break-word;
 }
 
-.chapter-progress {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 8px;
-    flex-shrink: 0;
-    margin-left: 16px;
-}
-
-.progress-text {
-    font-size: 12px;
-    color: #666;
-    font-weight: 500;
-    white-space: nowrap;
-}
-
-.progress-bar {
-    width: 120px;
-    height: 6px;
-    background: #e0e0e0;
-    border-radius: 3px;
-    overflow: hidden;
-}
-
-.progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #4caf50 0%, #45a049 100%);
-    transition: width 0.3s ease;
-}
 
 .chapter-items {
     padding: 16px;
@@ -98,17 +83,6 @@
     .chapter-header {
         flex-direction: column;
         align-items: flex-start;
-    }
-
-    .chapter-progress {
-        align-items: flex-start;
-        width: 100%;
-        margin: 12px 0 0 28px;
-    }
-
-    .progress-bar {
-        width: 100%;
-        max-width: 200px;
     }
 }
 

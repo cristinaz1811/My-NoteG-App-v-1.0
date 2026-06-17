@@ -4,7 +4,7 @@ const {
     compareAllSubmissions,
     ngramSimilarity,
     lcsSimilarity,
-} = require('../utils/plagiarismDetector');
+} = require('../../utils/plagiarismDetector');
 
 describe('tokenize', () => {
     it('returns an empty array for invalid input', () => {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { courseService, exerciseService } from '../services/api';
+import StudentFeedbackModal from '../components/StudentFeedbackModal';
 
 const CourseStudents = () => {
     const { id } = useParams();
@@ -15,6 +16,8 @@ const CourseStudents = () => {
     const [loadingDetails, setLoadingDetails] = useState(false);
     const [showExercisePerformance, setShowExercisePerformance] = useState(false);
     const [unlockingExercise, setUnlockingExercise] = useState(null);
+    const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+    const [submittingFeedback, setSubmittingFeedback] = useState(false);
 
     useEffect(() => {
         loadCourseAndStudents();
@@ -75,6 +78,27 @@ const CourseStudents = () => {
             console.error('Error loading student details:', error);
         } finally {
             setLoadingDetails(false);
+        }
+    };
+
+    const handleSendFeedback = async (feedbackData) => {
+        if (!selectedStudent) return;
+        setSubmittingFeedback(true);
+        try {
+            await courseService.sendStudentFeedback(selectedStudent.id, id, {
+                feedback_text: feedbackData.feedbackText,
+                feedback_category: feedbackData.category,
+                is_positive: feedbackData.isPositive
+            });
+            setShowFeedbackModal(false);
+            alert('Feedback sent successfully!');
+            // Refresh student details to show updated feedback
+            await loadStudentDetails(selectedStudent.id);
+        } catch (error) {
+            console.error('Error sending feedback:', error);
+            alert(error.response?.data?.error || 'Failed to send feedback');
+        } finally {
+            setSubmittingFeedback(false);
         }
     };
 
@@ -313,7 +337,15 @@ const CourseStudents = () => {
                             <div className="space-y-4">
                                 {/* Student Info */}
                                 <div className="surface-card rounded-xl p-5">
-                                    <h3 className="font-semibold text-lg mb-4">{studentDetails.student.username}</h3>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="font-semibold text-lg">{studentDetails.student.username}</h3>
+                                        <button
+                                            onClick={() => setShowFeedbackModal(true)}
+                                            className="px-3 py-1.5 text-sm font-medium rounded bg-gradient-to-r from-[#a1609d] to-[#8b4c8b] text-white hover:from-[#b87aad] hover:to-[#9b5c9b] transition-all"
+                                        >
+                                            ✍️ Give Feedback
+                                        </button>
+                                    </div>
                                     <div className="grid grid-cols-2 gap-4 text-sm">
                                         <div>
                                             <span className="text-gray-400">Email</span>
@@ -434,6 +466,16 @@ const CourseStudents = () => {
                 </div>
             </div>
 
+            {/* Feedback Modal */}
+            {showFeedbackModal && selectedStudent && (
+                <StudentFeedbackModal
+                    student={selectedStudent}
+                    courseId={id}
+                    onClose={() => setShowFeedbackModal(false)}
+                    onSubmit={handleSendFeedback}
+                    isLoading={submittingFeedback}
+                />
+            )}
         </div>
     );
 };

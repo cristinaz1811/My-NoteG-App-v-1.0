@@ -198,12 +198,28 @@ const getCourseById = async (req, res) => {
             ORDER BY l.order_index, l.id
         `, [id]);
 
+        // Get student count
+        const studentCountResult = await db.query(
+            'SELECT COUNT(DISTINCT user_id)::int as student_count FROM enrollments WHERE course_id = $1',
+            [id]
+        );
+        const studentCount = studentCountResult.rows[0]?.student_count || 0;
+
+        // Get exercise count
+        const exerciseCountResult = await db.query(
+            'SELECT COUNT(*)::int as exercise_count FROM exercises WHERE course_id = $1',
+            [id]
+        );
+        const exerciseCount = exerciseCountResult.rows[0]?.exercise_count || 0;
+
         const courseData = {
             ...course,
             chapters: chaptersResult.rows,
             unassignedExercises: unassignedExercises.rows,
             exercises: allExercises.rows,
             lectures: lecturesResult.rows,
+            student_count: studentCount,
+            exercise_count: exerciseCount,
         };
         await cacheSet(`course:${id}`, courseData, 300);
         res.json(courseData);
@@ -515,37 +531,6 @@ const getEnrolledCourseDetails = async (req, res) => {
             ORDER BY ch.order_index
         `, [courseId]);
 
-        // Build chapters with mixed items (lectures and exercises)
-        const chaptersWithItems = chaptersResult.rows.map(chapter => {
-            // Get lectures for this chapter
-            const lecturesInChapter = lecturesResult.rows.filter(l => l.chapter_id === chapter.id).map(l => ({
-                type: 'lecture',
-                id: l.id,
-                title: l.title,
-                description: l.description,
-                page_count: l.page_count,
-                media_count: l.media_count,
-                order_index: l.order_index,
-                completed: l.lecture_completed,
-                last_page_seen: l.last_page_seen
-            }));
-
-            // Get exercises for this chapter
-            const exercisesInChapter = exercisesResult.rows.filter(e => {
-                // We need chapter_id info for exercises, fetch it separately if needed
-                // For now, we'll filter based on the exercise's chapter association
-                return false; // placeholder, will be filled below
-            });
-
-            return {
-                id: chapter.id,
-                title: chapter.title,
-                description: chapter.description,
-                order_index: chapter.order_index,
-                items: [] // will be filled with merged lectures and exercises
-            };
-        });
-
         // Get exercises with chapter associations
         const exercisesWithChapterResult = await db.query(`
             SELECT
@@ -566,7 +551,7 @@ const getEnrolledCourseDetails = async (req, res) => {
             ORDER BY ex.order_index, ex.id
         `, [userId, courseId]);
 
-        // Rebuild chapters with proper mixed items
+        // Build chapters with proper mixed items
         const chaptersWithMixedItems = chaptersResult.rows.map(chapter => {
             // Get lectures for this chapter, sorted by order_index
             const lecturesInChapter = lecturesResult.rows
@@ -1476,6 +1461,7 @@ const getExerciseStudentAttempts = async (req, res) => {
 };
 
 module.exports = {
+    generateEnrollmentCode,
     getAllCourses,
     getCourseById,
     createCourse,

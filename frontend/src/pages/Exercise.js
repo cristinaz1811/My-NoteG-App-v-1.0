@@ -30,6 +30,37 @@ const Exercise = () => {
     const [showHistoryPanel, setShowHistoryPanel] = useState(false);
     const historyRefreshRef = useRef(0);
 
+    // Resizable panels state
+    const [rightPanelWidth, setRightPanelWidth] = useState(25); // percentage
+    const [resizing, setResizing] = useState(null);
+
+    const handleMouseDown = (panel) => {
+        setResizing(panel);
+    };
+
+    const handleMouseUp = () => {
+        setResizing(null);
+    };
+
+    const handleMouseMove = (e) => {
+        if (!resizing) return;
+
+        const container = document.querySelector('[data-exercise-layout]');
+        if (!container) return;
+
+        const containerWidth = container.clientWidth;
+        const mouseX = e.clientX;
+        const containerLeft = container.getBoundingClientRect().left;
+        const relativeX = mouseX - containerLeft;
+        const percentageX = (relativeX / containerWidth) * 100;
+
+        if (resizing === 'right') {
+            // Resize right panel (min 15%, max 50%)
+            const newRightWidth = Math.min(Math.max(100 - percentageX, 15), 50);
+            setRightPanelWidth(newRightWidth);
+        }
+    };
+
     // AI Hints state
     const [hints, setHints] = useState([
         { number: 1, text: null, unlocked: false },
@@ -588,7 +619,14 @@ const Exercise = () => {
     }
 
     return (
-        <div className="flex flex-col lg:flex-row page-fade-in" style={{ height: 'calc(100vh - 4rem)', overflow: 'hidden' }}>
+        <div
+            className="flex flex-col lg:flex-row page-fade-in"
+            data-exercise-layout
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            style={{ height: 'calc(100vh - 4rem)', overflow: 'hidden', cursor: resizing ? 'col-resize' : 'default' }}
+        >
 
             {/* Session locked overlay — blocks all interaction */}
             {sessionLocked && (
@@ -1062,9 +1100,20 @@ const Exercise = () => {
                 )}
             </div>
 
+            {/* Divider - Center to Right */}
+            {(showAIPanel || showHistoryPanel) && (
+                <div
+                    className="w-1 bg-white/5 hover:bg-white/20 cursor-col-resize transition-colors flex-shrink-0"
+                    onMouseDown={() => handleMouseDown('right')}
+                />
+            )}
+
             {/* Right Panel - Submission History */}
             {showHistoryPanel && (
-                <div className="lg:w-[25%] flex flex-col bg-[#0d0f15] border-l border-white/5 overflow-hidden" style={{ height: '100%' }}>
+                <div
+                    className="flex flex-col bg-[#0d0f15] border-l border-white/5 overflow-hidden flex-shrink-0"
+                    style={{ height: '100%', width: `${rightPanelWidth}%` }}
+                >
                     {/* History Panel Header */}
                     <div className="px-4 py-3 border-b border-white/5 bg-gradient-to-r from-blue-500/10 to-cyan-500/10">
                         <div className="flex items-center justify-between">
@@ -1112,7 +1161,10 @@ const Exercise = () => {
 
             {/* Right Panel - AI Assistant */}
             {showAIPanel && (
-                <div className="lg:w-[25%] flex flex-col bg-[#0d0f15] border-l border-white/5 overflow-hidden" style={{ height: '100%' }}>
+                <div
+                    className="flex flex-col bg-[#0d0f15] border-l border-white/5 overflow-hidden flex-shrink-0"
+                    style={{ height: '100%', width: `${rightPanelWidth}%` }}
+                >
                     {/* AI Panel Header */}
                     <div className="px-4 py-3 border-b border-white/5 bg-gradient-to-r from-purple-500/10 to-pink-500/10">
                         <div className="flex items-center justify-between">
