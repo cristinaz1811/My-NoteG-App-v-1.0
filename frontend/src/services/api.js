@@ -71,6 +71,8 @@ export const courseService = {
     regenerateEnrollmentCode: (courseId) => api.post(`/courses/professor/${courseId}/regenerate-code`),
     verifyEnrollmentCode: (courseId, code) => api.post(`/courses/${courseId}/verify-code`, { code }),
     enrollByCode: (code) => api.post('/courses/enroll-by-code', { code }),
+    // Student feedback (professor)
+    sendStudentFeedback: (studentId, courseId, data) => api.post('/feedback/send', { studentId, courseId, ...data }),
 };
 
 // Exercise services
@@ -84,12 +86,14 @@ export const exerciseService = {
     // AI Hints
     getAIHints: (id, mode) => api.get(`/exercises/${id}/ai-hints`, { params: { mode } }),
     generateAIHint: (id, data) => api.post(`/exercises/${id}/ai-hints/generate`, data),
+    deleteTestHints: (id) => api.delete(`/exercises/${id}/ai-hints/test`),
     getComplexityAnalysis: (id, data) => api.post(`/exercises/${id}/ai-complexity`, data),
     // Timed sessions
     startTimedSession: (id) => api.post(`/exercises/${id}/timed-session/start`),
     getTimedSession: (id) => api.get(`/exercises/${id}/timed-session`),
     recordViolation: (id) => api.post(`/exercises/${id}/timed-session/violation`),
     unlockStudentSession: (exerciseId, userId) => api.post(`/exercises/professor/${exerciseId}/sessions/${userId}/unlock`),
+    resetStudentSessionTimer: (exerciseId, userId) => api.post(`/exercises/professor/${exerciseId}/sessions/${userId}/reset-timer`),
     createExercise: (exerciseData) => api.post('/exercises', exerciseData),
     // Professor endpoints
     createProfessorExercise: (exerciseData) => api.post('/exercises/professor/create', exerciseData),

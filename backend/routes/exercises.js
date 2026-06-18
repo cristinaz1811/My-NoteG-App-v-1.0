@@ -15,11 +15,13 @@ const {
     getExerciseTestCases,
     getAIHints,
     generateAIHint,
+    deleteTestHints,
     getComplexityAnalysis,
     startTimedSession,
     getTimedSession,
     recordViolation,
     unlockSession,
+    resetSessionTimer,
     getExerciseFiles,
     addExerciseFile,
     updateExerciseFile,
@@ -42,10 +44,13 @@ router.get('/:id/timed-session', authMiddleware, getTimedSession);
 router.post('/:id/timed-session/violation', authMiddleware, recordViolation);
 // Professor: unlock a locked timed session for a specific student
 router.post('/professor/:exerciseId/sessions/:userId/unlock', authMiddleware, isProfessor, unlockSession);
+// Professor: reset timer for a timed session
+router.post('/professor/:exerciseId/sessions/:userId/reset-timer', authMiddleware, isProfessor, resetSessionTimer);
 
 // AI Hints routes
 router.get('/:id/ai-hints', authMiddleware, getAIHints);
 router.post('/:id/ai-hints/generate', authMiddleware, generateAIHint);
+router.delete('/:id/ai-hints/test', authMiddleware, deleteTestHints);
 router.post('/:id/ai-complexity', authMiddleware, getComplexityAnalysis);
 
 // Professor routes - Exercise management

@@ -1,5 +1,4 @@
 import React from 'react';
-import { Trophy, ChevronRight, CheckCircle } from 'lucide-react';
 import './NavigationPrompt.css';
 
 const ExerciseCompletePrompt = ({ score, nextItem, isChapterComplete, onContinue, onClose }) => {
@@ -7,7 +6,13 @@ const ExerciseCompletePrompt = ({ score, nextItem, isChapterComplete, onContinue
         <div className="navigation-prompt-overlay" onClick={onClose}>
             <div className="navigation-prompt success" onClick={(e) => e.stopPropagation()}>
                 <div className="prompt-icon-container success-icon-container">
-                    <Trophy size={48} />
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M6 4h12v3H6z" />
+                        <path d="M8 7v6c0 1.1.9 2 2 2h4c1.1 0 2-.9 2-2V7" />
+                        <path d="M6 13h12v2H6z" />
+                        <path d="M9 15v3h6v-3" />
+                        <path d="M11 18h2v1h-2z" />
+                    </svg>
                 </div>
 
                 <h2 className="prompt-title">
@@ -38,7 +43,7 @@ const ExerciseCompletePrompt = ({ score, nextItem, isChapterComplete, onContinue
                 <div className="prompt-actions">
                     <button className="btn-start" onClick={onContinue}>
                         <span>{isChapterComplete ? 'Continue' : nextItem?.type === 'lecture' ? 'Next Lecture' : 'Next Exercise'}</span>
-                        <ChevronRight size={20} />
+                        <span>→</span>
                     </button>
                 </div>
             </div>

@@ -133,20 +133,24 @@ app.use((err, req, res, _next) => {
     res.status(err.status || 500).json({ error: 'Something went wrong!' });
 });
 
-// Start server (using http server instead of express directly)
-server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-    console.log(`WebSocket server available at ws://localhost:${PORT}/ws`);
-    console.log(`Distributed mode: ${DISTRIBUTED_MODE ? 'ON' : 'OFF'}`);
+// Start server (using http server instead of express directly).
+// Guarded so importing this module in tests (supertest) doesn't bind a port,
+// start the WebSocket server, or schedule background intervals.
+if (require.main === module) {
+    server.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
+        console.log(`WebSocket server available at ws://localhost:${PORT}/ws`);
+        console.log(`Distributed mode: ${DISTRIBUTED_MODE ? 'ON' : 'OFF'}`);
 
-    // In distributed mode, subscribe to Redis for cross-instance notifications
-    if (DISTRIBUTED_MODE) {
-        initRedisSubscriber();
-    }
+        // In distributed mode, subscribe to Redis for cross-instance notifications
+        if (DISTRIBUTED_MODE) {
+            initRedisSubscriber();
+        }
 
-    // Drop SQL sandbox schemas that have been idle longer than SESSION_TTL_MINUTES
-    setInterval(cleanupStaleSessions, 15 * 60 * 1000);
-});
+        // Drop SQL sandbox schemas that have been idle longer than SESSION_TTL_MINUTES
+        setInterval(cleanupStaleSessions, 15 * 60 * 1000);
+    });
+}
 
 // Graceful shutdown
 const gracefulShutdown = async (signal) => {

@@ -1,5 +1,4 @@
 import React from 'react';
-import { BookOpen, Code, CheckCircle, Circle } from 'lucide-react';
 import './CourseContentItem.css';
 
 const CourseContentItem = ({ item, index, totalItems, onClick }) => {
@@ -22,9 +21,15 @@ const CourseContentItem = ({ item, index, totalItems, onClick }) => {
         >
             <div className="item-icon">
                 {isLecture ? (
-                    <BookOpen size={20} className="lecture-icon" />
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                    </svg>
                 ) : (
-                    <Code size={20} className="exercise-icon" />
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="16 18 22 12 16 6" />
+                        <polyline points="8 6 2 12 8 18" />
+                    </svg>
                 )}
             </div>
 
@@ -70,14 +75,16 @@ const CourseContentItem = ({ item, index, totalItems, onClick }) => {
             <div className="item-actions">
                 <div className="completion-indicator">
                     {isCompleted ? (
-                        <CheckCircle size={24} className="completed-icon" />
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="completed-icon">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M9 12.5L11 14.5L15 10" stroke="white" strokeWidth="2" fill="none" />
+                        </svg>
                     ) : (
-                        <Circle size={24} className="incomplete-icon" />
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="incomplete-icon">
+                            <circle cx="12" cy="12" r="10" />
+                        </svg>
                     )}
                 </div>
-                <button className="item-button">
-                    {isCompleted ? 'Review' : 'Start'}
-                </button>
             </div>
         </div>
     );

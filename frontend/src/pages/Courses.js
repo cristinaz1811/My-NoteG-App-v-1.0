@@ -81,24 +81,6 @@ const Courses = () => {
         }
     };
 
-    const getCourseEmoji = (index) => {
-        const emojis = ['🌐', '🐍', '🤖', '📱', '⚛️', '🎨', '🔧', '📊'];
-        return emojis[index % emojis.length];
-    };
-
-    const getCourseGradient = (index) => {
-        const gradients = [
-            'from-orange-500 to-red-600',
-            'from-blue-500 to-indigo-600',
-            'from-purple-500 to-pink-600',
-            'from-green-500 to-emerald-600',
-            'from-fuchsia-500 to-purple-600',
-            'from-amber-500 to-orange-600',
-            'from-rose-500 to-red-600',
-            'from-violet-500 to-purple-600',
-        ];
-        return gradients[index % gradients.length];
-    };
 
     if (loading) {
         return (
@@ -244,13 +226,6 @@ const Courses = () => {
                             onClick={() => handleCourseClick(course.id)}
                             className="surface-card card-hover cursor-pointer overflow-hidden group"
                         >
-                            {/* Course Header with Gradient */}
-                            <div className={`h-32 flex items-center justify-center bg-gradient-to-br ${getCourseGradient(index)}`}>
-                                <span className="text-5xl transform group-hover:scale-110 transition-transform">
-                                    {getCourseEmoji(index)}
-                                </span>
-                            </div>
-
                             {/* Course Content */}
                             <div className="p-6">
                                 {/* Tags */}

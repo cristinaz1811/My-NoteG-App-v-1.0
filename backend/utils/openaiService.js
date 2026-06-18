@@ -50,26 +50,39 @@ const buildSystemPrompt = (basePrompt, systemPromptOverride, systemPromptAppend)
 const generateHints = async ({ exerciseTitle, exerciseDescription, language, code, _testCases, failedTests, hintNumber, systemPromptOverride, systemPromptAppend, customHintLevels }) => {
     const hintLevels = customHintLevels || DEFAULT_HINT_LEVELS;
 
+    // Check if this is professor testing mode (no test results, just code review)
+    const isProfessorTesting = failedTests && failedTests.length > 0 && failedTests[0]?.input === 'Code Analysis';
+
+    // Build failing tests information for context
+    let failingTestsInfo = '';
+    if (failedTests && failedTests.length > 0 && !isProfessorTesting) {
+        failingTestsInfo = `\nTests that are failing:\n${failedTests.map(t => `- Input: ${t.input} → Expected: ${t.expected}, Got: ${t.actual || 'error'}`).join('\n')}`;
+    }
+
     const prompt = `Exercise: "${exerciseTitle}"
 Description: ${exerciseDescription}
 Language: ${language}
 
-Student code:
+Student/Test code:
 \`\`\`${language}
 ${code}
 \`\`\`
+${failingTestsInfo}
 
-Failing tests:
-${failedTests.map(t => `${t.input} → expected: ${t.expected}, got: ${t.actual || 'error'}`).join('\n')}
+${isProfessorTesting ? 'This is a code review. Analyze what might be wrong with this code.' : 'This is a submitted solution. Analyze what is wrong with this code.'}
 
 Generate hint #${hintNumber}/3.
 ${hintLevels[hintNumber]}
 
-CRITICAL RULES:
-- NEVER name the solution technique/data structure in hints 1-2.
-- Guide the student's THINKING PROCESS, don't give the answer.
-- Hint 1 = acknowledge brute force. Hint 2 = identify bottleneck. Hint 3 = nudge toward technique.
-- Keep each hint to 1-2 short sentences. No code. No greetings. No filler.`;
+CRITICAL ANALYSIS RULES:
+- Analyze THIS SPECIFIC CODE - identify what's actually wrong
+- NEVER name the data structure/algorithm in hints 1-2
+- Hint 1: Identify the PROBLEM - what doesn't work right?
+- Hint 2: Identify the ROOT CAUSE - why is that happening?
+- Hint 3: Guide toward the FIX - what direction should they try?
+- Be specific to the code shown (mention variables, conditions, edge cases)
+- Guide the student's THINKING PROCESS, don't give the answer
+- Keep to 1-2 short sentences. No code. No greetings. No filler.`;
 
     const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',

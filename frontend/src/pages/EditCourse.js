@@ -986,7 +986,7 @@ const EditCourse = () => {
                                     onClick={() => setShowBulkImportModal(true)}
                                     className="px-3 py-2 rounded-lg text-sm font-medium text-[#fef483] border border-[#fef483]/30 hover:bg-[#fef483]/10 transition-colors"
                                 >
-                                    📥 Bulk Import
+                                     Bulk Import
                                 </button>
                                 <button
                                     onClick={() => setShowExerciseModal(true)}
@@ -1458,6 +1458,12 @@ const BulkImportModal = ({ onClose, onImport }) => {
                 chapter: obj.chapter || null,
                 requires_efficiency: obj.requires_efficiency === 'true',
                 time_limit_minutes: obj.time_limit_minutes ? parseInt(obj.time_limit_minutes) : null,
+                ai_hints_enabled: obj.ai_hints_enabled !== 'false',
+                is_test: obj.is_test === 'true',
+                is_published: obj.is_published !== 'false',
+                is_multi_file: obj.is_multi_file === 'true',
+                available_from: obj.available_from || null,
+                available_until: obj.available_until || null,
             };
 
             // Parse testCases if present (should be JSON-encoded)
@@ -1536,23 +1542,54 @@ const BulkImportModal = ({ onClose, onImport }) => {
     "starterCode": "function twoSum(nums, target) {\\n  // code here\\n}",
     "chapter": "Arrays",
     "requires_efficiency": false,
-    "time_limit_minutes": null,
+    "time_limit_minutes": 30,
+    "ai_hints_enabled": true,
+    "is_test": false,
+    "is_published": true,
+    "is_multi_file": false,
+    "available_from": "2026-06-01T00:00",
+    "available_until": "2026-12-31T23:59",
     "testCases": [
-      { "input": "[[2,7,11,15], 9]", "expectedOutput": "[0,1]", "isHidden": false, "weight": 1 }
+      { "input": "[[2,7,11,15], 9]", "expectedOutput": "[0,1]", "isHidden": false, "weight": 1 },
+      { "input": "[[3,2,4], 6]", "expectedOutput": "[1,2]", "isHidden": true, "weight": 1 }
     ]
   }
 ]`;
 
-    const sampleCSV = `title,description,difficulty,language,starterCode,chapter,requires_efficiency,time_limit_minutes,testCases
-"Two Sum","Return indices of two numbers that add up to target.","easy","javascript","function twoSum(nums, target) {\\n  // code here\\n}","Arrays",false,,"[{\\"input\\":\\"[[2,7,11,15], 9]\\",\\"expectedOutput\\":\\"[0,1]\\",\\"isHidden\\":false,\\"weight\\":1}]"`;
+    const sampleCSV = `title,description,difficulty,language,starterCode,chapter,requires_efficiency,time_limit_minutes,ai_hints_enabled,is_test,is_published,is_multi_file,available_from,available_until,testCases
+"Two Sum","Return indices of two numbers that add up to target.","easy","javascript","function twoSum(nums, target) {\\n  // code here\\n}","Arrays",false,30,true,false,true,false,"2026-06-01T00:00","2026-12-31T23:59","[{\\"input\\":\\"[[2,7,11,15], 9]\\",\\"expectedOutput\\":\\"[0,1]\\",\\"isHidden\\":false,\\"weight\\":1}]"`;
 
     const [showSample, setShowSample] = useState('');
+
+    const downloadSample = (format) => {
+        let content, filename, mimeType;
+
+        if (format === 'json') {
+            content = sampleJSON;
+            filename = 'exercises_sample.json';
+            mimeType = 'application/json';
+        } else {
+            content = sampleCSV;
+            filename = 'exercises_sample.csv';
+            mimeType = 'text/csv';
+        }
+
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
 
     return (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
             <div className="surface-card rounded-2xl p-6 w-full max-w-2xl my-8">
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xl font-semibold">📥 Bulk Import Exercises</h3>
+                    <h3 className="text-xl font-semibold">Bulk Import Exercises</h3>
                     <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">&times;</button>
                 </div>
 
@@ -1560,15 +1597,22 @@ const BulkImportModal = ({ onClose, onImport }) => {
                     Upload a JSON or CSV file containing exercises to import them all at once.
                 </p>
 
-                {/* Sample format toggle */}
-                <div className="flex gap-2 mb-4">
+                {/* Sample format toggle & download */}
+                <div className="flex flex-wrap gap-2 mb-4">
                     <button
                         onClick={() => setShowSample(showSample === 'json' ? '' : 'json')}
                         className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
                             showSample === 'json' ? 'border-[#a1609d] text-[#a1609d] bg-[#a1609d]/10' : 'border-white/20 text-gray-400 hover:text-white'
                         }`}
                     >
-                        View JSON format
+                        📄 View JSON format
+                    </button>
+                    <button
+                        onClick={() => downloadSample('json')}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-white/20 text-gray-400 hover:text-white hover:border-white/40 transition-colors"
+                        title="Download example JSON file"
+                    >
+                        ⬇ Download JSON
                     </button>
                     <button
                         onClick={() => setShowSample(showSample === 'csv' ? '' : 'csv')}
@@ -1576,7 +1620,14 @@ const BulkImportModal = ({ onClose, onImport }) => {
                             showSample === 'csv' ? 'border-[#a1609d] text-[#a1609d] bg-[#a1609d]/10' : 'border-white/20 text-gray-400 hover:text-white'
                         }`}
                     >
-                        View CSV format
+                        📊 View CSV format
+                    </button>
+                    <button
+                        onClick={() => downloadSample('csv')}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-white/20 text-gray-400 hover:text-white hover:border-white/40 transition-colors"
+                        title="Download example CSV file"
+                    >
+                        ⬇ Download CSV
                     </button>
                 </div>
 

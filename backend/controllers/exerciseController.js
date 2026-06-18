@@ -2,6 +2,7 @@ const db = require('../config/database');
 const { generateHints, generateSQLHints, generateOptimizationHints, analyzeComplexity } = require('../utils/openaiService');
 const { notifyNewExercise, notifyCourseCompleted, createNotification } = require('../utils/notificationService');
 const { DISTRIBUTED_MODE, cacheGet, cacheSet } = require('../utils/redisClient');
+const { calculateScore, computeCompletionStatus, hintsUnlocked, attemptsUntilNextHint } = require('../utils/grading');
 
 const getExerciseById = async (req, res) => {
     try {
@@ -314,15 +315,8 @@ const submitSolution = async (req, res) => {
         const testsTotal = testCases.length;
         const allPassed = testsPassed === testsTotal;
 
-        // Score logic:
-        // - If requires_efficiency: all tests pass = 80%, optimal complexity = 100%
-        // - If not requires_efficiency: all tests pass = 100%
-        let score;
-        if (allPassed && exercise.requires_efficiency) {
-            score = 80; // Will be upgraded to 100 when complexity analysis confirms optimal
-        } else {
-            score = (testsPassed / testsTotal) * 100;
-        }
+        // Score & status (see utils/grading.js for the rules)
+        const score = calculateScore({ allPassed, requiresEfficiency: exercise.requires_efficiency, testsPassed, testsTotal });
         const status = allPassed ? 'passed' : 'failed';
 
         // For multi-file exercises, store all files as JSON in code column
@@ -342,9 +336,7 @@ const submitSolution = async (req, res) => {
         );
 
         if (progressCheck.rows.length === 0) {
-            const completionStatus = allPassed
-                ? (exercise.requires_efficiency ? 'inefficient' : 'completed')
-                : 'in_progress';
+            const completionStatus = computeCompletionStatus({ allPassed, requiresEfficiency: exercise.requires_efficiency });
             await db.query(
                 `INSERT INTO user_progress (user_id, exercise_id, completed, best_score, attempts, last_attempt_at, completion_status)
                  VALUES ($1, $2, $3, $4, 1, CURRENT_TIMESTAMP, $5)`,
@@ -356,7 +348,7 @@ const submitSolution = async (req, res) => {
             const currentStatus = progressCheck.rows[0].completion_status;
             let newStatus = currentStatus;
             if (allPassed && currentStatus === 'in_progress') {
-                newStatus = exercise.requires_efficiency ? 'inefficient' : 'completed';
+                newStatus = computeCompletionStatus({ allPassed, requiresEfficiency: exercise.requires_efficiency });
             }
             await db.query(
                 `UPDATE user_progress 
@@ -435,12 +427,7 @@ const getJobResult = async (req, res) => {
             const { results, testsPassed, testsTotal } = execResult;
             const allPassed = testsPassed === testsTotal;
 
-            let score;
-            if (allPassed && ctx.requiresEfficiency) {
-                score = 80;
-            } else {
-                score = (testsPassed / testsTotal) * 100;
-            }
+            const score = calculateScore({ allPassed, requiresEfficiency: ctx.requiresEfficiency, testsPassed, testsTotal });
             const status = allPassed ? 'passed' : 'failed';
 
             const submissionResult = await db.query(
@@ -455,9 +442,7 @@ const getJobResult = async (req, res) => {
             );
 
             if (progressCheck.rows.length === 0) {
-                const completionStatus = allPassed
-                    ? (ctx.requiresEfficiency ? 'inefficient' : 'completed')
-                    : 'in_progress';
+                const completionStatus = computeCompletionStatus({ allPassed, requiresEfficiency: ctx.requiresEfficiency });
                 await db.query(
                     `INSERT INTO user_progress (user_id, exercise_id, completed, best_score, attempts, last_attempt_at, completion_status)
                      VALUES ($1, $2, $3, $4, 1, CURRENT_TIMESTAMP, $5)`,
@@ -468,7 +453,7 @@ const getJobResult = async (req, res) => {
                 const currentStatus = progressCheck.rows[0].completion_status;
                 let newStatus = currentStatus;
                 if (allPassed && currentStatus === 'in_progress') {
-                    newStatus = ctx.requiresEfficiency ? 'inefficient' : 'completed';
+                    newStatus = computeCompletionStatus({ allPassed, requiresEfficiency: ctx.requiresEfficiency });
                 }
                 await db.query(
                     `UPDATE user_progress
@@ -800,27 +785,26 @@ const getAIHints = async (req, res) => {
         const attempts = progressResult.rows[0]?.attempts || 0;
         const bestScore = progressResult.rows[0]?.best_score || 0;
 
-        let hintsUnlocked, failedAttempts;
+        let unlockedCount, failedAttempts;
 
         if (mode === 'optimizing') {
             // For optimization mode: count attempts AFTER first solve
             // Get the number of submissions after the first passing one
             const optimizationAttemptsResult = await db.query(
-                `SELECT COUNT(*) as count FROM submissions 
-                 WHERE user_id = $1 AND exercise_id = $2 
+                `SELECT COUNT(*) as count FROM submissions
+                 WHERE user_id = $1 AND exercise_id = $2
                  AND submitted_at > (
-                     SELECT MIN(submitted_at) FROM submissions 
+                     SELECT MIN(submitted_at) FROM submissions
                      WHERE user_id = $1 AND exercise_id = $2 AND status = 'passed'
                  )`,
                 [userId, id]
             );
             failedAttempts = parseInt(optimizationAttemptsResult.rows[0]?.count || 0);
-            hintsUnlocked = Math.min(3, Math.floor(failedAttempts / 2));
         } else {
             // For solving mode: count failed attempts before passing
             failedAttempts = bestScore >= 100 ? 0 : attempts;
-            hintsUnlocked = Math.min(3, Math.floor(failedAttempts / 2));
         }
+        unlockedCount = hintsUnlocked(failedAttempts);
 
         // Get already generated hints from DB for this mode
         const existingHints = await db.query(
@@ -831,7 +815,7 @@ const getAIHints = async (req, res) => {
         const hints = [];
         for (let i = 1; i <= 3; i++) {
             const existing = existingHints.rows.find(h => h.hint_number === i);
-            if (i <= hintsUnlocked) {
+            if (i <= unlockedCount) {
                 if (existing) {
                     hints.push({ number: i, text: existing.hint_text, unlocked: true });
                 } else {
@@ -844,10 +828,10 @@ const getAIHints = async (req, res) => {
 
         res.json({
             hints,
-            hintsUnlocked,
+            hintsUnlocked: unlockedCount,
             failedAttempts,
             mode,
-            attemptsUntilNextHint: hintsUnlocked >= 3 ? 0 : ((hintsUnlocked + 1) * 2) - failedAttempts,
+            attemptsUntilNextHint: attemptsUntilNextHint(failedAttempts),
         });
     } catch (error) {
         console.error('Get AI hints error:', error);
@@ -990,13 +974,28 @@ const generateAIHint = async (req, res) => {
                 'SELECT input, expected_output FROM test_cases WHERE exercise_id = $1 LIMIT 3',
                 [id]
             );
+
+            // For professor testing mode (when failedTests is not provided from student submission),
+            // analyze the code more thoroughly to provide better hints
+            let analyzedFailedTests = failedTests || [];
+            if ((!failedTests || failedTests.length === 0) && code && code.trim()) {
+                // Generate a code analysis prompt to help AI understand potential issues
+                analyzedFailedTests = [
+                    {
+                        input: 'Code Analysis',
+                        expected: 'Optimal solution',
+                        actual: `Code provided for review:\n${code.substring(0, 500)}${code.length > 500 ? '...' : ''}`
+                    }
+                ];
+            }
+
             hintText = await generateHints({
                 exerciseTitle: exercise.title,
                 exerciseDescription: exercise.description,
                 language: exercise.language,
                 code: code || '',
                 testCases: testCasesResult.rows,
-                failedTests: failedTests || [],
+                failedTests: analyzedFailedTests,
                 hintNumber,
                 systemPromptOverride,
                 systemPromptAppend,
@@ -1014,6 +1013,25 @@ const generateAIHint = async (req, res) => {
     } catch (error) {
         console.error('Generate AI hint error:', error);
         res.status(500).json({ error: 'Failed to generate hint' });
+    }
+};
+
+// Delete test hints (for professor testing/reset)
+const deleteTestHints = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+
+        // Delete all test mode hints (hint_mode = 'solving' or similar) for this user/exercise
+        await db.query(
+            'DELETE FROM ai_hints WHERE user_id = $1 AND exercise_id = $2',
+            [userId, id]
+        );
+
+        res.json({ success: true, message: 'Test hints cleared' });
+    } catch (error) {
+        console.error('Delete test hints error:', error);
+        res.status(500).json({ error: 'Failed to delete hints' });
     }
 };
 
@@ -1284,6 +1302,57 @@ const unlockSession = async (req, res) => {
     }
 };
 
+// Professor: reset the timer for a student's timed session
+const resetSessionTimer = async (req, res) => {
+    try {
+        const { exerciseId, userId: studentId } = req.params;
+        const professorId = req.user.id;
+
+        // Verify the professor owns this exercise's course
+        const exRow = await db.query(`
+            SELECT e.title, e.time_limit_minutes, e.course_id, c.created_by
+            FROM exercises e JOIN courses c ON c.id = e.course_id
+            WHERE e.id = $1
+        `, [exerciseId]);
+
+        if (exRow.rows.length === 0) return res.status(404).json({ error: 'Exercise not found' });
+        if (exRow.rows[0].created_by !== professorId) return res.status(403).json({ error: 'Not authorized' });
+
+        const { time_limit_minutes, title } = exRow.rows[0];
+
+        // Reset the session timer
+        const result = await db.query(`
+            UPDATE exam_sessions
+            SET start_time = CURRENT_TIMESTAMP,
+                end_time = CURRENT_TIMESTAMP + INTERVAL '1 minute' * $3,
+                tab_switches = 0,
+                locked_by_flag = FALSE
+            WHERE user_id = $1 AND exercise_id = $2
+            RETURNING *
+        `, [studentId, exerciseId, time_limit_minutes]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'No timed session found for this student' });
+        }
+
+        // Notify the student their timer was reset
+        await createNotification({
+            userId: parseInt(studentId),
+            type: 'timer_reset',
+            title: 'Timer Reset',
+            message: `Your timer for "${title}" has been reset by your professor. You have ${time_limit_minutes} minutes.`,
+            link: `/exercises/${exerciseId}`,
+            exerciseId: parseInt(exerciseId),
+            fromUserId: professorId,
+        });
+
+        res.json({ message: 'Timer reset', session: result.rows[0] });
+    } catch (error) {
+        console.error('Reset timer error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 // ============= Multi-file Exercise File Management =============
 
 // Professor: Get all files for an exercise
@@ -1452,7 +1521,7 @@ const deleteExerciseFile = async (req, res) => {
 
 // ─── Bulk Import Exercises ─────────────────────────────────────────────────────
 const bulkImportExercises = async (req, res) => {
-    const client = await db.connect();
+    const client = await db.pool.connect();
     try {
         const { courseId, exercises } = req.body;
         const userId = req.user.id;
@@ -1657,11 +1726,13 @@ module.exports = {
     getExerciseTestCases,
     getAIHints,
     generateAIHint,
+    deleteTestHints,
     getComplexityAnalysis,
     startTimedSession,
     getTimedSession,
     recordViolation,
     unlockSession,
+    resetSessionTimer,
     // Multi-file exercise management
     getExerciseFiles,
     addExerciseFile,

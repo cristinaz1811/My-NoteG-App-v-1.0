@@ -3,12 +3,6 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { classService, courseService } from '../services/api';
 
-const GRADIENTS = [
-    'from-orange-500 to-red-600', 'from-blue-500 to-indigo-600',
-    'from-purple-500 to-pink-600', 'from-green-500 to-emerald-600',
-    'from-fuchsia-500 to-purple-600', 'from-amber-500 to-orange-600',
-];
-const EMOJIS = ['🌐', '🐍', '🤖', '📱', '⚛️', '🎨', '🔧', '📊'];
 
 export default function ClassDetail() {
     const { classId } = useParams();
@@ -450,11 +444,6 @@ export default function ClassDetail() {
                                             : navigate(`/my-courses/${course.id}`)
                                         }
                                     >
-                                        <div className={`h-28 flex items-center justify-center bg-gradient-to-br ${GRADIENTS[i % GRADIENTS.length]}`}>
-                                            <span className="text-4xl transform group-hover:scale-110 transition-transform">
-                                                {EMOJIS[i % EMOJIS.length]}
-                                            </span>
-                                        </div>
                                         <div className="p-5">
                                             <div className="flex items-center gap-2 mb-2">
                                                 <span className={`badge badge-${course.difficulty}`}>{course.difficulty}</span>

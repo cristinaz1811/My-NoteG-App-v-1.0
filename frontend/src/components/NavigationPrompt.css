@@ -13,12 +13,14 @@
 }
 
 .navigation-prompt {
-    background: white;
+    background: rgba(30, 30, 35, 0.95);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
     padding: 40px 32px;
     max-width: 480px;
     width: 100%;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
     text-align: center;
     animation: slideUp 0.3s ease;
 }
@@ -63,30 +65,30 @@
     margin: 0 0 16px 0;
     font-size: 20px;
     font-weight: 700;
-    color: #1a1a1a;
+    color: #ffffff;
     word-break: break-word;
 }
 
 .prompt-description {
     margin: 0 0 24px 0;
     font-size: 14px;
-    color: #666;
+    color: #999;
     line-height: 1.5;
 }
 
 .exercise-preview {
-    background: #f8f9fa;
+    background: rgba(255, 183, 77, 0.1);
     padding: 16px;
     border-radius: 8px;
     margin-bottom: 24px;
-    border-left: 4px solid #ff9800;
+    border-left: 4px solid #ffb74d;
 }
 
 .exercise-title {
     margin: 0 0 8px 0;
     font-size: 15px;
     font-weight: 600;
-    color: #1a1a1a;
+    color: #e0e0e0;
     word-break: break-word;
 }
 
@@ -94,7 +96,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    background: #f0f8f0;
+    background: rgba(76, 175, 80, 0.1);
     padding: 20px;
     border-radius: 8px;
     margin-bottom: 20px;
@@ -108,7 +110,7 @@
 
 .score-label {
     font-size: 12px;
-    color: #666;
+    color: #999;
     text-transform: uppercase;
     font-weight: 600;
     letter-spacing: 0.5px;
@@ -116,11 +118,11 @@
 }
 
 .next-item-preview {
-    background: #f0f4f8;
+    background: rgba(100, 181, 246, 0.1);
     padding: 16px;
     border-radius: 8px;
     margin-bottom: 24px;
-    border-left: 4px solid #2196f3;
+    border-left: 4px solid #64b5f6;
 }
 
 .next-item-label {
@@ -136,12 +138,12 @@
     margin: 0;
     font-size: 15px;
     font-weight: 600;
-    color: #1a1a1a;
+    color: #e0e0e0;
     word-break: break-word;
 }
 
 .chapter-complete-message {
-    background: #e8f5e9;
+    background: rgba(76, 175, 80, 0.1);
     padding: 16px;
     border-radius: 8px;
     margin-bottom: 24px;
@@ -150,7 +152,7 @@
 .chapter-complete-message p {
     margin: 0 0 8px 0;
     font-size: 14px;
-    color: #2e7d32;
+    color: #81c784;
     line-height: 1.5;
 }
 
@@ -174,7 +176,7 @@
     justify-content: center;
     gap: 8px;
     padding: 12px 24px;
-    background: #4caf50;
+    background: linear-gradient(135deg, #a1609d 0%, #8b4c8b 100%);
     color: white;
     border: none;
     border-radius: 6px;
@@ -185,9 +187,9 @@
 }
 
 .btn-start:hover {
-    background: #45a049;
+    background: linear-gradient(135deg, #b87aad 0%, #9b5c9b 100%);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+    box-shadow: 0 4px 12px rgba(161, 96, 157, 0.3);
 }
 
 .btn-start:active {
@@ -197,8 +199,8 @@
 .btn-skip {
     padding: 10px 24px;
     background: transparent;
-    color: #666;
-    border: 1px solid #ddd;
+    color: #999;
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 6px;
     font-size: 14px;
     font-weight: 600;
@@ -207,8 +209,9 @@
 }
 
 .btn-skip:hover {
-    background: #f5f5f5;
-    border-color: #999;
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.4);
+    color: #ccc;
 }
 
 .navigation-prompt.success .btn-start {
