@@ -1,8 +1,16 @@
 const OpenAI = require('openai');
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+let openai = null;
+
+// Lazy initialization - only create OpenAI client if API key is provided
+const getOpenAIClient = () => {
+    if (!openai && process.env.OPENAI_API_KEY) {
+        openai = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY,
+        });
+    }
+    return openai;
+};
 
 const BASE_HINTS_SYSTEM = 'You write short progressive hints that guide thinking without revealing the answer. Style: like LeetCode hints. Hint 1 mentions brute force, hint 2 pinpoints the bottleneck, hint 3 nudges toward the technique. Never name the optimal solution in hints 1 or 2.';
 const BASE_OPTIMIZATION_SYSTEM = 'You write short progressive optimization hints that guide thinking without revealing the answer. Style: like LeetCode hints. Hint 1 spots the bottleneck, hint 2 identifies the redundancy, hint 3 nudges toward the fix. Never name the optimal solution in hints 1 or 2.';
@@ -84,7 +92,9 @@ CRITICAL ANALYSIS RULES:
 - Guide the student's THINKING PROCESS, don't give the answer
 - Keep to 1-2 short sentences. No code. No greetings. No filler.`;
 
-    const response = await openai.chat.completions.create({
+    const client = getOpenAIClient();
+    if (!client) throw new Error('OpenAI API key not configured. Hints unavailable.');
+    const response = await client.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
             { role: 'system', content: buildSystemPrompt(BASE_HINTS_SYSTEM, systemPromptOverride, systemPromptAppend) },
@@ -122,7 +132,9 @@ Respond in EXACTLY this JSON format (raw JSON only, no markdown):
     "explanation": "One-sentence technical explanation of the dominant operations."
 }`;
 
-    const response = await openai.chat.completions.create({
+    const client = getOpenAIClient();
+    if (!client) throw new Error('OpenAI API key not configured. Hints unavailable.');
+    const response = await client.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
             { role: 'system', content: 'You are an algorithms professor. Analyze code complexity precisely. Determine if the solution achieves the best known complexity for the problem. Respond with valid JSON only. Be terse. Do NOT suggest how to optimize.' },
@@ -184,7 +196,9 @@ CRITICAL RULES:
 - Hint 1 = identify slow part. Hint 2 = pinpoint redundant operation. Hint 3 = nudge toward technique.
 - Keep each hint to 1-2 short sentences. No code. No greetings. No filler.`;
 
-    const response = await openai.chat.completions.create({
+    const client = getOpenAIClient();
+    if (!client) throw new Error('OpenAI API key not configured. Hints unavailable.');
+    const response = await client.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
             { role: 'system', content: buildSystemPrompt(BASE_OPTIMIZATION_SYSTEM, systemPromptOverride, systemPromptAppend) },
@@ -240,7 +254,9 @@ CRITICAL RULES:
 - Hint 1 = tables/relationships. Hint 2 = missing clause/operation. Hint 3 = query structure.
 - 1-2 short sentences. No greetings. No filler.`;
 
-    const response = await openai.chat.completions.create({
+    const client = getOpenAIClient();
+    if (!client) throw new Error('OpenAI API key not configured. Hints unavailable.');
+    const response = await client.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
             { role: 'system', content: buildSystemPrompt(BASE_SQL_SYSTEM, systemPromptOverride, systemPromptAppend) },
@@ -289,7 +305,9 @@ Provide your response in EXACTLY this JSON format (raw JSON, no markdown):
     "nextSteps": "1-2 sentence suggestion on what to tackle next"
 }`;
 
-    const response = await openai.chat.completions.create({
+    const client = getOpenAIClient();
+    if (!client) throw new Error('OpenAI API key not configured. Hints unavailable.');
+    const response = await client.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
             { role: 'system', content: 'You are a supportive programming tutor who gives data-driven, personalised feedback. Be encouraging but honest. Respond with valid JSON only.' },
