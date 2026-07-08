@@ -21,6 +21,7 @@ COPY config/ ./config/
 COPY utils/codeExecutor.js ./utils/
 COPY utils/redisClient.js ./utils/
 COPY utils/queueService.js ./utils/
+COPY utils/notificationService.js ./utils/
 COPY worker.js ./
 
 # Run as non-root user for security
