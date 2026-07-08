@@ -209,6 +209,13 @@ const getEmailQueue = () => {
 };
 
 const enqueueEmail = async (payload) => {
+    // Skip email sending in test mode or when EMAIL_DISABLED is true
+    if (process.env.NODE_ENV === 'test' || process.env.EMAIL_DISABLED === 'true') {
+        console.log(`[Email] Skipped ${payload.type} in test/disabled mode to:`,
+            payload.email || payload.studentEmail || payload.professorEmail);
+        return { skipped: true };
+    }
+
     const queue = getEmailQueue();
     if (!queue) {
         // Fallback: send inline when not in distributed mode

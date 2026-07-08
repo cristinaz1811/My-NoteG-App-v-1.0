@@ -17,6 +17,12 @@ const createTransporter = () => {
 };
 
 const sendVerificationEmail = async (email, username, verificationToken) => {
+    // Skip sending emails in test mode
+    if (process.env.NODE_ENV === 'test' || process.env.EMAIL_DISABLED === 'true') {
+        console.log(`[Email] Skipped verification email to ${email} (test mode)`);
+        return { skipped: true };
+    }
+
     const transporter = createTransporter();
     const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
     
@@ -70,6 +76,12 @@ const sendVerificationEmail = async (email, username, verificationToken) => {
 };
 
 const sendPasswordResetEmail = async (email, username, resetToken) => {
+    // Skip sending emails in test mode
+    if (process.env.NODE_ENV === 'test' || process.env.EMAIL_DISABLED === 'true') {
+        console.log(`[Email] Skipped password reset email to ${email} (test mode)`);
+        return { skipped: true };
+    }
+
     const transporter = createTransporter();
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
     
@@ -122,6 +134,12 @@ const sendPasswordResetEmail = async (email, username, resetToken) => {
 };
 
 const sendPlagiarismAlertEmail = async (email, username, courseTitle, exerciseTitle, flaggedPairs, maxSimilarity, reportId) => {
+    // Skip sending emails in test mode
+    if (process.env.NODE_ENV === 'test' || process.env.EMAIL_DISABLED === 'true') {
+        console.log(`[Email] Skipped plagiarism alert email to ${email} (test mode)`);
+        return { skipped: true };
+    }
+
     const transporter = createTransporter();
     const reportUrl = `${process.env.FRONTEND_URL}/professor/plagiarism/report/${reportId}`;
 
@@ -174,6 +192,12 @@ const sendPlagiarismAlertEmail = async (email, username, courseTitle, exerciseTi
 };
 
 const sendEnrollmentRequestEmail = async (professorEmail, professorName, studentName, className, yearName, faculty) => {
+    // Skip sending emails in test mode
+    if (process.env.NODE_ENV === 'test' || process.env.EMAIL_DISABLED === 'true') {
+        console.log(`[Email] Skipped enrollment request email to ${professorEmail} (test mode)`);
+        return { skipped: true };
+    }
+
     const transporter = createTransporter();
     const reviewUrl = `${process.env.FRONTEND_URL}/professor/enrollment-requests`;
 
@@ -213,6 +237,12 @@ const sendEnrollmentRequestEmail = async (professorEmail, professorName, student
 };
 
 const sendEnrollmentDecisionEmail = async (studentEmail, studentName, className, yearName, faculty, approved) => {
+    // Skip sending emails in test mode
+    if (process.env.NODE_ENV === 'test' || process.env.EMAIL_DISABLED === 'true') {
+        console.log(`[Email] Skipped enrollment decision email to ${studentEmail} (test mode)`);
+        return { skipped: true };
+    }
+
     const transporter = createTransporter();
     const link = approved
         ? `${process.env.FRONTEND_URL}/years`

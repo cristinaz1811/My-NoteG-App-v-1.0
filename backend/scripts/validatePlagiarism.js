@@ -1,5 +1,5 @@
 /**
- * Validation benchmark for the plagiarism detector (thesis §4.6).
+ * Validation benchmark for the plagiarism detector .
  *
  * Runs the detector over a labeled dataset and reports precision / recall / F1,
  * a confusion matrix, and a per-pair similarity table. The numbers / table are
