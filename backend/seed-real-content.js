@@ -768,11 +768,11 @@ async function upsertChapter(courseId, chapter) {
     if (existing.rows.length > 0) {
         await db.query(
             `UPDATE chapters
-             SET description = $3,
-                 order_index = $4,
+             SET description = $2,
+                 order_index = $3,
                  updated_at = CURRENT_TIMESTAMP
              WHERE id = $1`,
-            [existing.rows[0].id, chapter.title, chapter.description, chapter.order_index]
+            [existing.rows[0].id, chapter.description, chapter.order_index]
         );
         return existing.rows[0].id;
     }
