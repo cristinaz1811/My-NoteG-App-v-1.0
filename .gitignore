@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-package-lock.json
 
 
 # Python
@@ -54,6 +53,4 @@ Thumbs.db
 INSTALLATION_COMPLETE.md
 docs/
 .claude
-.github
-.github/
-*.md
+*.pem

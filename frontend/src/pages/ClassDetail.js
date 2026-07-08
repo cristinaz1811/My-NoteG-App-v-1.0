@@ -33,6 +33,9 @@ export default function ClassDetail() {
     const [assignSearch, setAssignSearch] = useState('');
     const [assigning, setAssigning] = useState(null);
 
+    // Unenroll state (student)
+    const [unenrolling, setUnenrolling] = useState(false);
+
     const isProfessor = user?.role === 'professor' || user?.role === 'admin';
 
     const fetchClass = useCallback(async () => {
@@ -158,6 +161,20 @@ export default function ClassDetail() {
         } catch { alert('Failed to remove course.'); }
     };
 
+    const handleUnenrollFromClass = async () => {
+        if (!window.confirm('Are you sure? You will be unenrolled from this class and all its courses. Your progress will be cleared.')) return;
+        setUnenrolling(true);
+        try {
+            await classService.unenrollFromClass(classId);
+            setEnrollStatus('none');
+            alert('You have been unenrolled from the class.');
+        } catch (err) {
+            alert(err.response?.data?.error || 'Failed to unenroll.');
+        } finally {
+            setUnenrolling(false);
+        }
+    };
+
     // ─── render ────────────────────────────────────────────────────────────────
 
     if (loading) return (
@@ -235,6 +252,16 @@ export default function ClassDetail() {
                                 + Create New Course
                             </Link>
                         </div>
+                    )}
+
+                    {!isProfessor && enrollStatus === 'approved' && (
+                        <button
+                            onClick={handleUnenrollFromClass}
+                            disabled={unenrolling}
+                            className="px-4 py-2 rounded-lg text-sm font-medium text-red-400 border border-red-600/40 hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                        >
+                            {unenrolling ? 'Unenrolling…' : 'Unenroll'}
+                        </button>
                     )}
                 </div>
 

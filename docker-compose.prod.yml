@@ -1,0 +1,163 @@
+###############################################################################
+# NoteG — Production Docker Compose (EC2)
+#
+# Runs prebuilt images pulled from GHCR (built & pushed by GitHub Actions) and
+# serves the frontend over HTTPS with Let's Encrypt certificates.
+#
+# Prerequisites on the host (see DEPLOYMENT.md):
+#   1. Docker + compose plugin installed (deploy/ec2-setup.sh)
+#   2. A ~/noteg/.env file with production secrets
+#   3. `sudo ./init-ssl.sh` run once to mint the first certificate
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+###############################################################################
+
+services:
+  # ─── PostgreSQL ───────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: noteg-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-code_learning}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/docker-init.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/docker-migrations.sql:/docker-entrypoint-initdb.d/02-migrations.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-code_learning}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - noteg-network
+
+  # ─── Redis ────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: noteg-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy noeviction
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - noteg-network
+
+  # ─── API Service (Express.js + WebSocket) ─────────────────────────────────
+  api:
+    image: ghcr.io/cristinaz1811/licenta-api:latest
+    container_name: noteg-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: 5001
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-code_learning}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      EMAIL_SERVICE: ${EMAIL_SERVICE:-gmail}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_SECURE: ${EMAIL_SECURE:-false}
+      EMAIL_USER: ${EMAIL_USER:-}
+      EMAIL_PASS: ${EMAIL_PASS:-}
+      FRONTEND_URL: ${FRONTEND_URL:-https://my-noteg.com}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DISTRIBUTED_MODE: "true"
+    networks:
+      - noteg-network
+
+  # ─── Code Execution Worker ────────────────────────────────────────────────
+  worker:
+    image: ghcr.io/cristinaz1811/licenta-worker:latest
+    container_name: noteg-worker
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-code_learning}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DISTRIBUTED_MODE: "true"
+      WORKER_PORT: 5002
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-3}
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    networks:
+      - noteg-network
+
+  # ─── Frontend (Nginx + React SPA, HTTPS) ──────────────────────────────────
+  frontend:
+    image: ghcr.io/cristinaz1811/licenta-frontend:latest
+    container_name: noteg-frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./frontend/nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - certbot_conf:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    networks:
+      - noteg-network
+
+  # ─── Certbot (automatic certificate renewal) ──────────────────────────────
+  certbot:
+    image: certbot/certbot
+    container_name: noteg-certbot
+    restart: unless-stopped
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    # Attempt renewal every 12h; certbot is a no-op until ~30 days before expiry.
+    entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done'
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  # Created once by init-ssl.sh; shared with the frontend + certbot services.
+  certbot_conf:
+    external: true
+    name: licenta_certbot_conf
+  certbot_www:
+    external: true
+    name: licenta_certbot_www
+
+networks:
+  noteg-network:
+    driver: bridge

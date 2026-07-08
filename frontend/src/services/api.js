@@ -187,6 +187,7 @@ export const classService = {
     // Enrollment
     getEnrollmentStatus: (classId) => api.get(`/classes/${classId}/enrollment-status`),
     requestEnrollment: (classId, data) => api.post(`/classes/${classId}/enroll`, data || {}),
+    unenrollFromClass: (classId) => api.delete(`/classes/${classId}/unenroll`),
     getAllEnrollmentRequests: (status) => api.get('/classes/all-enrollment-requests', { params: status ? { status } : {} }),
     getEnrollmentRequests: (classId) => api.get(`/classes/${classId}/enrollment-requests`),
     approveEnrollment: (classId, userId) => api.put(`/classes/${classId}/enrollment-requests/${userId}/approve`),

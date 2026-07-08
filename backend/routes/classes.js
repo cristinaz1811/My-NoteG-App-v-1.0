@@ -13,6 +13,7 @@ const {
     rejectEnrollment,
     regenerateAccessKey,
     getClassStudents,
+    unenrollFromClass,
 } = require('../controllers/classController');
 
 // Must be before /:classId to avoid being swallowed by the param route
@@ -25,6 +26,7 @@ router.delete('/:classId',       authMiddleware, isProfessor,      deleteClass);
 // Enrollment — student
 router.get('/:classId/enrollment-status',  authMiddleware,         getEnrollmentStatus);
 router.post('/:classId/enroll',            authMiddleware,         requestEnrollment);
+router.delete('/:classId/unenroll',        authMiddleware,         unenrollFromClass);
 
 // Enrollment — professor
 router.get('/:classId/enrollment-requests',  authMiddleware, isProfessor, getEnrollmentRequests);

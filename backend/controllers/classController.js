@@ -360,6 +360,90 @@ const getClassStudents = async (req, res) => {
     }
 };
 
+// DELETE /api/classes/:classId/unenroll  (student) - unenroll from a class
+const unenrollFromClass = async (req, res) => {
+    try {
+        const { classId } = req.params;
+        const userId = req.user.id;
+
+        // Check if enrolled in this class
+        const enrollment = await db.query(
+            'SELECT * FROM class_enrollments WHERE user_id = $1 AND class_id = $2',
+            [userId, classId]
+        );
+
+        if (enrollment.rows.length === 0) {
+            return res.status(404).json({ error: 'Not enrolled in this class' });
+        }
+
+        // Get all courses in this class
+        const courses = await db.query(
+            'SELECT id FROM courses WHERE class_id = $1',
+            [classId]
+        );
+
+        // Unenroll from all courses and delete related progress data
+        for (const course of courses.rows) {
+            const courseId = course.id;
+
+            // Delete related progress data for this course
+            await db.query(
+                `DELETE FROM ai_complexity_analysis
+                 WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
+                [userId, courseId]
+            );
+            await db.query(
+                `DELETE FROM ai_hints
+                 WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
+                [userId, courseId]
+            );
+            await db.query(
+                `DELETE FROM submissions
+                 WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
+                [userId, courseId]
+            );
+            await db.query(
+                `DELETE FROM user_progress
+                 WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)`,
+                [userId, courseId]
+            );
+            await db.query(
+                'DELETE FROM course_time_sessions WHERE user_id = $1 AND course_id = $2',
+                [userId, courseId]
+            );
+            await db.query(
+                'DELETE FROM exam_sessions WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)',
+                [userId, courseId]
+            );
+            await db.query(
+                'DELETE FROM sql_sessions WHERE user_id = $1 AND exercise_id IN (SELECT id FROM exercises WHERE course_id = $2)',
+                [userId, courseId]
+            );
+            await db.query(
+                'DELETE FROM lecture_progress WHERE user_id = $1 AND lecture_id IN (SELECT id FROM lectures WHERE course_id = $2)',
+                [userId, courseId]
+            );
+
+            // Delete enrollment from course
+            await db.query(
+                'DELETE FROM enrollments WHERE user_id = $1 AND course_id = $2',
+                [userId, courseId]
+            );
+        }
+
+        // Remove from class
+        await db.query(
+            'DELETE FROM class_enrollments WHERE user_id = $1 AND class_id = $2',
+            [userId, classId]
+        );
+
+        res.json({ message: 'Successfully unenrolled from class and all associated courses' });
+    } catch (err) {
+        console.error('unenrollFromClass error:', err);
+        res.status(500).json({ error: 'Failed to unenroll from class' });
+    }
+};
+
 module.exports = {
     getClassById,
     updateClass,
@@ -373,4 +457,5 @@ module.exports = {
     regenerateAccessKey,
     enrollApprovedMembersInCourse,
     getClassStudents,
+    unenrollFromClass,
 };

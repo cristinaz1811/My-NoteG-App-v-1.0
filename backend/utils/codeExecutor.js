@@ -376,6 +376,8 @@ const runMultiFileTestCase = async (files, testCase, language) => {
             result = await executeMultiFileJava(files, testCase);
         } else if (language === 'cpp' || language === 'c++') {
             result = await executeMultiFileCpp(files, testCase);
+        } else if (language === 'csharp' || language === 'c#') {
+            result = await executeMultiFileCSharp(files, testCase);
         } else {
             throw new Error(`Multi-file execution not supported for: ${language}`);
         }
@@ -624,6 +626,70 @@ const executeMultiFileCpp = async (files, testCase) => {
                 
                 setTimeout(() => {
                     process.kill();
+                    fs.rmSync(tempDir, { recursive: true, force: true });
+                    reject(new Error('Execution timeout'));
+                }, 10000);
+            } catch (err) {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+                reject(new Error(err.message));
+            }
+        });
+    } catch (err) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        throw err;
+    }
+};
+
+const executeMultiFileCSharp = async (files, testCase) => {
+    const { spawn, execSync } = require('child_process');
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'csharp-multi-'));
+    const executable = path.join(tempDir, 'Solution.exe');
+
+    try {
+        // Write all files; collect the .cs sources to compile together
+        const csFiles = [];
+        for (const file of files) {
+            const filePath = path.join(tempDir, file.filename);
+            const dir = path.dirname(filePath);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(filePath, file.code);
+            if (file.filename.endsWith('.cs')) csFiles.push(filePath);
+        }
+
+        return new Promise((resolve, reject) => {
+            try {
+                // Compile all C# files together (Mono mcs, fallback to csc)
+                try {
+                    execSync(`mcs -out:${executable} ${csFiles.join(' ')}`, { timeout: 10000 });
+                } catch {
+                    execSync(`csc -out:${executable} ${csFiles.join(' ')}`, { timeout: 10000 });
+                }
+
+                const proc = spawn('mono', [executable]);
+                let output = '';
+                let error = '';
+
+                proc.stdin.write(testCase.input);
+                proc.stdin.end();
+
+                proc.stdout.on('data', (data) => { output += data.toString(); });
+                proc.stderr.on('data', (data) => { error += data.toString(); });
+
+                proc.on('close', (code) => {
+                    fs.rmSync(tempDir, { recursive: true, force: true });
+                    if (code !== 0) {
+                        reject(new Error(error || 'C# execution failed'));
+                    } else {
+                        resolve(output.trim());
+                    }
+                });
+
+                setTimeout(() => {
+                    proc.kill();
                     fs.rmSync(tempDir, { recursive: true, force: true });
                     reject(new Error('Execution timeout'));
                 }, 10000);
