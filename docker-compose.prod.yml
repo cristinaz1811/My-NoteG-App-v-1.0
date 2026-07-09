@@ -108,6 +108,13 @@ services:
       DISTRIBUTED_MODE: "true"
       WORKER_PORT: 5002
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-3}
+      EMAIL_SERVICE: ${EMAIL_SERVICE:-gmail}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_SECURE: ${EMAIL_SECURE:-false}
+      EMAIL_USER: ${EMAIL_USER:-}
+      EMAIL_PASS: ${EMAIL_PASS:-}
+      FRONTEND_URL: ${FRONTEND_URL:-https://my-noteg.com}
     deploy:
       resources:
         limits:

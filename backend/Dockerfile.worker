@@ -22,6 +22,8 @@ COPY utils/codeExecutor.js ./utils/
 COPY utils/redisClient.js ./utils/
 COPY utils/queueService.js ./utils/
 COPY utils/notificationService.js ./utils/
+COPY utils/plagiarismDetector.js ./utils/
+COPY utils/emailService.js ./utils/
 COPY worker.js ./
 
 # Run as non-root user for security
