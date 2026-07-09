@@ -121,9 +121,9 @@ const MyCourses = () => {
         );
     }
 
-    const totalAttempts   = courses.reduce((a, c) => a + (c.total_attempts || 0), 0);
-    const totalCompleted  = courses.reduce((a, c) => a + (c.completed_exercises || 0), 0);
-    const totalTime       = courses.reduce((a, c) => a + (c.total_time_spent || 0), 0);
+    const totalAttempts   = courses.reduce((a, c) => a + Number(c.total_attempts || 0), 0);
+    const totalCompleted  = courses.reduce((a, c) => a + Number(c.completed_exercises || 0), 0);
+    const totalTime       = courses.reduce((a, c) => a + Number(c.total_time_spent || 0), 0);
     const doneCourses     = courses.filter(c => getProgress(c) === 100).length;
 
     return (
