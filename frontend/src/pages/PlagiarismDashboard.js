@@ -188,7 +188,7 @@ const PlagiarismDashboard = () => {
                                     >
                                         <div className="font-medium">{course.title}</div>
                                         <div className="text-xs text-gray-500 mt-1">
-                                            {course.exercise_count || 0} exercises · {course.student_count || 0} students
+                                            {course.exercise_count || 0} exercises · {course.enrollment_count || 0} students
                                         </div>
                                     </button>
                                 ))}
