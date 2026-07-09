@@ -14,6 +14,7 @@ const executeCode = async (code, testCases, language) => {
         } catch (error) {
             results.push({
                 passed: false,
+                isHidden: !!testCase.is_hidden,
                 input: testCase.input,
                 expected: testCase.expected_output,
                 actual: null,
@@ -50,6 +51,7 @@ const runTestCase = async (code, testCase, language) => {
 
         return {
             passed,
+            isHidden: !!testCase.is_hidden,
             input: testCase.input,
             expected: testCase.expected_output,
             actual: result,
@@ -59,6 +61,7 @@ const runTestCase = async (code, testCase, language) => {
     } catch (error) {
         return {
             passed: false,
+            isHidden: !!testCase.is_hidden,
             input: testCase.input,
             expected: testCase.expected_output,
             actual: null,
@@ -351,6 +354,7 @@ const executeMultiFileCode = async (files, testCases, language) => {
         } catch (error) {
             results.push({
                 passed: false,
+                isHidden: !!testCase.is_hidden,
                 input: testCase.input,
                 expected: testCase.expected_output,
                 actual: null,
@@ -387,6 +391,7 @@ const runMultiFileTestCase = async (files, testCase, language) => {
 
         return {
             passed,
+            isHidden: !!testCase.is_hidden,
             input: testCase.input,
             expected: testCase.expected_output,
             actual: result,
@@ -396,6 +401,7 @@ const runMultiFileTestCase = async (files, testCase, language) => {
     } catch (error) {
         return {
             passed: false,
+            isHidden: !!testCase.is_hidden,
             input: testCase.input,
             expected: testCase.expected_output,
             actual: null,

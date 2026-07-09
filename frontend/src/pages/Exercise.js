@@ -867,13 +867,6 @@ const Exercise = () => {
                             </svg>
                             History
                         </button>
-                        <button
-                            onClick={() => setShowHelpModal(true)}
-                            className="px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 bg-white/5 text-gray-400 hover:text-orange-300 hover:bg-orange-500/10 border border-white/10"
-                            title="Request help from professor"
-                        >
-                            Help
-                        </button>
                         {exercise?.ai_hints_enabled !== false && (
                         <button
                             onClick={() => { setShowAIPanel(!showAIPanel); if (!showAIPanel) setShowHistoryPanel(false); }}
@@ -1060,19 +1053,25 @@ const Exercise = () => {
                                             : 'bg-red-500/5 border border-red-500/20'
                                     }`}
                                 >
-                                    <div className="flex items-center gap-2 mb-2">
+                                    <div className={`flex items-center gap-2 ${result.isHidden ? '' : 'mb-2'}`}>
                                         <span className={result.passed ? 'text-green-400' : 'text-red-400'}>
                                             {result.passed ? '✓' : '✗'}
                                         </span>
                                         <span className="font-medium text-sm">
-                                            Test Case {index + 1}: {result.passed ? 'Passed' : 'Failed'}
+                                            {result.isHidden ? 'Hidden Test Case' : 'Test Case'} {index + 1}: {result.passed ? 'Passed' : 'Failed'}
                                         </span>
+                                        {result.isHidden && (
+                                            <span className="text-[10px] text-gray-500 bg-white/5 px-2 py-0.5 rounded">
+                                                Details hidden
+                                            </span>
+                                        )}
                                         {result.executionTime && (
                                             <span className="text-xs text-gray-500 ml-auto">
                                                 {result.executionTime}ms
                                             </span>
                                         )}
                                     </div>
+                                    {!result.isHidden && (
                                     <div className="font-mono text-xs space-y-1 text-gray-400">
                                         <div>
                                             <span className="text-gray-500">Input: </span>
@@ -1089,6 +1088,7 @@ const Exercise = () => {
                                             </span>
                                         </div>
                                     </div>
+                                    )}
                                 </div>
                             )) : (
                                 <div className="text-gray-400 text-center py-4">

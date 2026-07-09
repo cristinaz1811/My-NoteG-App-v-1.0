@@ -4,6 +4,18 @@ const { notifyNewExercise, notifyCourseCompleted, createNotification } = require
 const { DISTRIBUTED_MODE, cacheGet, cacheSet } = require('../utils/redisClient');
 const { calculateScore, computeCompletionStatus, hintsUnlocked, attemptsUntilNextHint } = require('../utils/grading');
 
+// Students must never see hidden test case details (input/expected/output) —
+// only whether each hidden test passed. Professors and admins see everything.
+const redactHiddenResults = (results, role) => {
+    if (!Array.isArray(results)) return results;
+    if (role === 'professor' || role === 'admin') return results;
+    return results.map((r) =>
+        r.isHidden
+            ? { passed: r.passed, isHidden: true, executionTime: r.executionTime }
+            : r
+    );
+};
+
 const getExerciseById = async (req, res) => {
     try {
         const { id } = req.params;
@@ -365,7 +377,7 @@ const submitSolution = async (req, res) => {
 
         res.json({
             submission: submissionResult.rows[0],
-            results,
+            results: redactHiddenResults(results, req.user.role),
             score,
             testsPassed,
             testsTotal,
@@ -470,7 +482,7 @@ const getJobResult = async (req, res) => {
             const response = {
                 status: 'completed',
                 submission: submissionResult.rows[0],
-                results,
+                results: redactHiddenResults(results, req.user.role),
                 score,
                 testsPassed,
                 testsTotal,
